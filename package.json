@@ -1,0 +1,36 @@
+{
+	"name": "swingcourt",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Motion controlled tennis for your living room, no console required.",
+	"license": "MIT",
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"start": "node src/server/main.ts",
+		"check": "biome ci .",
+		"format": "biome check --write .",
+		"typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"certs": "node scripts/setup-certs.mjs",
+		"vault:check": "node scripts/check-vault.mjs"
+	},
+	"dependencies": {
+		"three": "^0.186.0",
+		"ws": "^8.21.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.14",
+		"@types/node": "^24.13.6",
+		"@types/three": "^0.186.0",
+		"@types/ws": "^8.18.1",
+		"typescript": "^7.0.2",
+		"vite": "^7.3.6",
+		"vitest": "^3.2.7"
+	}
+}

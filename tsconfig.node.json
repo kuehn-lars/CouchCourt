@@ -1,0 +1,17 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+
+		// No DOM on purpose. Any browser API that leaks into src/shared fails here.
+		"lib": ["ES2023"],
+		"types": ["node"]
+	},
+	"include": [
+		"src/shared/**/*.ts",
+		"src/server/**/*.ts",
+		"tests/**/*.ts",
+		"vite.config.ts"
+	]
+}

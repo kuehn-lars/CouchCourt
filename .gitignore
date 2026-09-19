@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Local TLS material — regenerate with `npm run certs`, never commit
+certs/
+
+# Session-specific: scratch that does not belong to the repo
+docs/superpowers/
+llm-knowledge/sessions/*
+!llm-knowledge/sessions/.gitkeep
+!llm-knowledge/sessions/README.md
+
+# Obsidian per-user preferences and UI state
+llm-knowledge/.obsidian/
+
+# Test + tooling output
+coverage/
+.vitest/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Env
+.env
+.env.local
