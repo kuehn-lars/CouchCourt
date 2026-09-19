@@ -3,6 +3,9 @@ title: Publicly trusted certificates for LAN addresses
 updated: 2026-09-19
 tags: [decision, networking, ios, https]
 status: current
+code:
+  - `scripts/setup-certs.mjs`
+  - `vite.config.ts`
 ---
 
 # 0004 — Publicly trusted certificates for LAN addresses
@@ -23,7 +26,7 @@ wildcard certificate that local-ip.co publishes for `*.my.local-ip.co`.
 ## Why
 
 The hostname resolves via public DNS to whatever private IP is encoded in it, so
-`192-168-178-26.my.local-ip.co` resolves to `192.168.178.26`. The certificate is
+`192-168-1-42.my.local-ip.co` resolves to `192.168.1.42`. The certificate is
 issued by GlobalSign and already in every device's trust store. A guest scans
 the QR code and it just works: no CA install, no tap-through warning, nothing
 typed.

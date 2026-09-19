@@ -72,7 +72,10 @@ Guidance for Claude Code sessions working in this repository.
 **Before doing anything else, read `llm-knowledge/index.md`.**
 
 It is a short router into the knowledge vault — the project's long-term memory.
-Then read whichever notes it points to that touch your task. The vault exists
+Its **Where things live** table maps each concept to the files responsible for
+it, so you can open the right file directly instead of searching the tree. Then
+read whichever notes it points to that touch your task; each carries the same
+pointers in its `code:` frontmatter. The vault exists
 because this project's hard parts are not visible in the code: iOS permission
 rules, router behaviour, certificate chains, and decisions whose alternatives
 are no longer on disk.
@@ -99,6 +102,10 @@ Every session ends by updating the vault. Two steps:
 2. **Promote it.** Anything in that log which will **still be true in a month**
    becomes a note in `decisions/`, `platform/`, `reference/` or `experiments/`,
    and gets linked from `llm-knowledge/index.md`.
+3. **Point it at the code.** Give the note a `code:` frontmatter listing the
+   files that concept lives in, and add a row to the **Where things live** table
+   in `index.md` if it is a new concept. If you moved or renamed a file, update
+   the pointers that named it — `npm run vault:check` fails on a stale one.
 
 Step 2 is the one that matters. A vault where knowledge only accumulates in
 dated logs is a diary, and nobody greps a diary.

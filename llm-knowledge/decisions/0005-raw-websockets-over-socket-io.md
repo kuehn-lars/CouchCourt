@@ -3,6 +3,9 @@ title: Raw ws over Socket.IO
 updated: 2026-09-19
 tags: [decision, networking]
 status: current
+code:
+  - `src/shared/protocol.ts`
+  - `src/server/`
 ---
 
 # 0005 — Raw `ws` over Socket.IO

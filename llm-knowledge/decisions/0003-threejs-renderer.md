@@ -3,6 +3,9 @@ title: Three.js over Phaser
 updated: 2026-09-19
 tags: [decision, rendering]
 status: current
+code:
+  - `src/host/`
+  - `src/host/render/`
 ---
 
 # 0003 — Three.js over Phaser

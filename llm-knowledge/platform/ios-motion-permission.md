@@ -3,6 +3,9 @@ title: iOS motion sensors need HTTPS and a tap
 updated: 2026-09-19
 tags: [platform, ios, safari, motion]
 status: current
+code:
+  - `src/controller/index.html`
+  - `src/shared/swing/`
 ---
 
 # iOS motion sensors need HTTPS *and* a tap

@@ -3,6 +3,10 @@ title: One package, not a monorepo
 updated: 2026-09-19
 tags: [decision, build]
 status: current
+code:
+  - `package.json`
+  - `vite.config.ts`
+  - `tsconfig.json`
 ---
 
 # 0001 — One package, not a monorepo

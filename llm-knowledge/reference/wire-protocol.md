@@ -3,6 +3,9 @@ title: Wire protocol intent
 updated: 2026-09-19
 tags: [reference, networking, protocol]
 status: current
+code:
+  - `src/shared/protocol.ts`
+  - `src/shared/protocol.test.ts`
 ---
 
 # Wire protocol intent

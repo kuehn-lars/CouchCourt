@@ -3,6 +3,8 @@ title: Home routers block LAN hostnames (DNS rebind protection)
 updated: 2026-09-19
 tags: [platform, networking, dns, https]
 status: current
+code:
+  - `scripts/setup-certs.mjs`
 ---
 
 # Home routers block LAN hostnames (DNS rebind protection)
@@ -12,15 +14,15 @@ a broken QR code and it is not.
 
 ## Symptom
 
-`192-168-178-26.my.local-ip.co` resolves correctly from a public resolver but
+`192-168-1-42.my.local-ip.co` resolves correctly from a public resolver but
 returns nothing on the local network:
 
 ```
-$ nslookup 192-168-178-26.my.local-ip.co 1.1.1.1
-Address: 192.168.178.26           # correct
+$ nslookup 192-168-1-42.my.local-ip.co 1.1.1.1
+Address: 192.168.1.42           # correct
 
-$ nslookup 192-168-178-26.my.local-ip.co    # router at 192.168.178.1
-*** Can't find 192-168-178-26.my.local-ip.co: No answer
+$ nslookup 192-168-1-42.my.local-ip.co    # router at 192.168.1.1
+*** Can't find 192-168-1-42.my.local-ip.co: No answer
 ```
 
 On the phone this surfaces as "Safari cannot open the page because the server

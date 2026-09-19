@@ -13,6 +13,30 @@ is the signal to consolidate notes, not to add a scrollbar.
 
 New to the vault? [[README]] explains what belongs here and what does not.
 
+## Where things live
+
+Concept to code, so a session can go straight to the file instead of searching
+for it. Every path here is verified by `npm run vault:check`; a pointer that
+lies costs more than no pointer.
+
+| Concept | Code | Note |
+| --- | --- | --- |
+| Wire protocol, message validation | `src/shared/protocol.ts` | [[wire-protocol]] |
+| Simulation, physics, scoring | `src/shared/sim/` | [[tennis-scoring]] |
+| Swing detection | `src/shared/swing/` | [[ios-motion-permission]] |
+| Purity boundary enforcement | `tsconfig.web.json`, `tsconfig.node.json` | [[0002-host-authoritative-simulation]] |
+| WebSocket relay, player slots | `src/server/` | [[0005-raw-websockets-over-socket-io]] |
+| Host display, Three.js rendering | `src/host/` | [[0003-threejs-renderer]] |
+| Controller, motion permission gate | `src/controller/index.html` | [[ios-motion-permission]] |
+| Reconnection and session identity | `src/shared/protocol.ts` | [[ios-safari-tab-suspension]] |
+| TLS certificates, LAN hostname | `scripts/setup-certs.mjs` | [[0004-lan-https-via-local-ip-co]] |
+| Motion trace fixtures | `tests/fixtures/motion/` | [[ios-motion-permission]] |
+| Vault format and CI enforcement | `scripts/check-vault.mjs` | [[README]] |
+| Build, dev server, test config | `vite.config.ts` | [[0001-single-package-vite-mpa]] |
+
+Each note carries the same pointers in its `code:` frontmatter, so the trail
+works from either direction.
+
 ## Start here
 
 - [[0002-host-authoritative-simulation]] — where the game logic lives, and why

@@ -3,6 +3,9 @@ title: How this vault works
 updated: 2026-09-19
 tags: [meta]
 status: current
+code:
+  - `scripts/check-vault.mjs`
+  - `.github/workflows/ci.yml`
 ---
 
 # How this vault works
@@ -65,8 +68,28 @@ title: Short human title
 updated: 2026-09-19   # ISO date, enforced by CI
 tags: [platform, ios]
 status: current       # or: superseded
+code:                 # files this concept lives in, verified by CI
+  - `src/shared/protocol.ts`
+  - `src/shared/swing/`
 ---
 ```
+
+## Point at the code
+
+`code:` is the pointer from a concept to the files responsible for it. It
+exists so a session can open the right file immediately instead of searching
+the tree — the search is the expensive part, and it is the same search every
+time.
+
+This does not contradict the rule above about not duplicating the repo.
+Pointing *at* a file is a router entry that saves a search. Describing *what is
+in* the file is duplication that goes stale. Write the path, not the contents.
+
+CI verifies that every `code:` path and every path in a table still exists, so
+a pointer cannot quietly rot into a lie. Prose is exempt, so a note may still
+name a file nobody has written yet.
+
+Concept-to-file routing for the whole project lives in [[index]].
 
 When a note stops being true, do not delete it — set `status: superseded` and
 link the note that replaced it. A future session that finds the old note then

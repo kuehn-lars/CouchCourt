@@ -6,31 +6,40 @@
  * phone must reach the host over HTTPS. A self-signed cert means every guest
  * installs a root CA before they can play, which is a wall in front of a party
  * game. Instead we use local-ip.co: `<lan-ip-with-dashes>.my.local-ip.co`
- * resolves to that LAN IP, and they publish a real GlobalSign-issued wildcard
+ * resolves to that LAN IP, and they publish a real publicly-trusted wildcard
  * cert for `*.my.local-ip.co`. Guests scan the QR and it just works.
  *
- * Tradeoffs, verified 2026-09-19 — see llm-knowledge/decisions/0004:
- *   - The private key is PUBLIC by design. This buys browser trust, not
- *     secrecy. Anyone on your LAN could MITM the session. Fine for a game,
- *     never for anything else.
- *   - The cert is short-lived (~6 months). Re-run this script when it expires.
- *   - First resolution needs internet, and some routers block it outright.
- *   - Their published `chain.pem` cannot be trusted to match the leaf. It did
- *     not on 2026-09-19: the leaf had moved to GlobalSign while chain.pem still
- *     served Sectigo intermediates. We build the chain from the leaf's own AIA
- *     extension instead, and verify it before writing.
+ * Knowledge vault:
+ *   llm-knowledge/decisions/0004-lan-https-via-local-ip-co.md   why this approach
+ *   llm-knowledge/platform/lan-https-cert-chain.md              why AIA, not chain.pem
+ *   llm-knowledge/platform/lan-https-dns-rebind.md              why the DNS check exists
  */
 
 import { execFileSync } from "node:child_process";
 import { promises as dns } from "node:dns";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CERT_DIR = join(ROOT, "certs");
+const CERT_PATH = join(CERT_DIR, "cert.pem");
+const KEY_PATH = join(CERT_DIR, "key.pem");
 const BASE = "https://local-ip.co/cert";
+
+/** Single source of truth for the port, shared with vite.config.ts. */
+const PORT = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).config
+	.port;
+
+/** Rebuild when fewer than this many days of validity remain. */
+const RENEW_WITHIN_DAYS = 7;
 
 /** The address guests' phones have to reach. Loopback is useless here. */
 function lanIPv4() {
@@ -55,50 +64,62 @@ async function download(name) {
 	return text;
 }
 
+const openssl = (args, input) =>
+	execFileSync("openssl", args, { input, encoding: "utf8" });
+
 /**
- * The intermediate that actually signed the leaf, fetched from the leaf's own
+ * The intermediate that actually signed the leaf, read from the leaf's own
  * Authority Information Access extension.
  *
- * We deliberately do NOT use local-ip.co's published chain.pem. On 2026-09-19
- * it was stale — Sectigo intermediates for a leaf GlobalSign had issued — which
- * produces a chain that macOS papers over via AIA fetching and iOS Safari
- * rejects outright. Reading AIA from the leaf follows whatever issuer is
- * current, so this survives the next rotation too.
+ * We deliberately do NOT use local-ip.co's published chain.pem. It was stale on
+ * 2026-09-19 — Sectigo intermediates for a leaf GlobalSign had issued — which
+ * yields a chain macOS papers over via AIA fetching and iOS Safari rejects.
+ * Reading AIA from the leaf follows whatever issuer is current, so this
+ * survives the next rotation too.
  */
-async function fetchIssuerFromAia(leafPath) {
-	const extension = execFileSync(
-		"openssl",
-		["x509", "-in", leafPath, "-noout", "-ext", "authorityInfoAccess"],
-		{ encoding: "utf8" },
+async function fetchIssuer(leafPem) {
+	const extension = openssl(
+		["x509", "-noout", "-ext", "authorityInfoAccess"],
+		leafPem,
 	);
 	const url = /URI:(http:\/\/\S+?\.crt)/.exec(extension)?.[1];
 	if (!url) throw new Error("Leaf certificate has no CA Issuers URI in AIA");
 
 	const response = await fetch(url, { redirect: "follow" });
 	if (!response.ok) throw new Error(`${url} returned ${response.status}`);
-	const der = Buffer.from(await response.arrayBuffer());
 
 	// AIA serves DER; everything downstream wants PEM.
-	return execFileSync(
-		"openssl",
+	return openssl(
 		["x509", "-inform", "DER", "-outform", "PEM"],
-		{
-			input: der,
-			encoding: "utf8",
-		},
+		Buffer.from(await response.arrayBuffer()),
 	);
 }
 
 /**
- * iOS rejects an incomplete or mismatched chain, and it does so with a generic
- * "cannot verify server identity" that tells you nothing. Verifying here turns
- * that into a real error message on the machine that can fix it.
+ * iOS rejects a chain that is incomplete, mismatched, or not valid for the name
+ * being opened — and it does so with a generic "cannot verify server identity"
+ * that tells you nothing. Checking here turns that into a real message on the
+ * machine that can fix it.
+ *
+ * `-verify_hostname` matters as much as the chain itself: a chain can be
+ * perfectly valid and still be for the wrong name, which is precisely what
+ * would happen if local-ip.co reissued as `*.local-ip.co` and our two-label
+ * hostname stopped matching the wildcard.
  */
-function chainVerifies(certPath) {
+function chainIsUsable(certPath, hostname) {
 	try {
-		execFileSync("openssl", ["verify", "-untrusted", certPath, certPath], {
-			stdio: "pipe",
-		});
+		execFileSync(
+			"openssl",
+			[
+				"verify",
+				"-verify_hostname",
+				hostname,
+				"-untrusted",
+				certPath,
+				certPath,
+			],
+			{ stdio: "pipe" },
+		);
 		return true;
 	} catch {
 		return false;
@@ -107,11 +128,7 @@ function chainVerifies(certPath) {
 
 function certNotAfter(pemPath) {
 	try {
-		const out = execFileSync(
-			"openssl",
-			["x509", "-in", pemPath, "-noout", "-enddate"],
-			{ encoding: "utf8" },
-		);
+		const out = openssl(["x509", "-in", pemPath, "-noout", "-enddate"]);
 		return new Date(out.replace("notAfter=", "").trim());
 	} catch {
 		return null;
@@ -124,76 +141,88 @@ function certNotAfter(pemPath) {
  * local subnet. That is exactly what local-ip.co does, so the name resolves
  * from the open internet but not from the sofa. Catching it here turns a
  * baffling "Safari cannot open the page" into one actionable sentence.
+ *
+ * Returns null when resolution is fine, otherwise the reason it is not.
  */
-async function checkRebindProtection(hostname, expectedIp) {
+async function dnsProblem(hostname, expectedIp) {
 	try {
 		const { address } = await dns.lookup(hostname, { family: 4 });
 		return address === expectedIp
-			? { ok: true }
-			: { ok: false, reason: `resolved to ${address}, expected ${expectedIp}` };
+			? null
+			: `resolved to ${address}, expected ${expectedIp}`;
 	} catch (error) {
-		return { ok: false, reason: error.code ?? String(error) };
+		return error.code ?? String(error);
 	}
+}
+
+async function buildCerts(hostname) {
+	console.log("Fetching certificate from local-ip.co ...");
+	const [leaf, key] = await Promise.all([
+		download("server.pem"),
+		download("server.key"),
+	]);
+
+	// Build the whole chain in memory, then write once. Writing the leaf first
+	// and appending later would leave a leaf-only chain on disk if the AIA fetch
+	// failed — exactly the broken state this script exists to prevent.
+	const issuer = await fetchIssuer(leaf);
+
+	writeFileSync(CERT_PATH, `${leaf.trim()}\n${issuer.trim()}\n`);
+	writeFileSync(KEY_PATH, key, { mode: 0o600 });
+
+	if (!chainIsUsable(CERT_PATH, hostname)) {
+		// Leave nothing behind that `npm run dev` would happily serve to a phone.
+		rmSync(CERT_PATH, { force: true });
+		rmSync(KEY_PATH, { force: true });
+		console.error(
+			`Built a certificate chain that is not usable for ${hostname}.\n` +
+				"Refusing to leave one behind that iOS would reject. This usually means\n" +
+				"local-ip.co changed something — see\n" +
+				"llm-knowledge/platform/lan-https-cert-chain.md",
+		);
+		return false;
+	}
+
+	const expiry = certNotAfter(CERT_PATH);
+	console.log(
+		`Wrote ./certs${expiry ? ` (valid until ${expiry.toDateString()})` : ""}.`,
+	);
+	return true;
 }
 
 async function main() {
 	const ip = lanIPv4();
 	if (!ip) {
 		console.error("No non-loopback IPv4 address found. Are you on Wi-Fi?");
-		process.exit(1);
+		process.exitCode = 1;
+		return;
 	}
 
 	const hostname = `${ip.replaceAll(".", "-")}.my.local-ip.co`;
 	mkdirSync(CERT_DIR, { recursive: true });
 
-	const certPath = join(CERT_DIR, "cert.pem");
-	const keyPath = join(CERT_DIR, "key.pem");
+	const expiry = existsSync(CERT_PATH) ? certNotAfter(CERT_PATH) : null;
+	// A cert that is in date but whose chain no longer verifies must be rebuilt.
+	// That is exactly the state a stale chain.pem left behind.
+	const reusable =
+		expiry &&
+		expiry.getTime() - Date.now() > RENEW_WITHIN_DAYS * 864e5 &&
+		chainIsUsable(CERT_PATH, hostname);
 
-	const existing = existsSync(certPath) ? certNotAfter(certPath) : null;
-	// A cert that is in date but whose chain does not verify must be rebuilt —
-	// that is exactly the state a stale chain.pem left behind.
-	const stillValid =
-		existing &&
-		existing.getTime() - Date.now() > 7 * 864e5 &&
-		chainVerifies(certPath);
-
-	if (stillValid) {
-		console.log(`Reusing ./certs (valid until ${existing.toDateString()}).`);
-	} else {
-		console.log("Fetching certificate from local-ip.co ...");
-		const [leaf, key] = await Promise.all([
-			download("server.pem"),
-			download("server.key"),
-		]);
-		writeFileSync(certPath, `${leaf.trim()}\n`);
-		writeFileSync(keyPath, key, { mode: 0o600 });
-
-		// The leaf alone is not enough — iOS rejects an incomplete chain.
-		const issuer = await fetchIssuerFromAia(certPath);
-		writeFileSync(certPath, `${leaf.trim()}\n${issuer.trim()}\n`);
-
-		if (!chainVerifies(certPath)) {
-			console.error(
-				"Built a certificate chain that does not verify. Refusing to write a\n" +
-					"chain iOS would reject. This usually means local-ip.co changed\n" +
-					"something — see llm-knowledge/platform/lan-https-cert-chain.md",
-			);
-			process.exit(1);
-		}
-
-		const expiry = certNotAfter(certPath);
-		console.log(
-			`Wrote ./certs${expiry ? ` (valid until ${expiry.toDateString()})` : ""}.`,
-		);
+	if (reusable) {
+		console.log(`Reusing ./certs (valid until ${expiry.toDateString()}).`);
+	} else if (!(await buildCerts(hostname))) {
+		process.exitCode = 1;
+		return;
 	}
 
-	const dnsCheck = await checkRebindProtection(hostname, ip);
-	console.log(`\n  Host:       https://${hostname}:5173/host/`);
-	console.log(`  Controller: https://${hostname}:5173/controller/\n`);
+	console.log(`\n  Host:       https://${hostname}:${PORT}/host/`);
+	console.log(`  Controller: https://${hostname}:${PORT}/controller/\n`);
 
-	if (!dnsCheck.ok) {
+	const problem = await dnsProblem(hostname, ip);
+	if (problem) {
 		console.warn(
-			`WARNING: ${hostname} does not resolve on this network (${dnsCheck.reason}).\n` +
+			`WARNING: ${hostname} does not resolve on this network (${problem}).\n` +
 				"This is almost always DNS rebind protection on your router, which\n" +
 				"drops public DNS answers that point into your own LAN.\n\n" +
 				"  FritzBox: Home Network > Network > Network Settings >\n" +
@@ -202,6 +231,7 @@ async function main() {
 				"network at once, so guests still do not have to configure anything.\n" +
 				"See llm-knowledge/platform/lan-https-dns-rebind.md\n",
 		);
+		// Setup is genuinely incomplete: the phone cannot reach the host yet.
 		process.exitCode = 1;
 	}
 }

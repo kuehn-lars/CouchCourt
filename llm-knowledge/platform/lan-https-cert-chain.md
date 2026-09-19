@@ -3,6 +3,8 @@ title: local-ip.co's published chain does not match its leaf
 updated: 2026-09-19
 tags: [platform, https, ios, certificates]
 status: current
+code:
+  - `scripts/setup-certs.mjs`
 ---
 
 # local-ip.co's published chain does not match its leaf

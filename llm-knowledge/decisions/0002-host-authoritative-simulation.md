@@ -3,6 +3,10 @@ title: Simulation runs in the host browser
 updated: 2026-09-19
 tags: [decision, architecture, core]
 status: current
+code:
+  - `src/shared/`
+  - `tsconfig.web.json`
+  - `tsconfig.node.json`
 ---
 
 # 0002 — Simulation runs in the host browser, server is a relay

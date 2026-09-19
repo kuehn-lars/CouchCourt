@@ -3,6 +3,8 @@ title: Verifying LAN HTTPS with a public certificate
 updated: 2026-09-19
 tags: [experiment, networking, https, ios]
 status: current
+code:
+  - `scripts/setup-certs.mjs`
 ---
 
 # 2026-09-19 — Verifying LAN HTTPS with a public certificate
@@ -46,8 +48,8 @@ server using the fetched key and chain, fetched with strict verification against
 the system trust store (no `-k`), returned the expected body:
 
 ```
-curl --resolve 192-168-178-26.my.local-ip.co:8443:127.0.0.1 \
-     https://192-168-178-26.my.local-ip.co:8443/
+curl --resolve 192-168-1-42.my.local-ip.co:8443:127.0.0.1 \
+     https://192-168-1-42.my.local-ip.co:8443/
 swingcourt-tls-ok
 ```
 
@@ -92,11 +94,22 @@ Verify return code: 0 (ok)
 
 Both pages return 200 over strict TLS on the real hostname.
 
-## Not yet verified
+**6. Does it work on a real iPhone?** **Yes** — confirmed by the project owner
+on 2026-09-19, after the chain was rebuilt from AIA and the router's DNS rebind
+exception was added. The controller page loads over HTTPS on the LAN hostname
+with no certificate warning and no per-device setup, which was the entire
+premise of [[0004-lan-https-via-local-ip-co]].
 
-**The actual iPhone.** Everything above was tested on macOS. That distinction
-already produced one wrong conclusion in this note, so treat it as load-bearing:
-`Verify return code: 0 (ok)` is a much stronger signal than a successful curl,
-but it is still not a phone. The first session with a phone to hand should
-confirm the page loads and `DeviceMotionEvent.requestPermission()` resolves —
-see [[ios-motion-permission]] — and update this note with the result.
+Both blockers had to be fixed for this to work; either one alone still fails:
+
+1. Router DNS rebind exception — [[lan-https-dns-rebind]]
+2. Certificate chain rebuilt from AIA — [[lan-https-cert-chain]]
+
+## Still open
+
+- **iOS version not recorded.** Chain handling and `devicemotion` sample rates
+  differ between releases, so the next session with the phone should note it
+  here and in any motion fixtures captured.
+- **`DeviceMotionEvent.requestPermission()` is untested.** Page load is not the
+  same gate as sensor access — see [[ios-motion-permission]] for the second one.
+  Nothing has called it yet, because no controller code exists.

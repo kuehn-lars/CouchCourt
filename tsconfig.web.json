@@ -9,10 +9,13 @@
 		// src/shared fails here.
 		"types": []
 	},
+	// Tests are deliberately NOT excluded here. `types: []` only strips ambient
+	// globals, and vitest is imported as a module, so tests typecheck fine.
+	// Excluding them left colocated tests under src/host and src/controller
+	// checked by no project at all, silently.
 	"include": [
 		"src/shared/**/*.ts",
 		"src/host/**/*.ts",
 		"src/controller/**/*.ts"
-	],
-	"exclude": ["**/*.test.ts"]
+	]
 }

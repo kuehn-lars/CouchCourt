@@ -3,6 +3,8 @@ title: Tennis scoring rules the sim implements
 updated: 2026-09-19
 tags: [reference, domain, rules]
 status: current
+code:
+  - `src/shared/sim/`
 ---
 
 # Tennis scoring rules the sim implements

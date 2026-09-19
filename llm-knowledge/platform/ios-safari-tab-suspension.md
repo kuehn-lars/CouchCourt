@@ -3,6 +3,9 @@ title: iOS will drop the controller's socket
 updated: 2026-09-19
 tags: [platform, ios, safari, networking]
 status: current
+code:
+  - `src/shared/protocol.ts`
+  - `src/server/`
 ---
 
 # iOS will drop the controller's socket

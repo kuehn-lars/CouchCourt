@@ -8,10 +8,12 @@
 	"engines": {
 		"node": ">=24"
 	},
+	"config": {
+		"port": 5173
+	},
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build",
-		"start": "node src/server/main.ts",
 		"check": "biome ci .",
 		"format": "biome check --write .",
 		"typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
