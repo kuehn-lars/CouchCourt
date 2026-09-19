@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
 	type ControllerMessage,
+	type HostMessage,
 	isControllerMessage,
+	isHostMessage,
 	parseControllerMessage,
+	parseHostMessage,
 } from "./protocol.ts";
 
 describe("isControllerMessage", () => {
@@ -78,5 +81,54 @@ describe("parseControllerMessage", () => {
 
 	it("returns null for valid JSON that is not a message", () => {
 		expect(parseControllerMessage('{"t":"drop-tables"}')).toBeNull();
+	});
+});
+
+describe("isHostMessage", () => {
+	it("accepts each variant of the union", () => {
+		const valid: HostMessage[] = [
+			{ t: "host-hello", v: 1 },
+			{ t: "feedback", playerId: "p_abc", kind: "hit" },
+			{ t: "feedback", playerId: "p_abc", kind: "point" },
+		];
+		for (const message of valid) {
+			expect(isHostMessage(message), JSON.stringify(message)).toBe(true);
+		}
+	});
+
+	it("rejects malformed payloads", () => {
+		const invalid: unknown[] = [
+			null,
+			{ t: "host-hello" },
+			{ t: "host-hello", v: Number.NaN },
+			{ t: "feedback", kind: "hit" }, // playerId missing
+			{ t: "feedback", playerId: "p", kind: "explode" },
+			{ t: "swing", kind: "serve", power: 1, at: 0 }, // controller message
+		];
+		for (const message of invalid) {
+			expect(isHostMessage(message), JSON.stringify(message)).toBe(false);
+		}
+	});
+
+	// The two inbound directions must not accept each other's traffic, or a
+	// misrouted socket would look like a working one.
+	it("does not accept controller messages, and vice versa", () => {
+		const controller: unknown = { t: "ready", ready: true };
+		const host: unknown = { t: "host-hello", v: 1 };
+		expect(isHostMessage(controller)).toBe(false);
+		expect(isControllerMessage(host)).toBe(false);
+	});
+});
+
+describe("parseHostMessage", () => {
+	it("round-trips a valid message", () => {
+		expect(parseHostMessage('{"t":"host-hello","v":1}')).toEqual({
+			t: "host-hello",
+			v: 1,
+		});
+	});
+
+	it("returns null for invalid JSON rather than throwing", () => {
+		expect(parseHostMessage("{nope")).toBeNull();
 	});
 });

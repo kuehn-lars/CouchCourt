@@ -7,6 +7,7 @@ code:
   - `src/shared/`
   - `tsconfig.web.json`
   - `tsconfig.node.json`
+  - `tsconfig.test.json`
 ---
 
 # 0002 — Simulation runs in the host browser, server is a relay
@@ -47,8 +48,19 @@ Not by convention, and not by a lint plugin. By the typechecker:
 `shared` that touches `document` fails the node project; code that touches
 `process` fails the web project. Both directions, no extra tooling.
 
-Verified 2026-09-19 — a probe file using `document` and one using `process` each
-produced exactly one typecheck failure.
+**Both production projects must exclude `**/*.test.ts`.** Importing `vitest`
+pulls `@types/node` in transitively, which silently re-grants `process` to the
+web project and defeats the guard — `types: []` cannot stop it. This was
+observed, not theorised: briefly including tests in the web project made the
+node-API probe pass when it should have failed.
+
+Tests are therefore typechecked by a third project, `tsconfig.test.json`, which
+has both environments and enforces no boundary. That is the whole reason it is
+separate.
+
+Verified 2026-09-19 — probes for `document`, `process` and `enum` each fail, and
+colocated tests under `shared`, `server`, `host` and `controller` are all
+typechecked.
 
 ## Alternatives rejected
 

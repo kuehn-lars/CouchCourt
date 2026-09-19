@@ -7,7 +7,7 @@
  * by which point an agent is reading the vault and confidently acting on
  * something untrue.
  *
- * Deliberately checks four things only. A linter nobody can satisfy gets
+ * Each rule below is deliberately narrow. A linter nobody can satisfy gets
  * disabled, and then it guards nothing.
  */
 
@@ -36,27 +36,39 @@ function markdownFiles(dir) {
 }
 
 /**
- * Backticked repo paths, from structured pointer surfaces only.
- *
- * Structured surfaces — `code:` frontmatter and table cells — are contracts
- * about what exists right now, so they are checked. Prose is narrative and may
- * legitimately name a file nobody has written yet ("scoring.ts will implement
- * this"), so it is exempt. Checking prose would make forward references
- * impossible and the check would get switched off.
+ * The only place that knows the frontmatter format. Returns null when a note
+ * has no frontmatter block at all.
  */
-function pointerPaths(frontmatter, body) {
-	const surfaces = [];
+function readFrontmatter(text) {
+	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+	if (!match) return null;
+	const raw = match[1];
+	return {
+		updated: /^updated:\s*(\S+)/m.exec(raw)?.[1] ?? null,
+		status: /^status:\s*(\S+)/m.exec(raw)?.[1] ?? null,
+		code: /^code:\s*\n((?:[ \t]*-[ \t]+.+\n?)+)/m.exec(raw)?.[1] ?? "",
+	};
+}
 
-	const code = /^code:\s*\n((?:\s*-\s+.+\n?)+)/m.exec(frontmatter);
-	if (code) surfaces.push(code[1]);
+/** Prose with fenced and inline code removed. */
+const withoutCode = (text) =>
+	text.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
 
-	// Markdown table rows.
-	for (const line of body.split("\n")) {
-		if (line.trimStart().startsWith("|")) surfaces.push(line);
-	}
+/**
+ * Repo paths from structured pointer surfaces only: `code:` frontmatter and
+ * table cells. Those are contracts about what exists right now.
+ *
+ * Prose is exempt on purpose, so a note may still name a file nobody has
+ * written yet ("scoring.ts will implement this"). Checking prose would make
+ * forward references impossible and the check would get switched off.
+ */
+function pointerPaths(note) {
+	const tableRows = note.text
+		.split("\n")
+		.filter((line) => line.trimStart().startsWith("|"));
 
 	const paths = new Set();
-	for (const surface of surfaces) {
+	for (const surface of [note.frontmatter?.code ?? "", ...tableRows]) {
 		for (const [, path] of surface.matchAll(/`([^`\n]+)`/g)) {
 			if (CODE_ROOTS.test(path)) paths.add(path.replace(/\/$/, ""));
 		}
@@ -64,58 +76,71 @@ function pointerPaths(frontmatter, body) {
 	return paths;
 }
 
-const files = markdownFiles(VAULT);
-const noteNames = new Set(files.map((f) => basename(f, ".md")));
-const problems = [];
+// --- rules -----------------------------------------------------------------
+// Each takes a note and returns the problems it found. Adding a rule means
+// adding a function and listing it below, not editing a loop.
 
-for (const file of files) {
-	const where = relative(ROOT, file);
-	const text = readFileSync(file, "utf8");
+function frontmatterIsComplete({ frontmatter, text }) {
+	if (!frontmatter) return ["missing YAML frontmatter"];
 
-	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-	const frontmatter = match?.[1] ?? "";
-	if (!match) {
-		problems.push(`${where}: missing YAML frontmatter`);
-	} else {
-		const updated = /^updated:\s*(\S+)/m.exec(frontmatter);
-		if (!updated) {
-			problems.push(`${where}: frontmatter has no \`updated:\` date`);
-		} else if (!/^\d{4}-\d{2}-\d{2}$/.test(updated[1])) {
-			problems.push(
-				`${where}: \`updated: ${updated[1]}\` is not an ISO date (YYYY-MM-DD)`,
-			);
-		}
-
-		// A superseded note that does not say what replaced it is a dead end —
-		// worse than no note, because it reads as current until you check the date.
-		if (
-			/^status:\s*superseded/m.test(frontmatter) &&
-			!/\[\[[^\]]+\]\]/.test(text)
-		) {
-			problems.push(`${where}: marked superseded but links to no successor`);
-		}
+	const problems = [];
+	if (!frontmatter.updated) {
+		problems.push("frontmatter has no `updated:` date");
+	} else if (!/^\d{4}-\d{2}-\d{2}$/.test(frontmatter.updated)) {
+		problems.push(
+			`\`updated: ${frontmatter.updated}\` is not an ISO date (YYYY-MM-DD)`,
+		);
 	}
 
-	// Strip fenced and inline code first, or a note documenting the link syntax
-	// cannot be written without failing the check that reads it.
-	const prose = text.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
+	// A superseded note that does not say what replaced it is a dead end —
+	// worse than no note, because it reads as current until you check the date.
+	if (frontmatter.status === "superseded" && !/\[\[[^\]]+\]\]/.test(text)) {
+		problems.push("marked superseded but links to no successor");
+	}
+	return problems;
+}
 
-	for (const [, target] of prose.matchAll(/\[\[([^\]]+)\]\]/g)) {
+function wikilinksResolve({ text }, { noteNames }) {
+	const problems = [];
+	for (const [, target] of withoutCode(text).matchAll(/\[\[([^\]]+)\]\]/g)) {
 		// Obsidian accepts [[note]], [[note|alias]], [[note#heading]], [[dir/note]].
 		const name = basename(target.split("|")[0].split("#")[0].trim());
 		if (name && !noteNames.has(name)) {
-			problems.push(`${where}: broken wikilink [[${target}]]`);
+			problems.push(`broken wikilink [[${target}]]`);
 		}
 	}
-
-	// The whole point of a `code:` pointer is to save a future session the search.
-	// A pointer to a file that moved costs more than no pointer at all.
-	for (const path of pointerPaths(frontmatter, text)) {
-		if (!existsSync(join(ROOT, path))) {
-			problems.push(`${where}: \`${path}\` does not exist`);
-		}
-	}
+	return problems;
 }
+
+function codePointersExist(note) {
+	// The whole point of a pointer is to save a future session the search.
+	// A pointer to a file that moved costs more than no pointer at all.
+	return [...pointerPaths(note)]
+		.filter((path) => !existsSync(join(ROOT, path)))
+		.map((path) => `\`${path}\` does not exist`);
+}
+
+const RULES = [frontmatterIsComplete, wikilinksResolve, codePointersExist];
+
+// --- run -------------------------------------------------------------------
+
+const files = markdownFiles(VAULT);
+const vault = { noteNames: new Set(files.map((f) => basename(f, ".md"))) };
+
+const notes = files.map((file) => {
+	const text = readFileSync(file, "utf8");
+	return {
+		where: relative(ROOT, file),
+		text,
+		frontmatter: readFrontmatter(text),
+	};
+});
+
+const problems = notes.flatMap((note) =>
+	RULES.flatMap((rule) =>
+		rule(note, vault).map((problem) => `${note.where}: ${problem}`),
+	),
+);
 
 if (problems.length > 0) {
 	console.error(`Vault check failed (${problems.length}):\n`);
@@ -129,5 +154,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-	`Vault OK: ${files.length} notes, all links and code pointers resolve.`,
+	`Vault OK: ${notes.length} notes, all links and code pointers resolve.`,
 );

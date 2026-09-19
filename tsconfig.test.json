@@ -1,0 +1,14 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+
+		// Tests may exercise either side, so they get both environments. This
+		// project exists purely to typecheck test files — it enforces no boundary,
+		// which is exactly why the production projects must exclude tests.
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		"types": ["node"]
+	},
+	"include": ["src/**/*.test.ts", "tests/**/*.ts"]
+}

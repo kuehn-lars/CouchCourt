@@ -8,10 +8,9 @@
 		"lib": ["ES2023"],
 		"types": ["node"]
 	},
-	"include": [
-		"src/shared/**/*.ts",
-		"src/server/**/*.ts",
-		"tests/**/*.ts",
-		"vite.config.ts"
-	]
+	// Tests live in tsconfig.test.json; including them here would be harmless
+	// but pointless, and keeping production and test inputs apart is what makes
+	// the purity guards meaningful.
+	"exclude": ["**/*.test.ts"],
+	"include": ["src/shared/**/*.ts", "src/server/**/*.ts", "vite.config.ts"]
 }

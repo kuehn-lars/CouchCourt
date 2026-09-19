@@ -24,7 +24,7 @@ lies costs more than no pointer.
 | Wire protocol, message validation | `src/shared/protocol.ts` | [[wire-protocol]] |
 | Simulation, physics, scoring | `src/shared/sim/` | [[tennis-scoring]] |
 | Swing detection | `src/shared/swing/` | [[ios-motion-permission]] |
-| Purity boundary enforcement | `tsconfig.web.json`, `tsconfig.node.json` | [[0002-host-authoritative-simulation]] |
+| Purity boundary enforcement | `tsconfig.web.json`, `tsconfig.node.json`, `tsconfig.test.json` | [[0002-host-authoritative-simulation]] |
 | WebSocket relay, player slots | `src/server/` | [[0005-raw-websockets-over-socket-io]] |
 | Host display, Three.js rendering | `src/host/` | [[0003-threejs-renderer]] |
 | Controller, motion permission gate | `src/controller/index.html` | [[ios-motion-permission]] |

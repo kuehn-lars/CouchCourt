@@ -22,6 +22,9 @@ export type Side = "near" | "far";
 
 export type SwingKind = "forehand" | "backhand" | "serve";
 
+/** What the host tells a phone happened, so it can buzz. */
+export type FeedbackKind = "hit" | "miss" | "point";
+
 /** ~20Hz. Where the racket is pointing, used for shot direction. Radians. */
 export interface Aim {
 	yaw: number;
@@ -57,12 +60,12 @@ export type ControllerBoundMessage =
 	| { t: "rejected"; reason: "full" | "bad-version" | "unknown-session" }
 	| { t: "lobby"; players: LobbyPlayer[] }
 	/** Drives haptics and on-phone feedback. Not authoritative for anything. */
-	| { t: "feedback"; kind: "hit" | "miss" | "point" };
+	| { t: "feedback"; kind: FeedbackKind };
 
 /** host -> server */
 export type HostMessage =
 	| { t: "host-hello"; v: number }
-	| { t: "feedback"; playerId: PlayerId; kind: "hit" | "miss" | "point" };
+	| { t: "feedback"; playerId: PlayerId; kind: FeedbackKind };
 
 /** server -> host */
 export type HostBoundMessage =
@@ -71,6 +74,11 @@ export type HostBoundMessage =
 	| { t: "player-ready"; playerId: PlayerId; ready: boolean }
 	| { t: "aim"; playerId: PlayerId; aim: Aim }
 	| { t: "swing"; playerId: PlayerId; swing: Swing };
+
+const FEEDBACK_KINDS: readonly FeedbackKind[] = ["hit", "miss", "point"];
+
+const isFeedbackKind = (x: unknown): x is FeedbackKind =>
+	FEEDBACK_KINDS.includes(x as FeedbackKind);
 
 const isRecord = (x: unknown): x is Record<string, unknown> =>
 	typeof x === "object" && x !== null;
@@ -110,13 +118,40 @@ export function isControllerMessage(x: unknown): x is ControllerMessage {
 	}
 }
 
-/** Convenience wrapper: parse a raw socket payload, or get `null`. */
-export function parseControllerMessage(raw: string): ControllerMessage | null {
+/**
+ * The host page is served by us, but it still reaches the server over a socket
+ * anyone on the LAN can open. It is exactly as untrusted as a controller, so it
+ * gets exactly the same treatment.
+ *
+ * Both inbound directions are guarded on purpose. Shipping a validator for one
+ * and not the other is how an unvalidated boundary quietly becomes permanent:
+ * whoever writes the server copies the pattern they find.
+ */
+export function isHostMessage(x: unknown): x is HostMessage {
+	if (!isRecord(x)) return false;
+	switch (x.t) {
+		case "host-hello":
+			return isFiniteNumber(x.v);
+		case "feedback":
+			return typeof x.playerId === "string" && isFeedbackKind(x.kind);
+		default:
+			return false;
+	}
+}
+
+/** Parse a raw socket payload against a guard, or get `null`. */
+function parse<T>(raw: string, guard: (x: unknown) => x is T): T | null {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(raw);
 	} catch {
 		return null;
 	}
-	return isControllerMessage(parsed) ? parsed : null;
+	return guard(parsed) ? parsed : null;
 }
+
+export const parseControllerMessage = (raw: string): ControllerMessage | null =>
+	parse(raw, isControllerMessage);
+
+export const parseHostMessage = (raw: string): HostMessage | null =>
+	parse(raw, isHostMessage);
