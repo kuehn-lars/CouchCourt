@@ -1,0 +1,22 @@
+{
+	"compilerOptions": {
+		"target": "ES2023",
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noFallthroughCasesInSwitch": true,
+		"exactOptionalPropertyTypes": true,
+		"isolatedModules": true,
+		"verbatimModuleSyntax": true,
+		"allowImportingTsExtensions": true,
+
+		// The server runs via `node src/server/main.ts` using Node's native type
+		// stripping, which cannot execute enums, namespaces or parameter
+		// properties. This fails the typecheck instead of failing at runtime.
+		"erasableSyntaxOnly": true,
+
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"noEmit": true
+	}
+}

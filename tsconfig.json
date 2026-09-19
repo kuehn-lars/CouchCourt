@@ -1,0 +1,12 @@
+{
+	// Solution file. src/shared is deliberately compiled by BOTH projects:
+	// tsconfig.web.json has DOM but no node types, tsconfig.node.json has the
+	// reverse. Shared code touching either one fails one of the two typechecks.
+	// That is how the purity of src/shared is enforced — no lint plugin needed.
+	"files": [],
+	"references": [
+		{ "path": "./tsconfig.web.json" },
+		{ "path": "./tsconfig.node.json" },
+		{ "path": "./tsconfig.test.json" }
+	]
+}

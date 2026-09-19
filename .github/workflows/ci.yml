@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push makes the previous run's answer irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # `if: '!cancelled()'` on every step below: one job keeps CI fast and
+      # simple, but without this a lint error would mask every test failure and
+      # you would fix them one push at a time. This way one run reports
+      # everything that is wrong.
+      - name: Lint and format
+        if: ${{ !cancelled() }}
+        run: npm run check
+
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: npm run typecheck
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: npm test
+
+      - name: Build
+        if: ${{ !cancelled() }}
+        run: npm run build
+
+      - name: Knowledge vault integrity
+        if: ${{ !cancelled() }}
+        run: npm run vault:check

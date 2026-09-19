@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<!--
+			user-scalable=no and viewport-fit=cover matter here: a player is
+			swinging the phone, and a stray pinch-zoom or a control under the
+			home indicator ruins the round.
+		-->
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+		/>
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="theme-color" content="#0b1d13" />
+		<title>SwingCourt Controller</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: #0b1d13;
+				color: #e8f5ec;
+				font: 16px/1.5 -apple-system, system-ui, sans-serif;
+				/* A racket swing must never scroll or rubber-band the page. */
+				overscroll-behavior: none;
+				touch-action: none;
+				-webkit-user-select: none;
+				user-select: none;
+			}
+			main {
+				display: grid;
+				place-content: center;
+				height: 100%;
+				padding: max(1rem, env(safe-area-inset-top)) 1rem
+					max(1rem, env(safe-area-inset-bottom));
+				text-align: center;
+			}
+		</style>
+	</head>
+	<body>
+		<!--
+			Racket controller. iOS Safari only.
+			Requires a secure context AND a tap-triggered
+			DeviceMotionEvent.requestPermission() — see the vault note
+			llm-knowledge/platform/ios-motion-permission.md before touching this.
+			Entry point src/controller/main.ts is not written yet.
+		-->
+		<main>
+			<h1>SwingCourt</h1>
+			<p>Controller. Not built yet.</p>
+		</main>
+	</body>
+</html>

@@ -1,0 +1,22 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+
+		// Empty on purpose. Without @types/node, any Node API that leaks into
+		// src/shared fails here.
+		"types": []
+	},
+	"include": [
+		"src/shared/**/*.ts",
+		"src/host/**/*.ts",
+		"src/controller/**/*.ts"
+	],
+
+	// Tests are excluded because importing vitest pulls @types/node in
+	// transitively, which silently re-grants `process` and defeats the purity
+	// guard above. Tests are typechecked by tsconfig.test.json instead.
+	"exclude": ["**/*.test.ts"]
+}

@@ -1,0 +1,16 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+
+		// No DOM on purpose. Any browser API that leaks into src/shared fails here.
+		"lib": ["ES2023"],
+		"types": ["node"]
+	},
+	// Tests live in tsconfig.test.json; including them here would be harmless
+	// but pointless, and keeping production and test inputs apart is what makes
+	// the purity guards meaningful.
+	"exclude": ["**/*.test.ts"],
+	"include": ["src/shared/**/*.ts", "src/server/**/*.ts", "vite.config.ts"]
+}
