@@ -1,113 +1,140 @@
 # CLAUDE.md
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
-
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
-
-## 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-## 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+How to work in this repository. **What** the project is lives in `PRODUCT.md`;
+**why** things are the way they are lives in the knowledge vault. This file is
+only the working contract.
 
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+## 1. Start: read the vault
 
+**Before anything else, read `llm-knowledge/index.md`.**
 
-Guidance for Claude Code sessions working in this repository.
+It is a short router. Its **Where things live** table maps each concept to the
+files responsible for it, so you open the right file instead of searching the
+tree. Follow the links that touch your task; each note carries the same pointers
+in its `code:` frontmatter.
 
-## Read this first, every session
-
-**Before doing anything else, read `llm-knowledge/index.md`.**
-
-It is a short router into the knowledge vault — the project's long-term memory.
-Its **Where things live** table maps each concept to the files responsible for
-it, so you can open the right file directly instead of searching the tree. Then
-read whichever notes it points to that touch your task; each carries the same
-pointers in its `code:` frontmatter. The vault exists
-because this project's hard parts are not visible in the code: iOS permission
-rules, router behaviour, certificate chains, and decisions whose alternatives
-are no longer on disk.
-
+The vault exists because this project's hard parts are invisible in the code —
+platform behaviour, rejected alternatives, constants found by measurement.
 Skipping it means rediscovering something that already cost someone an evening.
-At minimum, before touching:
 
-| Area | Read |
-| --- | --- |
-| anything in `src/shared` | `decisions/0002-host-authoritative-simulation.md` |
-| the controller or motion input | `platform/ios-motion-permission.md` |
-| networking, sockets, reconnection | `platform/ios-safari-tab-suspension.md`, `decisions/0005-*` |
-| HTTPS, certificates, the QR flow | `decisions/0004-*`, `platform/lan-https-dns-rebind.md` |
-| protocol or message shapes | `reference/wire-protocol.md` |
-| scoring | `reference/tennis-scoring.md` |
+Then open a session log (§2) before you start work.
 
-## Write back before you finish
+---
 
-Every session ends by updating the vault. Two steps:
+## 2. Keep a session log, updated as you go
 
-1. **Log it.** Write `llm-knowledge/sessions/YYYY-MM-DD-<slug>.md` — what you
-   did, what surprised you, what you tried that did not work. This folder is
-   gitignored scratch; be honest and rough.
-2. **Promote it.** Anything in that log which will **still be true in a month**
-   becomes a note in `decisions/`, `platform/`, `reference/` or `experiments/`,
-   and gets linked from `llm-knowledge/index.md`.
-3. **Point it at the code.** Give the note a `code:` frontmatter listing the
-   files that concept lives in, and add a row to the **Where things live** table
-   in `index.md` if it is a new concept. If you moved or renamed a file, update
-   the pointers that named it — `npm run vault:check` fails on a stale one.
+Every session keeps a log at:
 
-Step 2 is the one that matters. A vault where knowledge only accumulates in
+```
+llm-knowledge/sessions/YYYY-MM-DD-HHmm-<slug>.md
+```
+
+The `HHmm` matters — several sessions can happen in one day and they must not
+collide. Use the time you started.
+
+**Create it before your first real change, and append to it at the end of every
+iteration** — each time you finish a unit of work, not once at the end. An
+iteration is finished when a test goes green, a decision is made, a bug is
+understood, or an attempt is abandoned.
+
+Append, do not rewrite. The log is a running account, and a session that is
+interrupted should still leave a usable one.
+
+```markdown
+## <time> — <what this iteration was>
+
+**Did:** what changed, and where.
+**Found:** anything surprising. Include the evidence, not just the conclusion.
+**Failed:** what did not work, and why. This is the most valuable line — it is
+the part nobody can reconstruct later.
+**Next:** the immediate next step, so an interrupted session can resume.
+```
+
+This folder is gitignored scratch. Be rough and be honest, especially about
+dead ends.
+
+---
+
+## 3. Work test-first. This is not optional.
+
+**Every behavioural change starts with a failing test.**
+
+### The loop
+
+1. **RED** — write the smallest test that expresses the next behaviour. **Run
+   it and watch it fail.**
+2. **GREEN** — write the least code that passes. Not the elegant version. The
+   passing one.
+3. **REFACTOR** — clean it up with the test still green.
+4. Log the iteration (§2) and repeat.
+
+### Watching it fail is the part that gets skipped
+
+A test you have never seen fail proves nothing. It may be asserting something
+trivially true, may not be running at all, or may be passing for a reason that
+has nothing to do with your change.
+
+This is not hypothetical here. Three separate times in this repository's first
+day, a green result meant less than it appeared to: a certificate chain that was
+broken while `curl` silently repaired it, an edit that silently did not apply
+while the suite stayed green, and a type-safety guard that was destroyed by an
+unrelated fix without a single check turning red.
+
+**So: when you add a guard, an assertion, or a CI rule, also prove it fails.**
+Break the thing on purpose, watch the check catch it, put it back. A guard that
+has never caught anything is a guess.
+
+### What to test, and what not to
+
+Test what is pure and what is easy to get wrong: logic, parsing, state
+machines, validation, scoring, maths. These need no browser, no server and no
+hardware, and they are where real bugs live.
+
+Do not test rendering, animation, audio, or anything needing real hardware. Do
+not write a test that only restates the implementation.
+
+When something is hard to test, that is usually the design talking. Prefer
+extracting the logic into a pure function over building test infrastructure
+around an awkward shape.
+
+### When you cannot test first
+
+Spikes and genuine exploration are allowed. Say so in the session log, keep the
+result labelled throwaway, and **write the test before the code becomes
+permanent.** "I will add tests after" is how it never happens.
+
+---
+
+## 4. Debug by finding the cause, not the symptom
+
+When something breaks: reproduce it, read the actual error, and instrument the
+boundaries until you know *where* it fails. Only then form one hypothesis and
+test it.
+
+Do not stack fixes. If three attempts have failed, the model is wrong, not the
+code — stop and say so.
+
+**Never explain away a contradicting signal.** If two tools disagree, the
+stricter one is usually describing reality. A tool reporting a failure you find
+inconvenient is the most valuable output you will get that day.
+
+---
+
+## 5. Finish: promote what you learned
+
+Before you are done, the session log gets harvested:
+
+1. **Promote.** Anything that will **still be true in a month** becomes a note
+   in `decisions/`, `platform/`, `reference/` or `experiments/`, linked from
+   `llm-knowledge/index.md`.
+2. **Point it at the code.** Give the note `code:` frontmatter naming the files
+   the concept lives in, and add a row to **Where things live** for a new
+   concept. If you moved or renamed a file, fix the pointers that named it —
+   `npm run vault:check` fails on a stale one.
+
+Step 1 is the one that matters. A vault where knowledge only accumulates in
 dated logs is a diary, and nobody greps a diary.
 
 ### What belongs in the vault
@@ -115,115 +142,71 @@ dated logs is a diary, and nobody greps a diary.
 **The test: would a future session spend more than a few minutes re-deriving
 this?**
 
-Yes — write it down:
-- Platform behaviour found the hard way (iOS, Safari, routers, certificates)
-- Constants discovered by measurement, stored next to the evidence
-- A decision, and specifically the alternatives rejected and why
-- Why something surprising is the way it is
+Write it down: platform behaviour found the hard way, constants discovered by
+measurement, a decision and the alternatives rejected, why something surprising
+is the way it is.
 
-No — leave it out:
-- The folder structure, or what a file contains
-- Our own code's API or function behaviour
-- Anything `grep` would answer in under a minute
+Leave it out: the folder structure, our own code's API, what a function does,
+anything `grep` answers in a minute. That duplicates the repo and goes stale at
+the next refactor. **A confidently wrong note is worse than a missing one.**
 
-The second list duplicates the repo and goes stale at the next refactor. **A
-confidently wrong note is worse than a missing one.**
+When a note stops being true, do not delete it — set `status: superseded` and
+link its replacement.
 
-When a note stops being true, do not delete it. Set `status: superseded` and
-link its replacement, so a future session learns the note is old instead of
-acting on it.
+Full rules in `llm-knowledge/README.md`, enforced by `npm run vault:check`.
 
-Full rules: `llm-knowledge/README.md`. Format is enforced by
-`npm run vault:check`, which runs in CI.
+---
 
-## Architecture in one paragraph
-
-A Node server serves two pages and relays WebSocket messages. The **host** page
-(Mac, Three.js) runs the authoritative simulation. The **controller** page
-(iPhone, Safari) reads motion sensors, detects swings *on the phone*, and sends
-semantic events — never a raw sensor stream. The server owns player slots and no
-game state.
-
-## The invariant that matters
-
-**`src/shared` is pure.** No DOM, no Node APIs, no I/O, no ambient clock or
-randomness. It holds the protocol, the simulation and the swing detector.
-
-This is why the entire simulation is testable headless, with no browser, no
-server and no phone. It is enforced by the typechecker, not by convention:
-`src/shared` is compiled by both `tsconfig.web.json` (DOM, no `@types/node`) and
-`tsconfig.node.json` (`@types/node`, no DOM), so a violation in either direction
-fails `npm run typecheck`.
-
-Two consequences that are easy to get wrong:
-
-- The simulation is a fixed-timestep pure function, `tick(state, inputs, dt)`.
-  Anything non-deterministic is passed *in*, never read inside. Breaking this
-  silently breaks replay-based tests.
-- The swing detector is a pure function over a sample stream. It must not
-  subscribe to `devicemotion` itself — the listener lives in `src/controller`.
-  This is what allows detection to be tuned offline against recorded traces.
-
-## Commands
+## 6. Commands
 
 ```bash
-npm run dev        # Vite dev server, HTTPS if ./certs exists
-npm run certs      # fetch LAN certificates; also diagnoses router DNS problems
-npm run check      # Biome lint + format
-npm run format     # Biome, writing fixes
-npm run typecheck  # both tsconfig projects
-npm test           # Vitest
-npm run build      # Vite production build
+npm run dev        # dev server, HTTPS when ./certs exists
+npm run certs      # fetch LAN certificates; also diagnoses router DNS
+npm run check      # lint + format
+npm run format     # lint + format, writing fixes
+npm run typecheck  # all three tsconfig projects
+npm test           # vitest
+npm run build      # production build
 npm run vault:check
 ```
 
-CI runs `check`, `typecheck`, `test`, `build` and `vault:check` on every pull
-request. Run them locally before pushing.
+CI runs everything except `dev` and `certs` on every pull request. Run them
+locally before pushing; do not use CI as your test runner.
 
-## Conventions
+---
 
-- **TypeScript, erasable syntax only.** The server runs via
-  `node src/server/main.ts` using Node's native type stripping, so no `enum`, no
-  namespaces, no parameter properties. `erasableSyntaxOnly` fails the typecheck
-  rather than letting it fail at runtime.
-- **Relative imports carry the `.ts` extension**, because Node's resolver
-  requires it and Vite accepts it.
+## 7. Conventions
+
+- **TypeScript, erasable syntax only.** The server runs under Node's native type
+  stripping, so no `enum`, no namespaces, no parameter properties.
+  `erasableSyntaxOnly` fails the typecheck rather than letting it fail at
+  runtime.
+- **Relative imports carry the `.ts` extension.**
 - **Biome**, not ESLint or Prettier. One tool, one config.
-- **Tests colocate** as `*.test.ts` next to the source. `tests/` holds only
+- **Tests colocate** as `*.test.ts` beside the source. `tests/` holds only
   integration tests and fixtures.
-- **Do not add a dependency** without a note in `llm-knowledge/decisions/`
-  saying what it replaces and what was rejected. The project's premise is zero
-  install and a small surface.
+- **Three tsconfig projects.** Two enforce architectural boundaries; the third
+  typechecks tests and enforces nothing. They are not interchangeable — see
+  `llm-knowledge/decisions/0002-host-authoritative-simulation.md` before
+  changing any of them.
+- **No new dependency** without a note in `llm-knowledge/decisions/` saying what
+  it replaces and what was rejected.
+- **Small files.** When one is doing several things, split it before adding a
+  fourth.
 
-## Testing strategy
+---
 
-Test the pure parts hard; do not chase the rest.
+## 8. Scope
 
-- **Scoring** — pure, fiddly, easy to get subtly wrong. Highest value per test.
-- **Physics and rally state** — fixed timestep makes these deterministic.
-- **Swing detection** — against **recorded motion traces** in
-  `tests/fixtures/motion/`. Record real swings on a phone once, commit the JSON,
-  then tune forever in Vitest with no phone in hand. Include negatives: setting
-  the phone down, gesturing while talking. This is the project's main testing
-  leverage — preserve it.
-- **Server** — integration test covering join, slot assignment, and
-  resume-after-drop.
+Build what was asked. `PRODUCT.md` lists what v1 is not — do not build those,
+and do not add abstractions in anticipation of them. No interface with one
+implementation, no config for a value that never changes, no scaffolding for
+later.
 
-Not tested: rendering, audio, anything needing real hardware. Motion input
-cannot be verified in CI, so say in the PR which iPhone and iOS version you
-tried.
+If you think something is out of scope or wrongly specified, say so in a
+sentence and then deliver the full request anyway. Narrowing the work is the
+user's call, not yours.
 
-## Scope discipline
-
-`PRODUCT.md` lists what v1 is not: doubles, manual movement, online play,
-accounts, persistent stats. Do not build them, and do not add abstractions in
-anticipation of them.
-
-The bar in `PRODUCT.md` is "feels good to play with friends", not technical
-accuracy. When those two conflict, feel wins.
-
-## Current state
-
-Repository harness only. Configuration, CI, the knowledge vault, the wire
-protocol contract and two placeholder HTML pages. **No gameplay code exists
-yet** — no server, no renderer, no simulation, no swing detection.
+Report honestly. If tests fail, say so and show the output. If you skipped
+something, say which part and why. Never describe work as done that you have
+not verified — run the command and read the result.
