@@ -35,7 +35,8 @@ note.
 
 ## Where a note goes
 
-Five folders, chosen so that "where does this go?" has exactly one answer.
+Six folders, chosen so that "where does this go?" has exactly one answer. Five
+are permanent; `plans/` holds work in flight and is normally empty.
 
 - **`decisions/`** — a choice we made and will not casually revisit. Numbered,
   ADR-style. Records the alternatives rejected and why, because that is the part
@@ -47,6 +48,11 @@ Five folders, chosen so that "where does this go?" has exactly one answer.
 - **`experiments/`** — something we actually measured, with a date and numbers.
   Tuning constants live here, next to the evidence that produced them.
 - **`sessions/`** — dated session logs. Gitignored, local to your machine.
+- **`plans/`** — a multi-session piece of work that is underway, committed so a
+  branch is legible to a session that did not start it. A plan is the one thing
+  here with an expiry date: **delete it when the work lands**, and promote what
+  survives into the four topic folders. If this folder is not empty, something
+  is unfinished.
 
 ## Sessions are an inbox, not the product
 

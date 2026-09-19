@@ -48,6 +48,12 @@ works from either direction.
   codebase.
 - [[wire-protocol]] — the controller/server/host contract and its intent.
 
+## In progress
+
+- [[2026-09-19-simulation]] — the simulation build plan, on branch
+  `feature/simulation`. Nothing in it is built yet. Read it before touching
+  `src/shared/sim/`; it is deleted when the last phase lands.
+
 ## Decisions
 
 - [[0001-single-package-vite-mpa]] — one package, not a monorepo
@@ -85,4 +91,5 @@ The things that will cost you an afternoon if you do not read them first.
 Deliberately empty of links, because CI rejects links to notes that do not
 exist. These are the gaps a future session should fill:
 
-- Court geometry and ball physics constants, once tuned
+- Court geometry and ball physics constants, once tuned — planned as phase 9 of
+  [[2026-09-19-simulation]]
