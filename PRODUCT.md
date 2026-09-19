@@ -132,8 +132,10 @@ in `llm-knowledge/decisions/`. In brief:
 
 ## Status
 
-Repository harness, plus the motion trace recorder. No gameplay yet — no
-server, no renderer, no simulation, no swing detection.
+Repository harness, plus the motion trace recorder and a swing detector
+(`src/shared/swing/detector.ts`), tuned and tested against the 20 committed
+traces. No gameplay yet — no server, no renderer, no simulation, and the
+detector is not wired into the controller.
 
 **Both iOS gates of those first thirty seconds are now proven** on an iPhone 14
 Pro running iOS 26.6.1: the LAN HTTPS path, and `requestPermission()` for the

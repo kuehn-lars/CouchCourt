@@ -23,7 +23,7 @@ lies costs more than no pointer.
 | --- | --- | --- |
 | Wire protocol, message validation | `src/shared/protocol.ts` | [[wire-protocol]] |
 | Simulation, physics, scoring | `src/shared/sim/` | [[tennis-scoring]] |
-| Swing detection | `src/shared/swing/` | [[ios-motion-permission]] |
+| Swing detection | `src/shared/swing/detector.ts` | [[2026-09-19-swing-detector-tuning]] |
 | Purity boundary enforcement | `tsconfig.web.json`, `tsconfig.node.json`, `tsconfig.test.json` | [[0002-host-authoritative-simulation]] |
 | WebSocket relay, player slots | `src/server/` | [[0005-raw-websockets-over-socket-io]] |
 | Host display, Three.js rendering | `src/host/` | [[0003-threejs-renderer]] |
@@ -76,12 +76,12 @@ The things that will cost you an afternoon if you do not read them first.
 - [[2026-09-19-lan-tls-verification]] — proving the LAN HTTPS approach works
 - [[2026-09-19-ios-devicemotion-sampling]] — the real sample rate, and why a
   peak threshold cannot separate a backhand from a hand gesture
+- [[2026-09-19-swing-detector-tuning]] — the duration/merge/classification
+  thresholds that do separate them, tuned against the traces
 
 ## Not yet written
 
 Deliberately empty of links, because CI rejects links to notes that do not
 exist. These are the gaps a future session should fill:
 
-- Swing detection thresholds — traces now exist, and
-  [[2026-09-19-ios-devicemotion-sampling]] says a single peak will not do it
 - Court geometry and ball physics constants, once tuned
