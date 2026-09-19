@@ -94,9 +94,9 @@ Verify return code: 0 (ok)
 
 Both pages return 200 over strict TLS on the real hostname.
 
-**6. Does it work on a real iPhone?** **Yes** — confirmed by the project owner
-on 2026-09-19, after the chain was rebuilt from AIA and the router's DNS rebind
-exception was added. The controller page loads over HTTPS on the LAN hostname
+**6. Does it work on a real iPhone?** **Yes** — confirmed on an **iPhone 14 Pro
+running iOS 26.6.1**, 2026-09-19, after the chain was rebuilt from AIA and the
+router's DNS rebind exception was added. The controller page loads over HTTPS on the LAN hostname
 with no certificate warning and no per-device setup, which was the entire
 premise of [[0004-lan-https-via-local-ip-co]].
 
@@ -105,11 +105,24 @@ Both blockers had to be fixed for this to work; either one alone still fails:
 1. Router DNS rebind exception — [[lan-https-dns-rebind]]
 2. Certificate chain rebuilt from AIA — [[lan-https-cert-chain]]
 
+## Reference device
+
+Everything iOS-side in this vault was verified on:
+
+| | |
+| --- | --- |
+| Device | iPhone 14 Pro |
+| iOS | 26.6.1 |
+| Browser | Safari |
+
+Record this alongside any motion traces captured — see
+`tests/fixtures/motion/` — because sample rate and gravity handling differ
+between devices and releases, and a fixture without provenance cannot be
+compared against a later one.
+
 ## Still open
 
-- **iOS version not recorded.** Chain handling and `devicemotion` sample rates
-  differ between releases, so the next session with the phone should note it
-  here and in any motion fixtures captured.
-- **`DeviceMotionEvent.requestPermission()` is untested.** Page load is not the
-  same gate as sensor access — see [[ios-motion-permission]] for the second one.
-  Nothing has called it yet, because no controller code exists.
+**`DeviceMotionEvent.requestPermission()` is untested.** Page load and sensor
+access are two separate iOS gates, and only the first has been cleared — see
+[[ios-motion-permission]]. Nothing has called the second one yet, because no
+controller code exists.

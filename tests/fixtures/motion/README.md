@@ -11,8 +11,8 @@ awkward; replaying them is instant. Record once, iterate forever.
 ```jsonc
 {
   "label": "forehand",        // or backhand, serve, idle, walking, pocket, gesture
-  "device": "iPhone 15 Pro",
-  "ios": "18.2",
+  "device": "iPhone 14 Pro",
+  "ios": "26.6.1",
   "hz": 60,                   // nominal sample rate reported by the device
   "samples": [
     {
@@ -33,6 +33,13 @@ between points.
 
 Name them so the intent is obvious: `forehand-fast-01.json`,
 `idle-table-01.json`, `gesture-talking-01.json`.
+
+## Reference device
+
+The project's known-good device is an **iPhone 14 Pro on iOS 26.6.1** — the one
+the HTTPS setup was verified on. Traces from it are the baseline; traces from
+anything else should say so, since a detector tuned on one device's sample rate
+may not hold on another.
 
 ## Capturing
 
