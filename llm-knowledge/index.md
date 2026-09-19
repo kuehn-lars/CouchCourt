@@ -31,6 +31,10 @@ lies costs more than no pointer.
 | Reconnection and session identity | `src/shared/protocol.ts` | [[ios-safari-tab-suspension]] |
 | TLS certificates, LAN hostname | `scripts/setup-certs.mjs` | [[0004-lan-https-via-local-ip-co]] |
 | Motion trace fixtures | `tests/fixtures/motion/` | [[ios-motion-permission]] |
+| Motion permission gate | `src/controller/motion.ts` | [[ios-motion-permission]] |
+| Trace recorder page | `src/controller/record.ts` | [[ios-motion-permission]] |
+| Motion trace format, validation | `src/shared/swing/trace.ts` | [[ios-motion-permission]] |
+| Trace save endpoint (dev only) | `scripts/trace-endpoint.ts` | [[vitest-is-a-vite-serve]] |
 | Vault format and CI enforcement | `scripts/check-vault.mjs` | [[README]] |
 | Build, dev server, test config | `vite.config.ts` | [[0001-single-package-vite-mpa]] |
 
@@ -60,6 +64,7 @@ The things that will cost you an afternoon if you do not read them first.
 - [[lan-https-dns-rebind]] — why the QR code may not resolve on a home router
 - [[lan-https-cert-chain]] — why it can still fail on the phone once it does
 - [[ios-safari-tab-suspension]] — the phone will drop its socket, by design
+- [[vitest-is-a-vite-serve]] — `apply: "serve"` is not a dev-only gate
 
 ## Reference
 
@@ -69,12 +74,14 @@ The things that will cost you an afternoon if you do not read them first.
 ## Experiments
 
 - [[2026-09-19-lan-tls-verification]] — proving the LAN HTTPS approach works
+- [[2026-09-19-ios-devicemotion-sampling]] — the real sample rate, and why a
+  peak threshold cannot separate a backhand from a hand gesture
 
 ## Not yet written
 
 Deliberately empty of links, because CI rejects links to notes that do not
 exist. These are the gaps a future session should fill:
 
-- Swing detection thresholds, once real motion traces exist
+- Swing detection thresholds — traces now exist, and
+  [[2026-09-19-ios-devicemotion-sampling]] says a single peak will not do it
 - Court geometry and ball physics constants, once tuned
-- Whatever iOS does to `devicemotion` sample rate under load

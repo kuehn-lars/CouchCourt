@@ -122,7 +122,8 @@ compared against a later one.
 
 ## Still open
 
-**`DeviceMotionEvent.requestPermission()` is untested.** Page load and sensor
-access are two separate iOS gates, and only the first has been cleared — see
-[[ios-motion-permission]]. Nothing has called the second one yet, because no
-controller code exists.
+Nothing from this experiment. The one item that was open here —
+`DeviceMotionEvent.requestPermission()`, the second of the two iOS gates — was
+cleared on the same device on 2026-09-19. Page load and sensor access are
+separate gates and **both** are now proven; see [[ios-motion-permission]] and
+[[2026-09-19-ios-devicemotion-sampling]].

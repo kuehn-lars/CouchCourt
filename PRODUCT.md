@@ -132,10 +132,19 @@ in `llm-knowledge/decisions/`. In brief:
 
 ## Status
 
-Repository harness only: build, CI, conventions, the knowledge vault and the
-wire protocol contract. No gameplay exists yet — no server, no renderer, no
-simulation, no swing detection.
+Repository harness, plus the motion trace recorder. No gameplay yet — no
+server, no renderer, no simulation, no swing detection.
 
-The LAN HTTPS path is verified end to end on an iPhone 14 Pro running iOS
-26.6.1, which means the riskiest part of those first thirty seconds is proven
-before any tennis has been written.
+**Both iOS gates of those first thirty seconds are now proven** on an iPhone 14
+Pro running iOS 26.6.1: the LAN HTTPS path, and `requestPermission()` for the
+motion sensors. The riskiest part of the onboarding is cleared before any tennis
+has been written, which is the order this project argues for.
+
+20 motion traces are committed in `tests/fixtures/motion/` — forehands,
+backhands and serves, plus the negatives that matter more: a phone on a table,
+in a pocket, someone walking, someone talking with their hands. Swing detection
+is now a test loop rather than a trip to the living room.
+
+The first thing those traces say is a warning: peak angular velocity alone does
+**not** separate a soft backhand from a hand gesture. The ranges overlap. See
+`llm-knowledge/experiments/2026-09-19-ios-devicemotion-sampling.md`.

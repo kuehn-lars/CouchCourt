@@ -28,6 +28,10 @@
 				-webkit-user-select: none;
 				user-select: none;
 			}
+			/* Default link blue is close to unreadable on this background. */
+			a {
+				color: #7fe0a4;
+			}
 			main {
 				display: grid;
 				place-content: center;
@@ -49,6 +53,13 @@
 		<main>
 			<h1>SwingCourt</h1>
 			<p>Controller. Not built yet.</p>
+			<!--
+				Dev tool. `npm run certs` prints this page's URL and no other, and
+				a LAN hostname is miserable to type on a phone — so the recorder
+				is reached by tapping through from here. Delete this link when the
+				real controller lands.
+			-->
+			<p><a href="./record.html">Trace recorder</a></p>
 		</main>
 	</body>
 </html>
