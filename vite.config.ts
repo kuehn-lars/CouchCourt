@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { traceEndpoint } from "./scripts/trace-endpoint.ts";
 
 const fromRoot = (path: string) =>
 	fileURLToPath(new URL(path, import.meta.url));
@@ -47,6 +48,13 @@ export default defineConfig(({ command, mode }) => {
 		// Root at src/ so the build emits dist/host/ and dist/controller/ rather
 		// than burying both pages under dist/src/.
 		root: fromRoot("./src"),
+		// Gated on `serving`, not on the plugin's own `apply: "serve"` alone:
+		// Vitest also runs as command "serve" (with mode "test"), which is
+		// exactly the case `serving` exists to exclude. Without this gate a
+		// filesystem-writing endpoint would come alive on every `vitest run`.
+		plugins: serving
+			? [traceEndpoint(fromRoot("./tests/fixtures/motion"))]
+			: [],
 		build: {
 			outDir: fromRoot("./dist"),
 			emptyOutDir: true,

@@ -4,6 +4,8 @@ updated: 2026-09-19
 tags: [platform, ios, safari, motion]
 status: current
 code:
+  - `src/controller/motion.ts`
+  - `src/controller/record.ts`
   - `src/controller/index.html`
   - `src/shared/swing/`
 ---
@@ -39,6 +41,12 @@ Things that catch people out:
   browsers and older iOS. Feature-detect with
   `typeof DeviceMotionEvent.requestPermission === "function"` before calling,
   or desktop Chrome throws on the host page.
+- **Call it on its receiver.** It is a static method and WebKit checks `this`;
+  an extracted reference invoked bare gets `undefined`, because modules are
+  strict mode. `src/controller/motion.ts` uses
+  `request.call(DeviceMotionEvent)`. The bare form has deliberately never been
+  run on a device — on a Mac the feature detect returns first, so the mistake
+  is invisible until you are holding the phone.
 - The call must be inside the gesture's own task. An `await` on something else
   *before* it loses the gesture and the call rejects.
 - `deviceorientation` has its own separate `DeviceOrientationEvent.requestPermission()`.
@@ -47,6 +55,12 @@ Things that catch people out:
   History and Website Data — not something a guest at a party will do. So the
   permission prompt must be clearly explained *before* the tap that triggers it,
   and never fired speculatively on page load.
+
+## Both gates are cleared
+
+Proven on an iPhone 14 Pro running iOS 26.6.1, 2026-09-19: the prompt appears on
+tap, granting delivers samples, and 20 captures were recorded. Numbers in
+[[2026-09-19-ios-devicemotion-sampling]].
 
 ## Consequence for the architecture
 

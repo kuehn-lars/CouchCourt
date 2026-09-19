@@ -12,5 +12,10 @@
 	// but pointless, and keeping production and test inputs apart is what makes
 	// the purity guards meaningful.
 	"exclude": ["**/*.test.ts"],
-	"include": ["src/shared/**/*.ts", "src/server/**/*.ts", "vite.config.ts"]
+	"include": [
+		"src/shared/**/*.ts",
+		"src/server/**/*.ts",
+		"vite.config.ts",
+		"scripts/**/*.ts"
+	]
 }

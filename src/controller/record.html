@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<!--
+			user-scalable=no and viewport-fit=cover matter here: a player is
+			swinging the phone, and a stray pinch-zoom or a control under the
+			home indicator ruins the round.
+		-->
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+		/>
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="theme-color" content="#0b1d13" />
+		<title>SwingCourt Trace Recorder</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: #0b1d13;
+				color: #e8f5ec;
+				font: 16px/1.5 -apple-system, system-ui, sans-serif;
+				/* A racket swing must never scroll or rubber-band the page. */
+				overscroll-behavior: none;
+				touch-action: none;
+				-webkit-user-select: none;
+				user-select: none;
+			}
+			main {
+				display: flex;
+				flex-direction: column;
+				gap: 1rem;
+				min-height: 100%;
+				padding: max(1rem, env(safe-area-inset-top)) 1rem
+					max(1rem, env(safe-area-inset-bottom));
+				box-sizing: border-box;
+			}
+			button {
+				font: inherit;
+				min-height: 44px;
+				padding: 0.75rem 1rem;
+				border-radius: 0.5rem;
+				border: 1px solid #7fe0a4;
+				background: #123020;
+				color: #e8f5ec;
+			}
+			button[aria-pressed="true"] {
+				background: #1f5c39;
+				border-color: #e8f5ec;
+			}
+			button:disabled {
+				opacity: 0.5;
+			}
+			input[type="text"] {
+				font: inherit;
+				min-height: 44px;
+				padding: 0.5rem;
+				border-radius: 0.5rem;
+				border: 1px solid #7fe0a4;
+				background: #0b1d13;
+				color: #e8f5ec;
+				box-sizing: border-box;
+				width: 100%;
+			}
+			fieldset {
+				border: 1px solid #7fe0a4;
+				border-radius: 0.5rem;
+			}
+			legend {
+				padding: 0 0.35rem;
+			}
+			label {
+				display: block;
+				font-size: 0.85rem;
+				margin-bottom: 0.25rem;
+			}
+			.field {
+				margin-bottom: 0.75rem;
+			}
+			.labels {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.5rem;
+			}
+			.durations {
+				display: flex;
+				gap: 0.5rem;
+			}
+			.durations button {
+				flex: 1;
+			}
+			#countdown {
+				font-size: min(30vw, 8rem);
+				font-weight: bold;
+				text-align: center;
+				line-height: 1;
+			}
+			#readout {
+				font-size: 0.9rem;
+				white-space: pre-line;
+			}
+			#status {
+				font-size: 0.9rem;
+			}
+			#gate p {
+				max-width: 32rem;
+			}
+		</style>
+	</head>
+	<body>
+		<!--
+			This page shares an origin with the real controller
+			(src/controller/index.html). A stray "Don't Allow" tap here bricks
+			motion permission for the actual game too, since denial is sticky
+			per origin — recovery means Settings > Safari > Clear History and
+			Website Data, not something anyone does mid-session. That is why
+			screen 1 explains the prompt before triggering it, and why the
+			request is never fired on page load. See
+			llm-knowledge/platform/ios-motion-permission.md.
+		-->
+		<main>
+			<section id="gate">
+				<h1>Trace recorder</h1>
+				<p>
+					Tapping "Enable motion" makes iOS show its own system prompt asking
+					whether this page can read the phone's motion &amp; orientation
+					sensors. Choose <strong>Allow</strong>. This page and the real
+					SwingCourt controller share an origin, so a "Don't Allow" here also
+					blocks motion for the actual game, and undoing that means Settings
+					&gt; Safari &gt; Clear History and Website Data.
+				</p>
+				<button type="button" id="enable-motion">Enable motion</button>
+				<p id="gate-status"></p>
+			</section>
+			<section id="capture" hidden>
+				<div class="field">
+					<label for="device">Device</label>
+					<input type="text" id="device" />
+				</div>
+				<div class="field">
+					<label for="ios">iOS version</label>
+					<input type="text" id="ios" />
+				</div>
+				<fieldset class="field">
+					<legend>Label</legend>
+					<div class="labels" id="labels"></div>
+				</fieldset>
+				<div class="field durations">
+					<button type="button" id="short" data-seconds="6">
+						Short (6s)
+					</button>
+					<button type="button" id="long" data-seconds="30">Long (30s)</button>
+				</div>
+				<div id="countdown" aria-live="polite"></div>
+				<!--
+					No aria-live: this repaints several times a second during a
+					capture, and a screen reader announcing it continuously would
+					be unusable. The status line below carries the announcements.
+				-->
+				<pre id="readout"></pre>
+				<button type="button" id="save" disabled>Save</button>
+				<p id="status" aria-live="polite"></p>
+			</section>
+		</main>
+		<script type="module" src="./record.ts"></script>
+	</body>
+</html>
