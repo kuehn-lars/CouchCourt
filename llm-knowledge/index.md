@@ -34,6 +34,7 @@ The things that will cost you an afternoon if you do not read them first.
 
 - [[ios-motion-permission]] — HTTPS *and* a tap, or no sensors at all
 - [[lan-https-dns-rebind]] — why the QR code may not resolve on a home router
+- [[lan-https-cert-chain]] — why it can still fail on the phone once it does
 - [[ios-safari-tab-suspension]] — the phone will drop its socket, by design
 
 ## Reference

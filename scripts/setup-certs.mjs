@@ -15,6 +15,10 @@
  *     never for anything else.
  *   - The cert is short-lived (~6 months). Re-run this script when it expires.
  *   - First resolution needs internet, and some routers block it outright.
+ *   - Their published `chain.pem` cannot be trusted to match the leaf. It did
+ *     not on 2026-09-19: the leaf had moved to GlobalSign while chain.pem still
+ *     served Sectigo intermediates. We build the chain from the leaf's own AIA
+ *     extension instead, and verify it before writing.
  */
 
 import { execFileSync } from "node:child_process";
@@ -49,6 +53,56 @@ async function download(name) {
 		throw new Error(`${BASE}/${name} did not return PEM data`);
 	}
 	return text;
+}
+
+/**
+ * The intermediate that actually signed the leaf, fetched from the leaf's own
+ * Authority Information Access extension.
+ *
+ * We deliberately do NOT use local-ip.co's published chain.pem. On 2026-09-19
+ * it was stale — Sectigo intermediates for a leaf GlobalSign had issued — which
+ * produces a chain that macOS papers over via AIA fetching and iOS Safari
+ * rejects outright. Reading AIA from the leaf follows whatever issuer is
+ * current, so this survives the next rotation too.
+ */
+async function fetchIssuerFromAia(leafPath) {
+	const extension = execFileSync(
+		"openssl",
+		["x509", "-in", leafPath, "-noout", "-ext", "authorityInfoAccess"],
+		{ encoding: "utf8" },
+	);
+	const url = /URI:(http:\/\/\S+?\.crt)/.exec(extension)?.[1];
+	if (!url) throw new Error("Leaf certificate has no CA Issuers URI in AIA");
+
+	const response = await fetch(url, { redirect: "follow" });
+	if (!response.ok) throw new Error(`${url} returned ${response.status}`);
+	const der = Buffer.from(await response.arrayBuffer());
+
+	// AIA serves DER; everything downstream wants PEM.
+	return execFileSync(
+		"openssl",
+		["x509", "-inform", "DER", "-outform", "PEM"],
+		{
+			input: der,
+			encoding: "utf8",
+		},
+	);
+}
+
+/**
+ * iOS rejects an incomplete or mismatched chain, and it does so with a generic
+ * "cannot verify server identity" that tells you nothing. Verifying here turns
+ * that into a real error message on the machine that can fix it.
+ */
+function chainVerifies(certPath) {
+	try {
+		execFileSync("openssl", ["verify", "-untrusted", certPath, certPath], {
+			stdio: "pipe",
+		});
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 function certNotAfter(pemPath) {
@@ -96,21 +150,36 @@ async function main() {
 	const keyPath = join(CERT_DIR, "key.pem");
 
 	const existing = existsSync(certPath) ? certNotAfter(certPath) : null;
-	const stillValid = existing && existing.getTime() - Date.now() > 7 * 864e5;
+	// A cert that is in date but whose chain does not verify must be rebuilt —
+	// that is exactly the state a stale chain.pem left behind.
+	const stillValid =
+		existing &&
+		existing.getTime() - Date.now() > 7 * 864e5 &&
+		chainVerifies(certPath);
 
 	if (stillValid) {
 		console.log(`Reusing ./certs (valid until ${existing.toDateString()}).`);
 	} else {
 		console.log("Fetching certificate from local-ip.co ...");
-		// The leaf alone is not enough: iOS rejects an incomplete chain, so the
-		// GlobalSign intermediates have to be concatenated onto it.
-		const [leaf, intermediates, key] = await Promise.all([
+		const [leaf, key] = await Promise.all([
 			download("server.pem"),
-			download("chain.pem"),
 			download("server.key"),
 		]);
-		writeFileSync(certPath, `${leaf.trim()}\n${intermediates.trim()}\n`);
+		writeFileSync(certPath, `${leaf.trim()}\n`);
 		writeFileSync(keyPath, key, { mode: 0o600 });
+
+		// The leaf alone is not enough — iOS rejects an incomplete chain.
+		const issuer = await fetchIssuerFromAia(certPath);
+		writeFileSync(certPath, `${leaf.trim()}\n${issuer.trim()}\n`);
+
+		if (!chainVerifies(certPath)) {
+			console.error(
+				"Built a certificate chain that does not verify. Refusing to write a\n" +
+					"chain iOS would reject. This usually means local-ip.co changed\n" +
+					"something — see llm-knowledge/platform/lan-https-cert-chain.md",
+			);
+			process.exit(1);
+		}
 
 		const expiry = certNotAfter(certPath);
 		console.log(

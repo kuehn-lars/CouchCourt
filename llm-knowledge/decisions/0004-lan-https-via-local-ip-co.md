@@ -55,5 +55,9 @@ Verified end to end on 2026-09-19 — see [[2026-09-19-lan-tls-verification]].
    not. DNS caching covers a repeat session on the same network.
 4. **Some routers block it.** This bit us immediately on the dev machine — see
    [[lan-https-dns-rebind]].
-5. **Third-party dependency.** If local-ip.co disappears, the fallback is mkcert
+5. **Their published chain cannot be trusted to match the leaf.** It did not on
+   2026-09-19, and the resulting chain fails on iOS while appearing fine on
+   macOS. `npm run certs` builds the chain from the leaf's AIA extension and
+   verifies it — see [[lan-https-cert-chain]].
+6. **Third-party dependency.** If local-ip.co disappears, the fallback is mkcert
    with the friction described above. Nothing else in the design depends on it.
