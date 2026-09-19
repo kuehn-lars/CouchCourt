@@ -62,83 +62,74 @@ function rotMagnitude(rot: readonly [number, number, number]): number {
 	return Math.sqrt(rot[0] ** 2 + rot[1] ** 2 + rot[2] ** 2);
 }
 
-interface Run {
-	startIndex: number;
-	endIndex: number;
+/** A maximal contiguous slice of samples — a candidate swing before merging,
+ * or a merged episode after. Samples, not indices: a run is meaningless
+ * without the array it came from, so it carries that array with it instead
+ * of a separate array plus a pair of offsets into it. */
+type Run = readonly MotionSample[];
+
+function isLongEnough(run: Run): boolean {
+	const first = run[0];
+	const last = run[run.length - 1];
+	return (
+		first !== undefined &&
+		last !== undefined &&
+		last.t - first.t >= MIN_SWING_DURATION_MS
+	);
 }
 
-/** Runs of `samples` where rotation magnitude stays at or above the swing
- * threshold for at least `MIN_SWING_DURATION_MS`. Shorter crossings are
- * dropped here, before merging — they are never a swing on their own. */
+/** Maximal runs of `samples` where rotation magnitude stays at or above the
+ * swing threshold for at least `MIN_SWING_DURATION_MS`. Shorter crossings
+ * are dropped here, before merging — they are never a swing on their own. */
 function findRuns(samples: readonly MotionSample[]): Run[] {
 	const runs: Run[] = [];
-	let startIndex: number | null = null;
+	let current: MotionSample[] = [];
 
-	const closeRun = (endIndex: number): void => {
-		if (startIndex === null) return;
-		const start = samples[startIndex];
-		const end = samples[endIndex];
-		if (start !== undefined && end !== undefined) {
-			if (end.t - start.t >= MIN_SWING_DURATION_MS) {
-				runs.push({ startIndex, endIndex });
-			}
-		}
-		startIndex = null;
+	const flush = (): void => {
+		if (isLongEnough(current)) runs.push(current);
+		current = [];
 	};
 
-	for (let i = 0; i < samples.length; i++) {
-		const sample = samples[i];
-		if (sample === undefined) continue;
+	for (const sample of samples) {
 		if (rotMagnitude(sample.rot) >= SWING_ROT_THRESHOLD_DEG_S) {
-			if (startIndex === null) startIndex = i;
+			current.push(sample);
 		} else {
-			closeRun(i - 1);
+			flush();
 		}
 	}
-	closeRun(samples.length - 1);
+	flush();
 
 	return runs;
 }
 
+/** ms between the end of `a` and the start of `b`. */
+function gapMs(a: Run, b: Run): number {
+	const end = a[a.length - 1];
+	const start = b[0];
+	if (end === undefined || start === undefined) return Number.POSITIVE_INFINITY;
+	return start.t - end.t;
+}
+
 /** Collapses runs within `EPISODE_MERGE_GAP_MS` of each other into one. */
-function mergeRuns(
-	samples: readonly MotionSample[],
-	runs: readonly Run[],
-): Run[] {
-	const merged: Run[] = [];
-	for (const current of runs) {
+function mergeRuns(runs: readonly Run[]): Run[] {
+	const merged: MotionSample[][] = [];
+	for (const run of runs) {
 		const prev = merged[merged.length - 1];
-		const prevEnd = prev !== undefined ? samples[prev.endIndex] : undefined;
-		const curStart = samples[current.startIndex];
-		if (
-			prev !== undefined &&
-			prevEnd !== undefined &&
-			curStart !== undefined &&
-			curStart.t - prevEnd.t <= EPISODE_MERGE_GAP_MS
-		) {
-			prev.endIndex = current.endIndex;
+		if (prev !== undefined && gapMs(prev, run) <= EPISODE_MERGE_GAP_MS) {
+			prev.push(...run);
 		} else {
-			merged.push({ ...current });
+			merged.push([...run]);
 		}
 	}
 	return merged;
 }
 
-/** The sample with the highest rotation magnitude within `run`. */
-function peakOf(samples: readonly MotionSample[], run: Run): MotionSample {
-	let best = samples[run.startIndex];
-	if (best === undefined) throw new Error("empty run");
-	let bestMagnitude = rotMagnitude(best.rot);
-	for (let i = run.startIndex + 1; i <= run.endIndex; i++) {
-		const sample = samples[i];
-		if (sample === undefined) continue;
-		const magnitude = rotMagnitude(sample.rot);
-		if (magnitude > bestMagnitude) {
-			best = sample;
-			bestMagnitude = magnitude;
-		}
-	}
-	return best;
+/** The sample with the highest rotation magnitude within `run`. Throws on an
+ * empty run — `findRuns` never produces one, so this signals a caller bug. */
+function peakOf(run: Run): MotionSample {
+	return run.reduce((best, sample) =>
+		rotMagnitude(sample.rot) > rotMagnitude(best.rot) ? sample : best,
+	);
 }
 
 /** Serve's pronation spike beats groundstroke direction; otherwise the sign
@@ -157,14 +148,15 @@ function powerOf(peakMagnitude: number): number {
 	return POWER_FLOOR + (1 - POWER_FLOOR) * clamped;
 }
 
+function toSwing(episode: Run): Swing {
+	const peak = peakOf(episode);
+	return {
+		kind: classify(peak),
+		power: powerOf(rotMagnitude(peak.rot)),
+		at: peak.t,
+	};
+}
+
 export function detectSwings(samples: readonly MotionSample[]): Swing[] {
-	const episodes = mergeRuns(samples, findRuns(samples));
-	return episodes.map((episode) => {
-		const peak = peakOf(samples, episode);
-		return {
-			kind: classify(peak),
-			power: powerOf(rotMagnitude(peak.rot)),
-			at: peak.t,
-		};
-	});
+	return mergeRuns(findRuns(samples)).map(toSwing);
 }

@@ -10,7 +10,7 @@ import {
 	SERVE_GAMMA_THRESHOLD_DEG_S,
 	SWING_ROT_THRESHOLD_DEG_S,
 } from "./detector.ts";
-import type { MotionSample } from "./trace.ts";
+import { isTrace, type MotionSample, type MotionTrace } from "./trace.ts";
 
 const STEP_MS = 1000 / 60;
 
@@ -93,15 +93,23 @@ describe("detectSwings", () => {
 		expect(swings[0]?.kind).toBe("backhand");
 	});
 
-	it("detects a large gamma at the peak as a serve, regardless of alpha's sign", () => {
-		const samples = runWithPeak(
+	it("detects a large gamma at the peak as a serve, even with a strongly positive alpha", () => {
+		// Positive alpha alone would classify as forehand — gamma must win.
+		const baseRot: [number, number, number] = [
+			900,
 			0,
-			24,
-			2,
 			SERVE_GAMMA_THRESHOLD_DEG_S,
-			12,
+		];
+		const peakRot: [number, number, number] = [
+			900,
+			0,
 			SERVE_GAMMA_THRESHOLD_DEG_S + 50,
-		);
+		];
+		const samples: MotionSample[] = Array.from({ length: 24 }, (_, i) => ({
+			t: i * STEP_MS,
+			acc: [0, 9.8, 0],
+			rot: i === 12 ? peakRot : baseRot,
+		}));
 		const swings = detectSwings(samples);
 		expect(swings).toHaveLength(1);
 		expect(swings[0]?.kind).toBe("serve");
@@ -183,8 +191,15 @@ describe("detectSwings against the committed motion traces", () => {
 	const dir = new URL("../../../tests/fixtures/motion/", import.meta.url);
 	const files = readdirSync(dir).filter((name) => name.endsWith(".json"));
 
-	const load = (name: string): { label: string; samples: MotionSample[] } =>
-		JSON.parse(readFileSync(new URL(name, dir), "utf8"));
+	// Same trust boundary as tests/fixtures/motion/fixtures.test.ts: a
+	// fixture is untrusted on-disk JSON until `isTrace` says otherwise.
+	const load = (name: string): MotionTrace => {
+		const parsed: unknown = JSON.parse(
+			readFileSync(new URL(name, dir), "utf8"),
+		);
+		if (!isTrace(parsed)) throw new Error(`${name}: not a well-formed trace`);
+		return parsed;
+	};
 
 	const swingFiles = files.filter((name) =>
 		/^(forehand|backhand|serve)-/.test(name),
