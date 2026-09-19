@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { relayPlugin } from "./scripts/relay-plugin.ts";
 import { traceEndpoint } from "./scripts/trace-endpoint.ts";
 
 const fromRoot = (path: string) =>
@@ -53,7 +54,7 @@ export default defineConfig(({ command, mode }) => {
 		// exactly the case `serving` exists to exclude. Without this gate a
 		// filesystem-writing endpoint would come alive on every `vitest run`.
 		plugins: serving
-			? [traceEndpoint(fromRoot("./tests/fixtures/motion"))]
+			? [traceEndpoint(fromRoot("./tests/fixtures/motion")), relayPlugin()]
 			: [],
 		build: {
 			outDir: fromRoot("./dist"),
@@ -74,10 +75,6 @@ export default defineConfig(({ command, mode }) => {
 			// explicit `https: undefined`.
 			...(https ? { https } : {}),
 		},
-		// NOTE: once src/server exists, attach the WebSocket server to Vite's own
-		// httpServer with a small plugin (configureServer hook) rather than running
-		// a second process. Dev and production then share one port and one code
-		// path. See llm-knowledge/decisions/0002-host-authoritative-simulation.md
 		test: {
 			// No jsdom: everything worth testing is either pure or server-side.
 			environment: "node",

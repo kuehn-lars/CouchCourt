@@ -25,7 +25,7 @@ lies costs more than no pointer.
 | Simulation, physics, scoring | `src/shared/sim/` | [[tennis-scoring]] |
 | Swing detection | `src/shared/swing/detector.ts` | [[2026-09-19-swing-detector-tuning]] |
 | Purity boundary enforcement | `tsconfig.web.json`, `tsconfig.node.json`, `tsconfig.test.json` | [[0002-host-authoritative-simulation]] |
-| WebSocket relay, player slots | `src/server/` | [[0005-raw-websockets-over-socket-io]] |
+| WebSocket relay, player slots | `src/server/` | [[0005-raw-websockets-over-socket-io]], [[0006-relay-session-policy]] |
 | Host display, Three.js rendering | `src/host/` | [[0003-threejs-renderer]] |
 | Controller, motion permission gate | `src/controller/index.html` | [[ios-motion-permission]] |
 | Reconnection and session identity | `src/shared/protocol.ts` | [[ios-safari-tab-suspension]] |
@@ -55,6 +55,7 @@ works from either direction.
 - [[0003-threejs-renderer]] — Three.js over Phaser
 - [[0004-lan-https-via-local-ip-co]] — publicly trusted certs for LAN addresses
 - [[0005-raw-websockets-over-socket-io]] — `ws` over Socket.IO
+- [[0006-relay-session-policy]] — host replacement, no slot reclaim, liveness defaults
 
 ## Platform
 
