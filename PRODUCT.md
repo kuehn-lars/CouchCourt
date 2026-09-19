@@ -132,10 +132,12 @@ in `llm-knowledge/decisions/`. In brief:
 
 ## Status
 
-Repository harness, plus the motion trace recorder and a swing detector
-(`src/shared/swing/detector.ts`), tuned and tested against the 20 committed
-traces. No gameplay yet — no server, no renderer, no simulation, and the
-detector is not wired into the controller.
+Repository harness, the motion trace recorder, a swing detector
+(`src/shared/swing/detector.ts`) tuned and tested against the 20 committed
+traces, and now the WebSocket relay server (`src/server/`): slot assignment,
+resume-by-`playerId`, and ping/pong liveness. No gameplay yet — no host
+renderer, no simulation, and neither the detector nor the relay is wired into
+the controller or host pages.
 
 **Both iOS gates of those first thirty seconds are now proven** on an iPhone 14
 Pro running iOS 26.6.1: the LAN HTTPS path, and `requestPermission()` for the
