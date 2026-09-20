@@ -12,6 +12,8 @@
 import {
 	type ControllerBoundMessage,
 	type ControllerMessage,
+	type FeedbackKind,
+	type MatchInfo,
 	type PlayerId,
 	PROTOCOL_VERSION,
 	type Side,
@@ -43,6 +45,12 @@ export function backoffMs(attempt: number): number {
 export function createSession(handlers: {
 	onState: (state: SessionState, detail?: string) => void;
 	onSide: (side: Side) => void;
+	/** The host's match state, relayed. The phone renders it and decides
+	 * nothing from it — `llm-knowledge/decisions/0002-host-authoritative-simulation.md`. */
+	onMatch?: (match: MatchInfo) => void;
+	/** `hit` / `miss` / `point`, for the screen and, where the platform has
+	 * one, the vibration motor. */
+	onFeedback?: (kind: FeedbackKind) => void;
 }): Session {
 	let socket: WebSocket | null = null;
 	let assignedSide: Side | null = null;
@@ -147,8 +155,20 @@ export function createSession(handlers: {
 							: "This page is out of date. Reload it.",
 					);
 					return;
+				case "match":
+					handlers.onMatch?.({
+						phase: msg.phase,
+						server: msg.server,
+						...(msg.winner !== undefined ? { winner: msg.winner } : {}),
+					});
+					return;
+				case "feedback":
+					handlers.onFeedback?.(msg.kind);
+					return;
 				default:
-					// `lobby` and `feedback` are not acted on in this scope.
+					// `lobby` is not acted on in this scope: the host screen is
+					// where the roster is read, and the phone has its own side
+					// from `assigned`.
 					return;
 			}
 		});

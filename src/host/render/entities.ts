@@ -23,9 +23,11 @@ const lerpVec = (a: Vec3, b: Vec3, t: number): Vec3 => ({
 const clamp = (x: number, lo: number, hi: number) =>
 	Math.max(lo, Math.min(hi, x));
 
-// A real tennis ball is 3.35cm — invisible from a broadcast-height camera 20m
-// away. "Feel beats fidelity" (`PRODUCT.md`): render it bigger than physics.
-const BALL_VISUAL_RADIUS = BALL_RADIUS * 2.6;
+// A real tennis ball is 3.35cm — invisible from a broadcast camera. "Feel
+// beats fidelity" (`PRODUCT.md`): render it bigger than physics. Raised from
+// 2.6x when the camera moved back to 26m with a 19° lens: at that distance
+// the old size was two pixels across, which is not a ball anyone can track.
+const BALL_VISUAL_RADIUS = BALL_RADIUS * 4.2;
 const BALL_COLOR = "#d7ff3f";
 
 const SHADOW_MAX_RADIUS = BALL_VISUAL_RADIUS * 1.8;
@@ -138,9 +140,14 @@ export function createBallVisual(scene: THREE.Scene): BallVisual {
 	};
 }
 
-const PLAYER_RADIUS = 0.3;
-const PLAYER_LENGTH = 1.0;
-const HEAD_RADIUS = 0.22;
+const PLAYER_RADIUS = 0.26;
+const PLAYER_LENGTH = 0.66;
+const HEAD_RADIUS = 0.2;
+const LEG_RADIUS = 0.11;
+const LEG_LENGTH = 0.62;
+const ARM_RADIUS = 0.085;
+const ARM_LENGTH = 0.46;
+const SHADOW_RADIUS = 0.42;
 const RACKET_REST_ANGLE = -0.3;
 const SWING_PEAK_ANGLE = 1.9;
 const SWING_DURATION = 0.22;
@@ -158,41 +165,130 @@ interface PlayerRig {
 	swingElapsed: number | undefined;
 }
 
+/**
+ * A player: legs, torso, head, a free arm and a racket arm, plus a blob
+ * shadow. Still procedural primitives (renderer rule 5) and still built once
+ * — but a capsule with a ball on top reads as a skittle at this camera
+ * distance, and legs are most of what makes it read as a person instead.
+ */
 function buildPlayer(side: Side, baseZ: number): PlayerRig {
 	const group = new THREE.Group();
 	group.position.z = baseZ;
 	group.rotation.y = side === "near" ? 0 : Math.PI;
 
-	const material = new THREE.MeshStandardMaterial({
+	const shirt = new THREE.MeshStandardMaterial({
 		color: SIDE_COLOR[side],
-		roughness: 0.6,
+		roughness: 0.65,
 	});
+	const skin = new THREE.MeshStandardMaterial({
+		color: "#e8c49a",
+		roughness: 0.75,
+	});
+	const shorts = new THREE.MeshStandardMaterial({
+		color: "#f2f6f8",
+		roughness: 0.85,
+	});
+
+	const hipHeight = LEG_LENGTH + LEG_RADIUS;
+	const torsoCentre = hipHeight + PLAYER_LENGTH / 2;
+
+	for (const dx of [-0.13, 0.13]) {
+		const leg = new THREE.Mesh(
+			new THREE.CapsuleGeometry(LEG_RADIUS, LEG_LENGTH, 3, 8),
+			skin,
+		);
+		leg.position.set(dx, LEG_RADIUS + LEG_LENGTH / 2, 0);
+		group.add(leg);
+	}
+
+	const skirt = new THREE.Mesh(
+		new THREE.CylinderGeometry(0.28, 0.24, 0.26, 12),
+		shorts,
+	);
+	skirt.position.y = hipHeight;
+	group.add(skirt);
+
 	const body = new THREE.Mesh(
 		new THREE.CapsuleGeometry(PLAYER_RADIUS, PLAYER_LENGTH, 4, 12),
-		material,
+		shirt,
 	);
-	const standHeight = PLAYER_RADIUS + PLAYER_LENGTH / 2;
-	body.position.y = standHeight;
+	body.position.y = torsoCentre;
 	group.add(body);
+
+	const shoulderHeight = torsoCentre + PLAYER_LENGTH / 2;
+
+	const freeArm = new THREE.Mesh(
+		new THREE.CapsuleGeometry(ARM_RADIUS, ARM_LENGTH, 3, 8),
+		skin,
+	);
+	freeArm.position.set(-0.32, shoulderHeight - ARM_LENGTH / 2, 0);
+	freeArm.rotation.z = 0.25;
+	group.add(freeArm);
 
 	const head = new THREE.Mesh(
 		new THREE.SphereGeometry(HEAD_RADIUS, 12, 12),
-		material,
+		skin,
 	);
-	head.position.y =
-		standHeight + PLAYER_LENGTH / 2 + PLAYER_RADIUS + HEAD_RADIUS;
+	head.position.y = shoulderHeight + PLAYER_RADIUS + HEAD_RADIUS * 0.7;
 	group.add(head);
 
+	// The racket arm and the racket rotate together, from the shoulder.
 	const racketPivot = new THREE.Group();
-	racketPivot.position.set(0.32, standHeight + 0.35, 0);
+	racketPivot.position.set(0.3, shoulderHeight - 0.05, 0);
 	racketPivot.rotation.x = RACKET_REST_ANGLE;
-	const racket = new THREE.Mesh(
-		new THREE.BoxGeometry(0.05, 0.55, 0.32),
-		new THREE.MeshStandardMaterial({ color: "#e8f5ec", roughness: 0.4 }),
+
+	const arm = new THREE.Mesh(
+		new THREE.CapsuleGeometry(ARM_RADIUS, ARM_LENGTH, 3, 8),
+		skin,
 	);
-	racket.position.y = 0.3;
-	racketPivot.add(racket);
+	arm.position.y = -ARM_LENGTH / 2;
+	racketPivot.add(arm);
+
+	const grip = new THREE.Mesh(
+		new THREE.CylinderGeometry(0.035, 0.035, 0.28, 8),
+		new THREE.MeshStandardMaterial({ color: "#1d2630", roughness: 0.6 }),
+	);
+	grip.position.y = -ARM_LENGTH - 0.14;
+	racketPivot.add(grip);
+
+	const head_ = new THREE.Mesh(
+		new THREE.TorusGeometry(0.17, 0.022, 6, 18),
+		new THREE.MeshStandardMaterial({ color: "#e8f5ec", roughness: 0.35 }),
+	);
+	head_.position.y = -ARM_LENGTH - 0.44;
+	head_.rotation.y = Math.PI / 2;
+	racketPivot.add(head_);
+
+	const strings = new THREE.Mesh(
+		new THREE.CircleGeometry(0.16, 16),
+		new THREE.MeshBasicMaterial({
+			color: "#cfe6ff",
+			transparent: true,
+			opacity: 0.18,
+			side: THREE.DoubleSide,
+			depthWrite: false,
+		}),
+	);
+	strings.position.copy(head_.position);
+	strings.rotation.y = Math.PI / 2;
+	racketPivot.add(strings);
+
 	group.add(racketPivot);
+
+	// The same trick the ball uses: a flat dark disc, not a shadow map. It is
+	// what stops a player looking like they are hovering.
+	const shadow = new THREE.Mesh(
+		new THREE.CircleGeometry(SHADOW_RADIUS, 20),
+		new THREE.MeshBasicMaterial({
+			color: "#000000",
+			transparent: true,
+			opacity: 0.32,
+			depthWrite: false,
+		}),
+	);
+	shadow.rotation.x = -Math.PI / 2;
+	shadow.position.y = 0.006;
+	group.add(shadow);
 
 	return { group, racket: racketPivot, baseZ, swingElapsed: undefined };
 }

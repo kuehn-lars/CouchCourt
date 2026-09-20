@@ -13,10 +13,12 @@ import type { Side } from "../../shared/protocol.ts";
 import { BASELINE_Z } from "../../shared/sim/court.ts";
 import type { MatchState } from "../../shared/sim/index.ts";
 import type { Vec3 } from "../../shared/sim/state.ts";
+import type { CameraMode } from "./camera.ts";
 import { buildCourt } from "./court.ts";
 import { createEffects } from "./effects.ts";
 import { createBallVisual, createPlayersVisual } from "./entities.ts";
 import { createScene } from "./scene.ts";
+import { buildStadium } from "./stadium.ts";
 import { createScoreUI } from "./ui.ts";
 
 export type RenderEvent =
@@ -62,6 +64,7 @@ export interface Renderer {
 		alpha: number,
 		dt: number,
 		events: readonly RenderEvent[],
+		cameraMode: CameraMode,
 	): void;
 }
 
@@ -70,6 +73,7 @@ export function createRenderer(
 	uiRoot: HTMLElement,
 ): Renderer {
 	const { scene, camera, renderer, updateCamera } = createScene(canvas);
+	scene.add(buildStadium());
 	scene.add(buildCourt());
 
 	const ball = createBallVisual(scene);
@@ -81,7 +85,7 @@ export function createRenderer(
 	const scoreUI = createScoreUI(uiRoot);
 
 	return {
-		render(previous, current, alpha, dt, events) {
+		render(previous, current, alpha, dt, events, cameraMode) {
 			for (const event of events) {
 				switch (event.kind) {
 					case "hit":
@@ -100,7 +104,7 @@ export function createRenderer(
 			players.update(previous.players, current.players, alpha, dt);
 			effects.update(dt);
 			scoreUI.update(current.score);
-			updateCamera(ballPos.x);
+			updateCamera(cameraMode, ballPos);
 
 			renderer.render(scene, camera);
 		},

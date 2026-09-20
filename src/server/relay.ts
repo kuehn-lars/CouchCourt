@@ -59,12 +59,16 @@ export function attachRelay(
 		if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 	};
 
+	/** One snapshot, sent to everyone who cares — the phones and the host.
+	 * See `HostBoundMessage`'s note on why the host gets a snapshot and not
+	 * a stream of joined/left/ready deltas. */
 	const broadcastLobby = () => {
-		const msg: ControllerBoundMessage = {
+		const msg: ControllerBoundMessage & HostBoundMessage = {
 			t: "lobby",
 			players: lobby.players(),
 		};
 		for (const ws of connsByPlayer.values()) sendTo(ws, msg);
+		if (hostSocket) sendTo(hostSocket, msg);
 	};
 
 	function handleHandshake(ws: WebSocket, raw: string) {
@@ -90,13 +94,6 @@ export function attachRelay(
 				side: outcome.side,
 			});
 			broadcastLobby();
-			if (hostSocket) {
-				sendTo(hostSocket, {
-					t: "player-joined",
-					playerId: outcome.playerId,
-					side: outcome.side,
-				});
-			}
 			return;
 		}
 
@@ -107,6 +104,9 @@ export function attachRelay(
 				return;
 			}
 			hostSocket = ws;
+			// A host that just connected knows nothing about who is already
+			// in the lobby. Tell it before it has to ask.
+			broadcastLobby();
 			return;
 		}
 
@@ -126,12 +126,8 @@ export function attachRelay(
 
 		switch (msg.t) {
 			case "ready": {
-				const players = lobby.setReady(ws, msg.ready);
-				if (!players) return;
+				if (!lobby.setReady(ws, msg.ready)) return;
 				broadcastLobby();
-				if (hostSocket) {
-					sendTo(hostSocket, { t: "player-ready", playerId, ready: msg.ready });
-				}
 				return;
 			}
 			case "aim":
@@ -168,9 +164,24 @@ export function attachRelay(
 
 	function handleHostMessage(raw: string) {
 		const msg = parseHostMessage(raw);
-		if (msg?.t !== "feedback") return; // duplicate host-hello or unknown: ignore
-		const target = connsByPlayer.get(msg.playerId);
-		if (target) sendTo(target, { t: "feedback", kind: msg.kind });
+		if (!msg) return;
+		if (msg.t === "feedback") {
+			const target = connsByPlayer.get(msg.playerId);
+			if (target) sendTo(target, { t: "feedback", kind: msg.kind });
+			return;
+		}
+		if (msg.t === "match") {
+			// Spread, not assign: `winner` is optional and
+			// exactOptionalPropertyTypes forbids an explicit undefined.
+			const out: ControllerBoundMessage = {
+				t: "match",
+				phase: msg.phase,
+				server: msg.server,
+				...(msg.winner !== undefined ? { winner: msg.winner } : {}),
+			};
+			for (const ws of connsByPlayer.values()) sendTo(ws, out);
+		}
+		// A duplicate host-hello falls through: nothing to do.
 	}
 
 	wss.on("connection", (ws: WebSocket) => {
@@ -193,7 +204,6 @@ export function attachRelay(
 			const playerId = lobby.disconnectController(ws);
 			if (playerId !== null) {
 				if (connsByPlayer.get(playerId) === ws) connsByPlayer.delete(playerId);
-				if (hostSocket) sendTo(hostSocket, { t: "player-left", playerId });
 				broadcastLobby();
 				return;
 			}

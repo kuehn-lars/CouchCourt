@@ -20,12 +20,17 @@ interface Panel {
 	readonly dot: HTMLDivElement;
 }
 
-function buildPanel(side: Side, align: "top" | "bottom"): Panel {
+/**
+ * Corners, not the centre. The panels used to sit centred at the top and
+ * bottom edges, which put the near player's head behind the bottom one for
+ * the whole match — the players stand on the centre line, which is exactly
+ * where the middle of the screen is.
+ */
+function buildPanel(side: Side, align: "left" | "right"): Panel {
 	const root = document.createElement("div");
 	root.className = "score-panel";
 	root.style.cssText = `
-		position: fixed; left: 50%; transform: translateX(-50%);
-		${align}: 20px;
+		position: fixed; top: 20px; ${align}: 20px;
 		display: flex; align-items: center; gap: 12px;
 		padding: 10px 20px; border-radius: 16px;
 		background: rgba(10, 20, 30, 0.55);
@@ -63,8 +68,8 @@ export interface ScoreUI {
 }
 
 export function createScoreUI(root: HTMLElement): ScoreUI {
-	const near = buildPanel("near", "bottom");
-	const far = buildPanel("far", "top");
+	const near = buildPanel("near", "left");
+	const far = buildPanel("far", "right");
 	root.append(near.root, far.root);
 
 	const panels: Readonly<Record<Side, Panel>> = { near, far };

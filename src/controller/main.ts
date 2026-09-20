@@ -7,6 +7,7 @@
  * are pure and live elsewhere — `shared/swing/stream.ts` and `backoffMs`.
  */
 
+import type { FeedbackKind, MatchInfo, Side } from "../shared/protocol.ts";
 import { createSwingStream } from "../shared/swing/stream.ts";
 import { toSample } from "../shared/swing/trace.ts";
 import { requestMotionPermission } from "./motion.ts";
@@ -27,6 +28,7 @@ const enableButton = requireElement("enable", HTMLButtonElement);
 const play = requireElement("play", HTMLElement);
 const sideEl = requireElement("side", HTMLElement);
 const statusEl = requireElement("status", HTMLElement);
+const hintEl = requireElement("hint", HTMLElement);
 
 const STATUS_TEXT: Record<SessionState, string> = {
 	connecting: "Connecting…",
@@ -35,6 +37,63 @@ const STATUS_TEXT: Record<SessionState, string> = {
 	reconnecting: "Reconnecting…",
 	rejected: "",
 };
+
+/** What the phone says about the match. The host decides all of it; this is
+ * presentation of a relayed fact and nothing more. */
+let match: MatchInfo | null = null;
+let mySide: Side | null = null;
+
+const SIDE_NAME: Record<Side, string> = { near: "Near side", far: "Far side" };
+
+function renderMatch(): void {
+	if (!match) {
+		hintEl.textContent = "Waiting for the host.";
+		return;
+	}
+	switch (match.phase) {
+		case "lobby":
+			hintEl.textContent = "You\u2019re in. Waiting for the host to start.";
+			return;
+		case "countdown":
+			hintEl.textContent = "Get ready\u2026";
+			return;
+		case "playing":
+			hintEl.textContent =
+				match.server === mySide && mySide !== null
+					? "You serve \u2014 swing!"
+					: "Swing when the ball reaches you.";
+			return;
+		case "over":
+			hintEl.textContent = match.winner === mySide ? "You won." : "Match over.";
+			return;
+	}
+}
+
+/**
+ * The screen IS the feedback channel. iOS Safari has no `navigator.vibrate`
+ * at all — it is a Chrome/Android API — so a colour flash is not a fallback
+ * here, it is the only thing that works on the target device. `vibrate` is
+ * still called where it exists, because it costs one line.
+ */
+const FLASH: Record<FeedbackKind, string> = {
+	hit: "#7fe0a4",
+	miss: "#ff7a7a",
+	point: "#ffd166",
+};
+
+let flashUntil = 0;
+
+function flash(kind: FeedbackKind): void {
+	document.body.style.transition = "none";
+	document.body.style.background = FLASH[kind];
+	flashUntil = performance.now() + 120;
+	navigator.vibrate?.(kind === "point" ? [40, 60, 40] : 30);
+	setTimeout(() => {
+		if (performance.now() < flashUntil) return;
+		document.body.style.transition = "background 220ms ease";
+		document.body.style.background = "";
+	}, 130);
+}
 
 const stream = createSwingStream();
 let session: Session | null = null;
@@ -67,8 +126,15 @@ function startPlaying(): void {
 		onState: (state, detail) => {
 			statusEl.textContent = detail ?? STATUS_TEXT[state];
 		},
+		onMatch: (info) => {
+			match = info;
+			renderMatch();
+		},
+		onFeedback: flash,
 		onSide: (side) => {
-			sideEl.textContent = side === "near" ? "Near side" : "Far side";
+			mySide = side;
+			sideEl.textContent = SIDE_NAME[side];
+			renderMatch();
 			// Sent HERE, not right after createSession: the socket is not open
 			// yet at that point and `send` would drop it silently. Being
 			// assigned a side is the first moment there is a session to be
