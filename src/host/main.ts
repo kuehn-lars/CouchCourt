@@ -297,6 +297,7 @@ function frame(now: number): void {
 			players,
 			countdown: Math.ceil((countdownUntil - now) / 1000),
 			winner,
+			games: current.score.games,
 			botSide,
 			waitingFor: waitingFor(),
 			joinUrl: JOIN_URL,

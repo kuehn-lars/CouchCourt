@@ -23,6 +23,8 @@ export interface LobbyView {
 	readonly countdown: number;
 	/** Only read in `over`. */
 	readonly winner: Side | null;
+	/** Games won, for the final line. Only read in `over`. */
+	readonly games: Readonly<Record<Side, number>>;
 	/** Set in solo play, so the roster can show who the bot is. */
 	readonly botSide: Side | null;
 	/** A side whose phone has dropped mid-match. The simulation is frozen
@@ -249,7 +251,10 @@ export function createLobbyUI(
 			title.textContent = view.winner
 				? `${SIDE_LABEL[view.winner]} wins`
 				: "Match over";
-			lede.textContent = "";
+			// Winner's games first, the way a result is always written.
+			lede.textContent = view.winner
+				? `${view.games[view.winner]} – ${view.games[view.winner === "near" ? "far" : "near"]}`
+				: "";
 			start.dataset.action = "rematch";
 			start.textContent = "Back to the lobby";
 			start.disabled = false;
