@@ -6,7 +6,7 @@
  * `llm-knowledge/decisions/0003-threejs-renderer.md` (no artist, no sprites,
  * which is also what keeps this "own assets only" for free). Lines are one
  * `InstancedMesh` — nine segments, one draw call — per
- * `llm-knowledge/plans/2026-09-19-simulation.md` phase 8, rule 5.
+ * `llm-knowledge/modules/host.md`'s renderer rule 5.
  */
 
 import * as THREE from "three";

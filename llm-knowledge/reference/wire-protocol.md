@@ -80,3 +80,5 @@ desync.
 - **No acknowledgements or sequence numbers.** A dropped aim update is replaced
   20ms later. If swings ever start getting lost on real hardware, that is the
   point to reconsider — not before.
+
+**Code map:** [[modules/shared-protocol]] · [[architecture]]

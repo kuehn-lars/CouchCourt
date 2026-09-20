@@ -1,8 +1,8 @@
 /**
- * Fixed-timestep accumulator. `advance` is the whole reason phase 7 exists:
+ * Fixed-timestep accumulator. `advance` is the whole reason this file exists:
  * rendering a fixed-step sim without interpolating by `alpha` is what makes
  * it judder, whatever the materials look like
- * (`llm-knowledge/plans/2026-09-19-simulation.md`, phase 7).
+ * (`llm-knowledge/modules/host.md`, "The frame").
  *
  * Pure and DOM-free on purpose, unlike `main.ts` — this is the part worth
  * testing without a browser.

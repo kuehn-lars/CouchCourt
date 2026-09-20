@@ -70,3 +70,5 @@ the power range, max-power/worst-timing essentially never lands, no legal
 power reaches the far fence, minimum-power serve clears the net), is an
 independent question from this one and is tracked in its own place once that
 file exists.
+
+**Code map:** [[modules/shared-sim]]

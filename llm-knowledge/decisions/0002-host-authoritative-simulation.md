@@ -77,3 +77,5 @@ typechecked.
   *into* `tick`, never read inside it. Breaking this silently breaks replays.
 - The host page is trusted. There is no anti-cheat story and there does not need
   to be one; everyone is in the same room.
+
+**Code map:** [[architecture]] · [[modules/shared-sim]] · [[modules/tooling]]

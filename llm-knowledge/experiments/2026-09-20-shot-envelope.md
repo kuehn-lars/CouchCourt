@@ -10,10 +10,11 @@ code:
 
 # The shot-feel constants, tuned against a measured playability envelope
 
-Phase 9, the last phase, of the now-deleted `llm-knowledge/plans/2026-09-19-simulation.md`.
-`sim/playability.test.ts` is the permanent regression net; this note is the
-measurement behind the two constants it drove, and the two fixture bugs that
-cost the most time getting there.
+The last phase of the simulation build plan, now deleted (recoverable at
+`git show 0d95ed4^`). `sim/playability.test.ts` is the permanent regression
+net; this note is the measurement behind the two constants it drove, and the
+two fixture bugs that cost the most time getting there. What the constants
+mean and which kind each is: [[modules/shared-sim]].
 
 ## The result
 
@@ -83,3 +84,5 @@ a forehand produce a forehand that goes where the player expected") needs
 real phones and a real match, which no session so far has had. If a future
 manual pass changes these constants for feel, re-run this envelope and its
 reasoning, not just the numbers.
+
+**Code map:** [[modules/shared-sim]]

@@ -54,3 +54,5 @@ detector's thresholds ([[2026-09-19-swing-detector-tuning]]), there is no
 experiment behind this number yet. [[ios-safari-tab-suspension]]'s "Untested"
 section is the open question that would inform a real value; until then this
 is deliberately just a sane-looking default with a name, easy to override.
+
+**Code map:** [[modules/server]]

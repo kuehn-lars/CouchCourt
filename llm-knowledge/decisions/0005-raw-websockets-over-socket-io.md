@@ -45,3 +45,5 @@ rally plus a ~20Hz aim stream — not a 60Hz raw sensor firehose.
   `tests/integration/`.
 - No automatic heartbeat. `ws` gives `ping`/`pong` primitives; a dead-peer
   timeout has to be written, or a locked phone lingers in the lobby forever.
+
+**Code map:** [[modules/server]] · [[modules/shared-protocol]]

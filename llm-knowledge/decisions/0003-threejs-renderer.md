@@ -32,6 +32,21 @@ court, ball, net and players are procedural primitives — a plane, a sphere,
 capsules — which also satisfies the "own assets only" principle in `PRODUCT.md`
 for free, with no licensing question to think about.
 
+## The camera follows from the same argument
+
+Settled with the user on 2026-09-19: **elevated, behind the near baseline,
+fixed.** The whole court is visible and the ball travels in depth, which is
+the skill the swing timing is built on.
+
+- **Side-on broadcast** is fairer to both players and removes the depth cue —
+  it would argue against this ADR entirely.
+- **A camera that follows the hitter** flips the world every shot and
+  disorients both players. It would also break
+  [[0008-timing-not-aim-for-shot-direction]], since cross-court and
+  down-the-line have to mean the same thing every shot.
+
+A small eased lateral drift toward the ball is allowed. Ease it, never cut.
+
 ## Alternatives rejected
 
 - **Phaser / 2D.** Cheaper to first pixel, then rewritten once the depth problem
@@ -58,3 +73,8 @@ for free, with no licensing question to think about.
 - Rendering is not unit-tested. If the host page grows enough to be worth a
   smoke test, that is one Playwright check for "boots, canvas present, no
   console errors" — not a visual regression suite.
+- **The seven rules that keep it fast** — interpolate, zero allocation in the
+  frame loop, blob shadow over shadow map, ring-buffer trail, procedural
+  primitives, no post-processing, fixed camera — live in [[modules/host]],
+  next to the files that have to obey them. Breaking one shows up as periodic
+  hitching rather than as an error, which is why they are written down at all.

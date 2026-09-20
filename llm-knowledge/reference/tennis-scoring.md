@@ -70,3 +70,5 @@ Not modelled, and not to be added without a reason:
 - Foot faults, time violations, challenges.
 - Doubles scoring — explicitly out of scope for v1.
 - Advantage sets (no final-set tiebreak).
+
+**Code map:** [[modules/shared-sim]] · [[coordinate-frame]]

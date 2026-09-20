@@ -49,3 +49,5 @@ That day is not in the v1 scope, and may never come.
 - Boundaries between the folders are not enforced by the package manager, so
   they have to be enforced another way — see [[0002-host-authoritative-simulation]]
   for how `src/shared` purity is enforced by the typechecker instead.
+
+**Code map:** [[modules/tooling]] · [[architecture]]

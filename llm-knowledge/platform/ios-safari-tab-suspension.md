@@ -50,3 +50,5 @@ sit in the lobby looking connected indefinitely.
 Nobody has measured how long iOS actually waits before suspending a
 foregrounded-then-backgrounded tab, or whether audio playback keeps it alive.
 If someone measures it, that belongs in `experiments/`.
+
+**Code map:** [[modules/server]] · [[modules/controller]] · [[modules/host]]

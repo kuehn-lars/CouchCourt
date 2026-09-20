@@ -80,3 +80,5 @@ The 0.15 floor, not 0, is a feel decision: PRODUCT.md asks to "guess in
 a real attempt — it should never read as nothing. The exact floor and curve
 shape (currently linear) are the most likely things a future session
 re-tunes once this is played, not measured.
+
+**Code map:** [[modules/shared-swing]]

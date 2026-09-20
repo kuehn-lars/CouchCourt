@@ -2,7 +2,7 @@
  * Hit and bounce effects: a fixed-size particle pool plus a small ring of
  * shockwave meshes, both round-robin-reused rather than created per event so
  * a fast rally never allocates in the render loop
- * (`llm-knowledge/plans/2026-09-19-simulation.md` phase 8, rule 2).
+ * (`llm-knowledge/modules/host.md`'s renderer rule 2).
  */
 
 import * as THREE from "three";

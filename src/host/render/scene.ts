@@ -2,10 +2,10 @@
  * Renderer, camera, lights and background. Built once; `resize()` is the only
  * thing called again after setup, from a `window` "resize" listener.
  *
- * No shadow map (`WebGLRenderer.shadowMap` is left off): the plan's blob
- * shadow (`entities.ts`) is the primary depth cue at this ball size and costs
- * nothing, per `llm-knowledge/plans/2026-09-19-simulation.md` phase 8, rule 3.
- * No post-processing, per rule 6 — the gradient background and fog do the
+ * No shadow map (`WebGLRenderer.shadowMap` is left off): the blob shadow
+ * (`entities.ts`) is the primary depth cue at this ball size and costs
+ * nothing, per `llm-knowledge/modules/host.md`'s renderer rule 3. No
+ * post-processing, per rule 6 — the gradient background and fog do the
  * atmospheric work a bloom pass would otherwise buy.
  */
 
