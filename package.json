@@ -13,6 +13,7 @@
 	},
 	"scripts": {
 		"dev": "vite",
+		"start": "vite build && vite preview",
 		"build": "vite build",
 		"check": "biome ci .",
 		"format": "biome check --write .",

@@ -51,6 +51,7 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0007-host-arrival-time-for-swing-timing]] | Swing timing uses host arrival, never the phone's clock |
 | [[0008-timing-not-aim-for-shot-direction]] | Direction comes from timing's sign; the `aim` stream is dead |
 | [[0009-streaming-swing-detection]] | The phone emits a swing before it finishes. Why `detectSwings` cannot be streamed, and what firing early costs |
+| [[0010-vite-preview-as-production-server]] | `npm start` is `vite build && vite preview`. Why no hand-written Node entry point exists |
 
 ## Platform
 
@@ -64,6 +65,7 @@ around. **These are the ones that cost an afternoon if you skip them.**
 | [[lan-https-cert-chain]] | Why it can still fail on the phone once it does, and why macOS hides it |
 | [[ios-safari-tab-suspension]] | The phone will drop its socket. By design, not as an edge case |
 | [[vitest-is-a-vite-serve]] | `apply: "serve"` is not a dev-only gate |
+| [[vite-https-is-http2]] | Every Vite server with TLS is an `Http2SecureServer`. The relay has always been on one |
 
 ## Reference
 
@@ -101,9 +103,10 @@ folders above and recorded in [[log]]. See `llm-knowledge/sessions/README.md`.
 
 Things that are true today and that a session should not be surprised by.
 
-- **The game cannot be played end to end.** The controller is built
-  (2026-09-20) but there is no `src/server/main.ts`, so the relay exists only
-  in dev. [[architecture]] has the detail.
+- **Both seams are closed as of 2026-09-20.** The controller is built and
+  `npm start` (`vite build && vite preview`) serves the built pages with the
+  relay attached — [[0010-vite-preview-as-production-server]]. What remains
+  is hardware verification, not wiring.
 - **Nothing has been seen running.** No session has opened the host page or
   the controller page in a browser, or played a rally on real phones. The
   renderer, phase 9's tuned constants, and the whole controller (permission
