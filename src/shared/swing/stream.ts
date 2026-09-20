@@ -21,7 +21,7 @@ import {
 	SWING_ROT_THRESHOLD_DEG_S,
 	swingFromPeak,
 } from "./detector.ts";
-import type { MotionSample } from "./trace.ts";
+import { MAX_GAP_MS, type MotionSample } from "./trace.ts";
 
 /**
  * Fraction of the run's running peak that rotation must fall to before the
@@ -85,6 +85,19 @@ export function createSwingStream(): SwingStream {
 			const magnitude = rotMagnitude(sample.rot);
 
 			if (magnitude >= SWING_ROT_THRESHOLD_DEG_S) {
+				// A gap this long is a stalled sensor, not a continuous swing
+				// (MAX_GAP_MS is measured in trace.ts against real capture
+				// stalls). `sample.t` keeps advancing through the stall, so
+				// without this the resumed run inherits a runStart and peak
+				// from before it and can qualify and emit off almost no real
+				// motion.
+				if (
+					runStart !== null &&
+					lastHot !== null &&
+					sample.t - lastHot > MAX_GAP_MS
+				) {
+					clearRun();
+				}
 				if (runStart === null) runStart = sample.t;
 				lastHot = sample.t;
 				if (magnitude > peakMag) {

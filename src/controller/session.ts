@@ -50,6 +50,11 @@ export function createSession(handlers: {
 	// Set when the server tells us the session is unrecoverable. Stops the
 	// reconnect loop from hammering a server that will keep saying no.
 	let givenUp = false;
+	// The pending backoff timer, if one is armed. Cleared at the top of every
+	// `connect()` call so a foreground-triggered reconnect (or any other path
+	// back into `connect()`) can never leave a frozen timer to fire later and
+	// spin up a second, duplicate socket.
+	let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const stored = (): PlayerId | null => {
 		try {
@@ -83,6 +88,15 @@ export function createSession(handlers: {
 
 	function connect(): void {
 		if (givenUp) return;
+		// Whatever called us — the initial call, the foreground fast path, or
+		// the backoff timer itself — supersedes any reconnect still pending.
+		// Without this, a timer armed while backgrounded and frozen can thaw
+		// after a foreground reconnect already happened and open a second,
+		// duplicate socket.
+		if (reconnectTimer !== null) {
+			clearTimeout(reconnectTimer);
+			reconnectTimer = null;
+		}
 		handlers.onState(attempt === 0 ? "connecting" : "reconnecting");
 
 		const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
@@ -90,6 +104,9 @@ export function createSession(handlers: {
 		socket = ws;
 
 		ws.addEventListener("open", () => {
+			// A stale socket that outlived its replacement must not touch state
+			// a newer connection already owns.
+			if (ws !== socket) return;
 			attempt = 0;
 			const resume = stored();
 			// Spread, not assign: exactOptionalPropertyTypes forbids an explicit
@@ -102,6 +119,7 @@ export function createSession(handlers: {
 		});
 
 		ws.addEventListener("message", (event) => {
+			if (ws !== socket) return;
 			// The relay is our own server, and it guards both inbound
 			// directions itself. This edge has no third untrusted party on it,
 			// exactly as `src/host/main.ts` argues for the host side.
@@ -136,20 +154,31 @@ export function createSession(handlers: {
 		});
 
 		ws.addEventListener("close", () => {
+			// An orphaned socket's own eventual close must not clobber the live
+			// socket a foreground reconnect already installed.
+			if (ws !== socket) return;
 			socket = null;
 			if (givenUp) return;
 			const delay = backoffMs(attempt);
 			attempt += 1;
 			handlers.onState("reconnecting");
-			setTimeout(connect, delay);
+			reconnectTimer = setTimeout(connect, delay);
 		});
 	}
 
 	// Backgrounding is the early warning that the socket is about to die.
 	// Reconnecting the moment we are visible again beats waiting for the
-	// relay's 15s ping to notice.
+	// relay's 15s ping to notice. Checked on readyState, not just `=== null`:
+	// the far more common ordering is that we foreground BEFORE the dead
+	// socket's own `close` event has fired, so `socket` is still a CLOSING or
+	// CLOSED object, not null — and waiting for `close` first means waiting
+	// out the full backoff instead of reconnecting immediately.
 	document.addEventListener("visibilitychange", () => {
-		if (document.visibilityState === "visible" && socket === null && !givenUp) {
+		if (
+			document.visibilityState === "visible" &&
+			!givenUp &&
+			(socket === null || socket.readyState !== WebSocket.OPEN)
+		) {
 			attempt = 0;
 			connect();
 		}

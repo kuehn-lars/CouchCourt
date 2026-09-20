@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { Swing } from "../protocol.ts";
 import { detectSwings } from "./detector.ts";
 import { createSwingStream } from "./stream.ts";
-import { isTrace, type MotionSample, type MotionTrace } from "./trace.ts";
+import {
+	isTrace,
+	MAX_GAP_MS,
+	type MotionSample,
+	type MotionTrace,
+} from "./trace.ts";
 
 const NEGATIVE = ["idle", "walking", "pocket", "gesture"];
 
@@ -104,5 +109,40 @@ describe("createSwingStream", () => {
 		const streamed = replay(samples);
 		expect(streamed[0]?.swing.kind).toBe("backhand"); // the backswing
 		expect(streamed[0]?.swing.power).toBeLessThan(0.3);
+	});
+
+	// iOS devicemotion delivery stalls (backgrounding, suspension) but
+	// `performance.now()` keeps advancing, so `sample.t` carries the full gap.
+	// Without a reset, a hot sample right before the stall and another right
+	// after look like one continuous run: `sample.t - runStart` trivially
+	// clears MIN_SWING_DURATION_MS on the very first post-gap sample, and if
+	// its magnitude has dipped under the stale peak's decay threshold, a
+	// phantom swing is emitted from data spanning almost no real motion.
+	it("resets the run across a sampling gap larger than MAX_GAP_MS, instead of treating it as one continuous swing", () => {
+		const stream = createSwingStream();
+
+		// A short hot run that has NOT qualified yet on its own — far short of
+		// MIN_SWING_DURATION_MS (300ms).
+		expect(
+			stream.push({ t: 0, acc: [0, 9.8, 0], rot: [500, 0, 0] }),
+		).toBeNull();
+		expect(
+			stream.push({ t: 50, acc: [0, 9.8, 0], rot: [600, 0, 0] }),
+		).toBeNull();
+
+		// The sensor stalls for longer than MAX_GAP_MS, then resumes hot.
+		// `gapStart - lastHot` (300ms) exceeds MAX_GAP_MS (250ms), so this must
+		// start a new run rather than continue the old one.
+		const gapStart = 50 + MAX_GAP_MS + 50;
+		const swing = stream.push({
+			t: gapStart,
+			acc: [0, 9.8, 0],
+			rot: [400, 0, 0],
+		});
+
+		// Without the fix: runStart stays 0, so gapStart - runStart (350ms)
+		// clears MIN_SWING_DURATION_MS, and 400 < peakMag(600) * PEAK_DECAY_EMIT
+		// (420) — a phantom swing fires here, built from the stale t=50 peak.
+		expect(swing).toBeNull();
 	});
 });
