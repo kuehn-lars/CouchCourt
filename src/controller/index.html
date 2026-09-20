@@ -40,6 +40,23 @@
 					max(1rem, env(safe-area-inset-bottom));
 				text-align: center;
 			}
+			button {
+				font: inherit;
+				padding: 0.9rem 1.6rem;
+				border: 0;
+				border-radius: 0.6rem;
+				background: #7fe0a4;
+				color: #0b1d13;
+				font-weight: 600;
+			}
+			.side {
+				font-size: 2rem;
+				font-weight: 700;
+				margin: 0 0 0.25rem;
+			}
+			.hint {
+				opacity: 0.7;
+			}
 		</style>
 	</head>
 	<body>
@@ -48,18 +65,25 @@
 			Requires a secure context AND a tap-triggered
 			DeviceMotionEvent.requestPermission() — see the vault note
 			llm-knowledge/platform/ios-motion-permission.md before touching this.
-			Entry point src/controller/main.ts is not written yet.
 		-->
 		<main>
-			<h1>SwingCourt</h1>
-			<p>Controller. Not built yet.</p>
-			<!--
-				Dev tool. `npm run certs` prints this page's URL and no other, and
-				a LAN hostname is miserable to type on a phone — so the recorder
-				is reached by tapping through from here. Delete this link when the
-				real controller lands.
-			-->
-			<p><a href="./record.html">Trace recorder</a></p>
+			<section id="gate">
+				<h1>SwingCourt</h1>
+				<p>
+					This phone is your racket. It needs access to motion sensors to
+					feel your swing — nothing is recorded or sent anywhere but the
+					screen you are playing on.
+				</p>
+				<button id="enable" type="button">Enable motion</button>
+				<p id="gate-status" role="status"></p>
+			</section>
+
+			<section id="play" hidden>
+				<p id="side" class="side"></p>
+				<p id="status" role="status">Connecting…</p>
+				<p class="hint">Swing to serve.</p>
+			</section>
 		</main>
+		<script type="module" src="./main.ts"></script>
 	</body>
 </html>
