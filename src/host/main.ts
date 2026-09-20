@@ -165,6 +165,11 @@ socket.addEventListener("message", (event) => {
 				if (p.ready && !readyOrder.includes(p.playerId))
 					readyOrder.push(p.playerId);
 			}
+			// A phone that just joined — or just resumed after its socket died
+			// mid-match — has no idea what the match is doing. The roster
+			// changing is the only signal the host gets that someone is newly
+			// listening, so it re-announces then.
+			announce();
 			return;
 		}
 		case "swing": {
@@ -252,7 +257,7 @@ function frame(now: number): void {
 		// for exactly that reason (`llm-knowledge/modules/host.md`).
 		if (paused) accumulator = 0;
 
-		const result = advance(paused ? 0 : accumulator, paused ? 0 : frameDt);
+		const result = advance(accumulator, paused ? 0 : frameDt);
 		accumulator = result.accumulator;
 		for (let i = 0; i < result.ticks; i++) {
 			if (phase !== "playing") break;
