@@ -7,85 +7,106 @@ status: current
 
 # SwingCourt knowledge index
 
-**Read this first.** It is a router, not a database — it stays short enough to
-read at the start of every session. If it grows past roughly one screen, that
-is the signal to consolidate notes, not to add a scrollbar.
+**Read this first.** It is the catalog: every note in the vault, one line
+each. Find the rows that touch your task, open those, ignore the rest.
 
-New to the vault? [[README]] explains what belongs here and what does not.
-
-## Where things live
-
-Concept to code, so a session can go straight to the file instead of searching
-for it. Every path here is verified by `npm run vault:check`; a pointer that
-lies costs more than no pointer.
-
-| Concept | Code | Note |
-| --- | --- | --- |
-| Wire protocol, message validation | `src/shared/protocol.ts` | [[wire-protocol]] |
-| Simulation, physics, scoring | `src/shared/sim/` | [[tennis-scoring]] |
-| Shot feel, playability tuning | `src/shared/sim/shot.ts`, `src/shared/sim/playability.test.ts` | [[2026-09-20-shot-envelope]] |
-| Swing detection | `src/shared/swing/detector.ts` | [[2026-09-19-swing-detector-tuning]] |
-| Purity boundary enforcement | `tsconfig.web.json`, `tsconfig.node.json`, `tsconfig.test.json` | [[0002-host-authoritative-simulation]] |
-| WebSocket relay, player slots | `src/server/` | [[0005-raw-websockets-over-socket-io]], [[0006-relay-session-policy]] |
-| Host display, Three.js rendering | `src/host/` | [[0003-threejs-renderer]] |
-| Controller, motion permission gate | `src/controller/index.html` | [[ios-motion-permission]] |
-| Reconnection and session identity | `src/shared/protocol.ts` | [[ios-safari-tab-suspension]] |
-| TLS certificates, LAN hostname | `scripts/setup-certs.mjs` | [[0004-lan-https-via-local-ip-co]] |
-| Motion trace fixtures | `tests/fixtures/motion/` | [[ios-motion-permission]] |
-| Motion permission gate | `src/controller/motion.ts` | [[ios-motion-permission]] |
-| Trace recorder page | `src/controller/record.ts` | [[ios-motion-permission]] |
-| Motion trace format, validation | `src/shared/swing/trace.ts` | [[ios-motion-permission]] |
-| Trace save endpoint (dev only) | `scripts/trace-endpoint.ts` | [[vitest-is-a-vite-serve]] |
-| Vault format and CI enforcement | `scripts/check-vault.mjs` | [[README]] |
-| Build, dev server, test config | `vite.config.ts` | [[0001-single-package-vite-mpa]] |
-
-Each note carries the same pointers in its `code:` frontmatter, so the trail
-works from either direction.
+New here? Read [[architecture]] next — it is the only page that describes the
+whole system. [[README]] explains how the vault is maintained.
 
 ## Start here
 
-- [[0002-host-authoritative-simulation]] — where the game logic lives, and why
-  `src/shared` must stay pure. The single most load-bearing constraint in the
-  codebase.
-- [[wire-protocol]] — the controller/server/host contract and its intent.
+| | |
+| --- | --- |
+| [[architecture]] | How the whole thing connects: the swing path end to end, what each hop may assume, where state lives, and the two seams that mean **the game cannot currently be played** |
+| [[0002-host-authoritative-simulation]] | The most load-bearing decision in the codebase. Most of the structure follows from it |
+| [[log]] | What happened, in order, and what each session promoted |
+
+## Modules — what is wired to what
+
+One page per subsystem: its files, its import graph, its invariants, and the
+notes that constrain it. **Start at the row for the thing you are changing.**
+
+| Module | Code | Covers |
+| --- | --- | --- |
+| [[modules/shared-protocol]] | `src/shared/protocol.ts` | The wire contract every folder imports. Guards, versioning, the dead `aim` stream |
+| [[modules/shared-swing]] | `src/shared/swing/` | Trace format and swing detection. Tuned offline against 20 committed captures |
+| [[modules/shared-sim]] | `src/shared/sim/` | The game: `tick`, ball flight, shot feel, scoring, court geometry |
+| [[modules/server]] | `src/server/` | The relay: slots, resume, liveness. No game state |
+| [[modules/host]] | `src/host/` | Fixed-timestep loop, socket wiring, Three.js renderer and its performance rules |
+| [[modules/controller]] | `src/controller/` | The iOS permission gate and the trace recorder. The real controller is **not built** |
+| [[modules/tooling]] | `vite.config.ts`, `scripts/`, `.github/workflows/ci.yml` | Build, the three tsconfig projects, CI, the vault checker |
 
 ## Decisions
 
-- [[0001-single-package-vite-mpa]] — one package, not a monorepo
-- [[0002-host-authoritative-simulation]] — sim in the host browser, server is a relay
-- [[0003-threejs-renderer]] — Three.js over Phaser
-- [[0004-lan-https-via-local-ip-co]] — publicly trusted certs for LAN addresses
-- [[0005-raw-websockets-over-socket-io]] — `ws` over Socket.IO
-- [[0006-relay-session-policy]] — host replacement, no slot reclaim, liveness defaults
-- [[0007-host-arrival-time-for-swing-timing]] — swing timing uses host arrival
-  time, never the phone's own clock
+Choices we made and will not casually revisit, with the alternatives rejected.
+
+| | |
+| --- | --- |
+| [[0001-single-package-vite-mpa]] | One package, not a monorepo |
+| [[0002-host-authoritative-simulation]] | Sim in the host browser; the server is a relay. How purity is enforced by the typechecker |
+| [[0003-threejs-renderer]] | Three.js over Phaser — tennis is a depth game |
+| [[0004-lan-https-via-local-ip-co]] | Publicly trusted certificates for LAN addresses, and its five known costs |
+| [[0005-raw-websockets-over-socket-io]] | `ws` over Socket.IO — the reconnection argument inverts |
+| [[0006-relay-session-policy]] | Host replacement, no slot reclaim, liveness defaults |
+| [[0007-host-arrival-time-for-swing-timing]] | Swing timing uses host arrival, never the phone's clock |
+| [[0008-timing-not-aim-for-shot-direction]] | Direction comes from timing's sign; the `aim` stream is dead |
 
 ## Platform
 
-The things that will cost you an afternoon if you do not read them first.
+How the outside world behaves. Not our code, not fixable — only workable
+around. **These are the ones that cost an afternoon if you skip them.**
 
-- [[ios-motion-permission]] — HTTPS *and* a tap, or no sensors at all
-- [[lan-https-dns-rebind]] — why the QR code may not resolve on a home router
-- [[lan-https-cert-chain]] — why it can still fail on the phone once it does
-- [[ios-safari-tab-suspension]] — the phone will drop its socket, by design
-- [[vitest-is-a-vite-serve]] — `apply: "serve"` is not a dev-only gate
+| | |
+| --- | --- |
+| [[ios-motion-permission]] | HTTPS *and* a tap, or no sensors at all. Missing either is silent |
+| [[lan-https-dns-rebind]] | Why the QR code may not resolve on a home router |
+| [[lan-https-cert-chain]] | Why it can still fail on the phone once it does, and why macOS hides it |
+| [[ios-safari-tab-suspension]] | The phone will drop its socket. By design, not as an edge case |
+| [[vitest-is-a-vite-serve]] | `apply: "serve"` is not a dev-only gate |
 
 ## Reference
 
-- [[wire-protocol]] — message shapes and why they are shaped that way
-- [[tennis-scoring]] — the scoring rules the sim implements
+How our own system and its domain are defined.
+
+| | |
+| --- | --- |
+| [[wire-protocol]] | Why the messages are shaped the way they are |
+| [[tennis-scoring]] | The scoring rules the sim implements, and what is deliberately simplified |
+| [[coordinate-frame]] | Axes, units and the ITF geometry constants |
+| [[llm-wiki]] | The pattern this vault is built on. Source material, not a project note |
 
 ## Experiments
 
-- [[2026-09-19-lan-tls-verification]] — proving the LAN HTTPS approach works
-- [[2026-09-19-ios-devicemotion-sampling]] — the real sample rate, and why a
-  peak threshold cannot separate a backhand from a hand gesture
-- [[2026-09-19-swing-detector-tuning]] — the duration/merge/classification
-  thresholds that do separate them, tuned against the traces
-- [[2026-09-20-serve-reachability]] — superseded; see the recheck below
-- [[2026-09-20-serve-reachability-recheck]] — the "unreturnable serve" finding
-  didn't reproduce: every legal serve power gives the receiver a 0.48-0.67s
-  return window. Reachability was never phase 9's problem.
-- [[2026-09-20-shot-envelope]] — the shot-feel constants (`GROUND_SPEED_MAX`,
-  `HEIGHT_ANGLE_BOOST`), tuned against a measured playability envelope, and
-  two fixture-design bugs that cost more time than the tuning itself
+Something measured, with a date and numbers. Tuned constants live here next to
+the evidence that produced them.
+
+| | |
+| --- | --- |
+| [[2026-09-19-lan-tls-verification]] | Proving the LAN HTTPS approach works, and two conclusions that were wrong |
+| [[2026-09-19-ios-devicemotion-sampling]] | The real sample rate (60.00Hz), stall behaviour, and why a peak threshold cannot separate a backhand from a hand gesture |
+| [[2026-09-19-swing-detector-tuning]] | The duration/merge/classification thresholds that do separate them |
+| [[2026-09-20-shot-envelope]] | The shot-feel constants, and two fixture-design bugs that cost more than the tuning |
+| [[2026-09-20-serve-reachability-recheck]] | The "unreturnable serve" finding did not reproduce: every legal serve power gives a 0.48–0.67s return window |
+| [[2026-09-20-serve-reachability]] | **Superseded.** The original, wrong claim — kept so nobody re-derives it |
+
+## Sessions
+
+`sessions/` holds one gitignored log per session — raw, honest, local scratch.
+They are an inbox, not the product: what survives gets promoted into the
+folders above and recorded in [[log]]. See `llm-knowledge/sessions/README.md`.
+
+## Known gaps
+
+Things that are true today and that a session should not be surprised by.
+
+- **The game cannot be played end to end.** No controller entry module, so
+  `detectSwings` has no production caller; and no `src/server/main.ts`, so the
+  relay exists only in dev. [[architecture]] has the detail.
+- **Nothing has been seen running.** No session has opened the host page in a
+  browser or played a rally on real phones. The renderer and phase 9's tuned
+  constants are both unverified against how the game actually feels.
+- **Nothing decides who serves first.** `main.ts` hardcodes `near`; there is
+  no lobby UI and no protocol message for it.
+- **How long iOS waits before suspending a backgrounded tab is unmeasured**,
+  which is why the relay's 15s ping interval is a guess rather than a tuned
+  constant.

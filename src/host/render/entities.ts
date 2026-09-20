@@ -2,10 +2,10 @@
  * The moving pieces: the ball (plus its blob shadow and trail) and the two
  * players. Everything here is built once; per frame only `.position`,
  * `.rotation` and `.scale` are mutated — no `new THREE.*` inside the render
- * loop, per `llm-knowledge/plans/2026-09-19-simulation.md` phase 8, rule 2.
+ * loop, per `llm-knowledge/modules/host.md`'s renderer rule 2.
  *
  * Every visual reads the interpolated position (`lerp(prev, cur, alpha)`),
- * never the raw sim state directly, per the same plan's rule 1 — that is
+ * never the raw sim state directly, per the same note's rule 1 — that is
  * what makes a fixed-step sim look smooth on a variable-rate display.
  */
 

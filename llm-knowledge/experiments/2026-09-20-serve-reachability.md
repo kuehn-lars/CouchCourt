@@ -81,3 +81,5 @@ Whatever is chosen, `rally.test.ts`'s "a full set, replayed" test is the
 regression net that will need its swing powers and expected tick numbers
 re-derived afterward — not adjusted by guesswork, the same throwaway-driver
 approach that found them the first time.
+
+**Code map:** [[modules/shared-sim]]

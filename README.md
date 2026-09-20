@@ -7,9 +7,13 @@ either end — players scan a QR code and start swinging.
 
 See [`PRODUCT.md`](PRODUCT.md) for what it is and what v1 deliberately is not.
 
-> **Status: harness only.** Configuration, CI, the knowledge vault and the wire
-> protocol contract exist. No gameplay does — no server, no renderer, no
-> simulation, no swing detection.
+> **Status: every part built, not yet joined up.** The simulation, the
+> renderer, the WebSocket relay and the swing detector all exist and are
+> tested. The game still cannot be played: the phone controller is a
+> placeholder, so nothing calls the detector, and there is no production server
+> entry, so the relay runs only under `npm run dev`. See
+> [`llm-knowledge/architecture.md`](llm-knowledge/architecture.md) for exactly
+> where the two seams are.
 
 ## Requirements
 
@@ -44,7 +48,7 @@ and the script tells you where to look — details in
 | `npm run certs` | Fetch LAN certificates, diagnose router DNS |
 | `npm run check` | Biome lint and format check |
 | `npm run format` | Biome, writing fixes |
-| `npm run typecheck` | Both tsconfig projects |
+| `npm run typecheck` | All three tsconfig projects |
 | `npm test` | Vitest |
 | `npm run build` | Production build |
 | `npm run vault:check` | Knowledge vault integrity |
@@ -69,8 +73,16 @@ a phone. See [`CLAUDE.md`](CLAUDE.md).
 ## The knowledge vault
 
 `llm-knowledge/` is an Obsidian vault holding what is expensive to re-derive —
-platform gotchas, measured constants, and decisions with the alternatives that
-were rejected. Open it by pointing Obsidian at that folder; no plugins needed.
+how the pieces are wired together, platform gotchas, measured constants, and
+decisions with the alternatives that were rejected. Open it by pointing
+Obsidian at that folder; no plugins needed.
 
-Start at [`llm-knowledge/index.md`](llm-knowledge/index.md). Contributors and
-Claude Code sessions alike read it before working and write to it after.
+| Start at | For |
+| --- | --- |
+| [`index.md`](llm-knowledge/index.md) | The catalog. Every note, one line each |
+| [`architecture.md`](llm-knowledge/architecture.md) | How the whole system connects, end to end |
+| [`modules/`](llm-knowledge/modules) | One page per subsystem: files, imports, invariants, gaps |
+| [`log.md`](llm-knowledge/log.md) | What happened, in order |
+
+Contributors and Claude Code sessions alike read it before working and write to
+it after. `npm run vault:check` keeps it from rotting.

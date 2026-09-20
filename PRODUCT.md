@@ -116,8 +116,9 @@ When the two conflict, feel wins.
 
 ## Technical shape
 
-The decisions and, more usefully, the alternatives rejected are recorded as ADRs
-in `llm-knowledge/decisions/`. In brief:
+How the pieces connect is `llm-knowledge/architecture.md`. The decisions and,
+more usefully, the alternatives rejected are recorded as ADRs in
+`llm-knowledge/decisions/`. In brief:
 
 | | |
 | --- | --- |
@@ -128,16 +129,32 @@ in `llm-knowledge/decisions/`. In brief:
 | Motion input | DeviceMotion / DeviceOrientation in iOS Safari |
 | Local HTTPS | A publicly trusted certificate for the LAN address, so guests install no CA and see no warning |
 
-`llm-knowledge/index.md` maps each concept to the files responsible for it.
+`llm-knowledge/index.md` is the catalog, and `llm-knowledge/modules/` has one
+page per subsystem mapping it to the files responsible for it.
 
 ## Status
 
-Repository harness, the motion trace recorder, a swing detector
-(`src/shared/swing/detector.ts`) tuned and tested against the 20 committed
-traces, and now the WebSocket relay server (`src/server/`): slot assignment,
-resume-by-`playerId`, and ping/pong liveness. No gameplay yet — no host
-renderer, no simulation, and neither the detector nor the relay is wired into
-the controller or host pages.
+**Every part is built. They are not yet joined up.**
+
+Done and tested: the repository harness, the motion trace recorder, the swing
+detector (`src/shared/swing/detector.ts`) tuned against 20 committed traces,
+the WebSocket relay (`src/server/`) with slot assignment, resume-by-`playerId`
+and ping/pong liveness, the full simulation (`src/shared/sim/` — ball physics,
+shot feel, automatic movement, scoring, a deterministic replayable rally
+machine) and the Three.js host renderer (`src/host/`). 234 tests.
+
+**Two seams keep it from being playable**, both deliberate deferrals rather
+than oversights:
+
+- The phone controller is still a placeholder, so nothing calls the detector.
+- There is no production server entry, so the relay runs only under
+  `npm run dev`.
+
+Nothing has been seen running either: no session has opened the host page in a
+browser or played a rally on real phones, so the renderer and the tuned shot
+constants are unverified against how the game actually feels.
+
+`llm-knowledge/architecture.md` has the detail on both seams.
 
 **Both iOS gates of those first thirty seconds are now proven** on an iPhone 14
 Pro running iOS 26.6.1: the LAN HTTPS path, and `requestPermission()` for the

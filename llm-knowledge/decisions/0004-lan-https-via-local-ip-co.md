@@ -64,3 +64,5 @@ Verified end to end on 2026-09-19 — see [[2026-09-19-lan-tls-verification]].
    verifies it — see [[lan-https-cert-chain]].
 6. **Third-party dependency.** If local-ip.co disappears, the fallback is mkcert
    with the friction described above. Nothing else in the design depends on it.
+
+**Code map:** [[modules/tooling]] · [[modules/controller]]

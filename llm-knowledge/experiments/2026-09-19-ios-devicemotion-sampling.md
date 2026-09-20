@@ -121,3 +121,5 @@ and it is now answerable in a vitest loop instead of a living room.
 
 `idle` reaching 273.4 deg/s is the same warning in miniature: that is the phone
 being picked up or put down, inside a capture labelled "at rest".
+
+**Code map:** [[modules/shared-swing]] · [[modules/controller]]

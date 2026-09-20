@@ -3,7 +3,7 @@
  * **cited, not tuned.** The numbers that get measured and adjusted live with
  * the ball physics and the shot feel; nothing in this file is one of them.
  *
- * The frame, stated once (`llm-knowledge/plans/2026-09-19-simulation.md`):
+ * The frame, stated once in `llm-knowledge/reference/coordinate-frame.md`:
  * `x` across the court with 0 at the centre, `y` up, `z` along the court with
  * the net at 0, the near baseline at `+BASELINE_Z` and the far one at
  * `-BASELINE_Z`. Metres, seconds, radians, so no unit suffixes on names.

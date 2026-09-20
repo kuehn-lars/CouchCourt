@@ -3,7 +3,7 @@
  * its timing into an outgoing ball velocity.
  *
  * There is no `aim` reading here on purpose
- * (`llm-knowledge/plans/2026-09-19-simulation.md`, "Shot direction"): a
+ * (`llm-knowledge/decisions/0008-timing-not-aim-for-shot-direction.md`): a
  * trustworthy compass zero needs a per-player calibration step the product
  * won't spend, so **direction comes from timing's sign alone** — early is
  * cross-court, late is down the line, and that is one lerp, not a geometry

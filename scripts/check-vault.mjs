@@ -24,6 +24,9 @@ const SKIP = new Set([".obsidian", "sessions"]);
 /** Top-level directories a `code:` pointer may reference. */
 const CODE_ROOTS = /^(src|scripts|tests|\.github)\//;
 
+/** The catalog every note must be reachable from. */
+const ENTRY_NOTE = "index";
+
 function markdownFiles(dir) {
 	const found = [];
 	for (const entry of readdirSync(dir)) {
@@ -100,16 +103,24 @@ function frontmatterIsComplete({ frontmatter, text }) {
 	return problems;
 }
 
-function wikilinksResolve({ text }, { noteNames }) {
-	const problems = [];
+/**
+ * Note names a note links to. Obsidian accepts [[note]], [[note|alias]],
+ * [[note#heading]] and [[dir/note]], so the name is the basename of the part
+ * before any pipe or hash.
+ */
+function linkTargets(text) {
+	const names = [];
 	for (const [, target] of withoutCode(text).matchAll(/\[\[([^\]]+)\]\]/g)) {
-		// Obsidian accepts [[note]], [[note|alias]], [[note#heading]], [[dir/note]].
 		const name = basename(target.split("|")[0].split("#")[0].trim());
-		if (name && !noteNames.has(name)) {
-			problems.push(`broken wikilink [[${target}]]`);
-		}
+		if (name) names.push(name);
 	}
-	return problems;
+	return names;
+}
+
+function wikilinksResolve(note, { noteNames }) {
+	return linkTargets(note.text)
+		.filter((name) => !noteNames.has(name))
+		.map((name) => `broken wikilink [[${name}]]`);
 }
 
 function codePointersExist(note) {
@@ -122,6 +133,65 @@ function codePointersExist(note) {
 
 const RULES = [frontmatterIsComplete, wikilinksResolve, codePointersExist];
 
+// --- vault-wide rules ------------------------------------------------------
+// These are properties of the whole vault, not of one note, so they run once
+// over every note rather than per-note like the rules above.
+
+/**
+ * A note nobody can reach is a note nobody reads. `index.md` is the catalog
+ * every session starts from, so anything not reachable from it by following
+ * wikilinks is invisible in practice however good it is.
+ *
+ * Reachability, not a direct link: a module page linked from `index.md` may
+ * introduce the notes that only matter once you are there.
+ */
+function everyNoteIsReachable(notes) {
+	const byName = new Map(notes.map((note) => [note.name, note]));
+	const entry = byName.get(ENTRY_NOTE);
+	if (!entry)
+		return [`${ENTRY_NOTE}.md is missing — it is the vault's entry point`];
+
+	const seen = new Set([ENTRY_NOTE]);
+	const queue = [entry];
+	while (queue.length > 0) {
+		for (const name of linkTargets(queue.pop().text)) {
+			if (seen.has(name)) continue;
+			seen.add(name);
+			const next = byName.get(name);
+			if (next) queue.push(next);
+		}
+	}
+
+	return notes
+		.filter((note) => !seen.has(note.name))
+		.map(
+			(note) =>
+				`${note.where}: unreachable from ${ENTRY_NOTE}.md — add a link to it`,
+		);
+}
+
+/**
+ * Every subsystem has a page describing what it is wired to. This is the
+ * mechanical half of the vault's second rule: the vault must be able to
+ * describe the system, not only justify it. A new `src/` folder with no
+ * module page is how that decays back into a pile of notes.
+ */
+function everySourceDirHasAModule(notes) {
+	const covered = notes
+		.filter((note) => note.where.includes("llm-knowledge/modules/"))
+		.flatMap((note) => [...pointerPaths(note)]);
+
+	return readdirSync(join(ROOT, "src"))
+		.filter((entry) => statSync(join(ROOT, "src", entry)).isDirectory())
+		.filter((dir) => !covered.some((path) => path.startsWith(`src/${dir}`)))
+		.map(
+			(dir) =>
+				`src/${dir}/ has no page in llm-knowledge/modules/ naming it in \`code:\``,
+		);
+}
+
+const VAULT_RULES = [everyNoteIsReachable, everySourceDirHasAModule];
+
 // --- run -------------------------------------------------------------------
 
 const files = markdownFiles(VAULT);
@@ -131,16 +201,20 @@ const notes = files.map((file) => {
 	const text = readFileSync(file, "utf8");
 	return {
 		where: relative(ROOT, file),
+		name: basename(file, ".md"),
 		text,
 		frontmatter: readFrontmatter(text),
 	};
 });
 
-const problems = notes.flatMap((note) =>
-	RULES.flatMap((rule) =>
-		rule(note, vault).map((problem) => `${note.where}: ${problem}`),
+const problems = [
+	...notes.flatMap((note) =>
+		RULES.flatMap((rule) =>
+			rule(note, vault).map((problem) => `${note.where}: ${problem}`),
+		),
 	),
-);
+	...VAULT_RULES.flatMap((rule) => rule(notes)),
+];
 
 if (problems.length > 0) {
 	console.error(`Vault check failed (${problems.length}):\n`);
@@ -154,5 +228,6 @@ if (problems.length > 0) {
 }
 
 console.log(
-	`Vault OK: ${notes.length} notes, all links and code pointers resolve.`,
+	`Vault OK: ${notes.length} notes — links and code pointers resolve, ` +
+		`every note is reachable from ${ENTRY_NOTE}.md, every src/ folder has a module page.`,
 );

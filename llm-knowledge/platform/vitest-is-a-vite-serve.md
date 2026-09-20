@@ -51,3 +51,5 @@ point run:
 Without the `serving` gate the first row becomes "yes", silently. Nothing in the
 test output would say so — which is the reason this note exists rather than a
 comment.
+
+**Code map:** [[modules/tooling]]

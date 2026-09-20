@@ -4,7 +4,7 @@
  *
  * `tick(state, inputs, dt)` takes only the swings that arrived since the
  * last call, each already stamped with **host arrival time** by the caller
- * (`llm-knowledge/plans/2026-09-19-simulation.md`, "Swing timing source" —
+ * (`llm-knowledge/decisions/0007-host-arrival-time-for-swing-timing.md` —
  * the phone's `swing.at` is a different clock and is not read here). Nothing
  * else enters: no clock read, no RNG, matching
  * `llm-knowledge/decisions/0002-host-authoritative-simulation.md`.

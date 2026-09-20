@@ -1,7 +1,7 @@
 /**
  * The host entry point: the rAF loop, the socket wiring, the two state
  * references the renderer interpolates between, and the render call itself
- * (`llm-knowledge/plans/2026-09-19-simulation.md`, phases 7 and 8). Not unit
+ * (`llm-knowledge/modules/host.md` maps this whole folder). Not unit
  * tested — it is all DOM and socket I/O, and the one part worth testing
  * without a browser is `loop.ts`'s `advance`.
  *

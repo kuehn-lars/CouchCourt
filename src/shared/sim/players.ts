@@ -5,9 +5,9 @@
  *
  * The predictor reuses `stepBall` rather than a closed-form solve — one
  * physics implementation, so this can never drift out of sync with what the
- * ball actually does (`llm-knowledge/plans/2026-09-19-simulation.md`, phase
- * 4). Positioning is generous by construction: whether the shot is good is
- * decided by timing in phase 5, not by whether the avatar got there.
+ * ball actually does (`llm-knowledge/modules/shared-sim.md`, "Invariants").
+ * Positioning is generous by construction: whether the shot is good is
+ * decided by timing in `shot.ts`, not by whether the avatar got there.
  *
  * `src/shared/**` is compiled under both a DOM-only and a Node-only tsconfig,
  * so this file names no DOM type and no Node global — see

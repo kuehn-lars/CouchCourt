@@ -127,3 +127,5 @@ Nothing from this experiment. The one item that was open here —
 cleared on the same device on 2026-09-19. Page load and sensor access are
 separate gates and **both** are now proven; see [[ios-motion-permission]] and
 [[2026-09-19-ios-devicemotion-sampling]].
+
+**Code map:** [[modules/tooling]]

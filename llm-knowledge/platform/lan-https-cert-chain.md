@@ -94,3 +94,5 @@ echo | openssl s_client -connect <lan-ip>:5173 \
 
 Anything other than `Verify return code: 0 (ok)` will fail on iOS, whatever the
 Mac says.
+
+**Code map:** [[modules/tooling]]

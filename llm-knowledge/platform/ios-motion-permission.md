@@ -72,3 +72,5 @@ Because the API is a browser-only global, the detector in `src/shared/swing`
 must not call it — the detector is a pure function over a sample stream, and the
 listener that feeds it lives in `src/controller`. See
 [[0002-host-authoritative-simulation]].
+
+**Code map:** [[modules/controller]] · [[modules/shared-swing]]

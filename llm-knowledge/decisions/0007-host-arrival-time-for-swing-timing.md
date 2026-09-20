@@ -10,9 +10,11 @@ code:
 
 # Swing timing uses host arrival time, never the phone's `swing.at`
 
-Decided while building the simulation's rally machine (phase 6 of the
-now-deleted `llm-knowledge/plans/2026-09-19-simulation.md`), flagged in the
-plan as "a trap" worth its own note once it landed.
+Decided up front, before any simulation code, in the simulation build plan
+that has since been deleted (recoverable at `git show 0d95ed4^`). The plan
+flagged it as "a trap" worth its own note once it landed, which is this note.
+Its sibling decision is [[0008-timing-not-aim-for-shot-direction]]; between
+them they are the whole of how a swing is read.
 
 ## The decision
 
