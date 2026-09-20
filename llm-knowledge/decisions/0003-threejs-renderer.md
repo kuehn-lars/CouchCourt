@@ -45,7 +45,16 @@ for free, with no licensing question to think about.
 - `three` is a runtime dependency; `@types/three` a dev one.
 - The renderer reads simulation state and never writes it. There is no renderer
   interface or abstraction layer — one implementation, no indirection, per
-  [[0002-host-authoritative-simulation]].
+  [[0002-host-authoritative-simulation]]. This held even where it cost
+  something: phase 8 wanted a "did the ball bounce/hit this tick" flag for
+  particle effects, and `MatchState` has none (`stepBall`'s `net`/`bounce`
+  results are consumed inside `rally.ts` and never surface). Rather than
+  growing the sim's public shape for a cosmetic need, `host/render/index.ts`
+  exports a pure `detectEvents(before, after)` that diffs two consecutive
+  `MatchState`s the same way `main.ts` already derives its `hit`/`point`
+  feedback (`toHit` flip, `score` reference change) plus one heuristic for
+  bounce (`v.y` sign flip near the ground) that only ever drives a visual, so
+  a false positive costs nothing.
 - Rendering is not unit-tested. If the host page grows enough to be worth a
   smoke test, that is one Playwright check for "boots, canvas present, no
   console errors" — not a visual regression suite.
