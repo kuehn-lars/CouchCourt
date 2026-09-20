@@ -9,6 +9,7 @@ import {
 	POWER_FLOOR_DEG_S,
 	SERVE_GAMMA_THRESHOLD_DEG_S,
 	SWING_ROT_THRESHOLD_DEG_S,
+	swingFromPeak,
 } from "./detector.ts";
 import { isTrace, type MotionSample, type MotionTrace } from "./trace.ts";
 
@@ -181,6 +182,33 @@ describe("detectSwings", () => {
 		const samples = run(0, 24, 0, mid);
 		const swings = detectSwings(samples);
 		expect(swings[0]?.power).toBeCloseTo((1 + POWER_FLOOR) / 2, 5);
+	});
+});
+
+describe("swingFromPeak", () => {
+	it("builds the same swing detectSwings would from that peak", () => {
+		// A serve: |gamma| over SERVE_GAMMA_THRESHOLD_DEG_S at the peak.
+		const peak: MotionSample = { t: 500, acc: [0, 9.8, 0], rot: [0, 0, 900] };
+		expect(swingFromPeak(peak)).toEqual({
+			kind: "serve",
+			power:
+				POWER_FLOOR +
+				(1 - POWER_FLOOR) *
+					((900 - POWER_FLOOR_DEG_S) / (POWER_CEIL_DEG_S - POWER_FLOOR_DEG_S)),
+			at: 500,
+		});
+	});
+
+	it("agrees with detectSwings on a real fixture's peak", () => {
+		// Whatever detectSwings reports for a trace, rebuilding from the peak
+		// sample it chose must give an identical Swing. This is the guard that
+		// stops the two detectors drifting.
+		const samples = run(0, 40, 0, 800);
+		const [swing] = detectSwings(samples);
+		expect(swing).toBeDefined();
+		const peak = samples.find((s) => s.t === swing?.at);
+		expect(peak).toBeDefined();
+		if (peak) expect(swingFromPeak(peak)).toEqual(swing);
 	});
 });
 
