@@ -1,6 +1,6 @@
 ---
 title: Wire protocol intent
-updated: 2026-09-19
+updated: 2026-09-20
 tags: [reference, networking, protocol]
 status: current
 code:
@@ -53,6 +53,15 @@ side is a bug waiting for a party.
 `Infinity` explicitly — those survive an in-process send intact, sail through a
 naive `typeof x === "number"` check, and then poison the simulation silently
 several frames later. Finding that after the fact is miserable.
+
+This deliberately covers only the two directions arriving *at the server*
+(`isControllerMessage`, `isHostMessage`): a phone's controller software is
+arbitrary and untrusted, but the host's own `WebSocket` only ever receives
+`HostBoundMessage`/`ControllerBoundMessage` from the relay we wrote, using
+types we control on both ends. `src/host/main.ts` (phase 7) parses those with
+a plain cast, not a guard — there is no third, equally-untrusted party on that
+edge the way there is on the other two. Revisit only if the host ever needs to
+trust a relay it did not write.
 
 ## Versioning
 
