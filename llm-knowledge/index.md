@@ -111,10 +111,10 @@ Things that are true today and that a session should not be surprised by.
   `npm start` (`vite build && vite preview`) serves the built pages with the
   relay attached — [[0010-vite-preview-as-production-server]]. What remains
   is hardware verification, not wiring.
-- **Seen in a browser, never on a phone.** 2026-09-20: the lobby, the
-  countdown, a solo rally and the controller's join flow all render in
-  headless Chrome with no console errors, and screenshots drove three rounds
-  of fixes. But headless Chrome has no motion sensors and renders through
+- **Seen in a browser, never on a phone.** 2026-09-20: the whole match loop
+  — lobby, countdown, a set played out to 6-0, the winner screen, rematch —
+  plus the controller's join flow, all in headless Chrome with no console
+  errors, and screenshots drove three rounds of fixes. But headless Chrome has no motion sensors and renders through
   SwiftShader, so frame rate, the wake lock, reconnect-after-suspension, the
   tuned shot constants and `Swing.spin`'s axis are all still unverified
   against real hardware. See [[modules/controller]]'s "What is and is not

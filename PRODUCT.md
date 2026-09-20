@@ -145,9 +145,10 @@ feel, automatic movement, scoring, a deterministic replayable rally machine),
 a solo opponent, the Three.js renderer with three camera modes, a lobby with
 a join QR code, and synthesised sound. 300 tests.
 
-**Seen running, in headless Chrome only** (2026-09-20): the lobby, the
-countdown, a solo rally scoring real points, and the controller's join flow
-through its permission gate — with no console errors on either page. That is
+**Seen running, in headless Chrome only** (2026-09-20): the whole loop —
+lobby, countdown, a solo match played through to a completed set, the winner
+screen and a rematch back to the lobby — plus the controller's join flow
+through its permission gate, with no console errors on either page. That is
 the first time any of this had been watched rather than inferred, and it
 produced three bugs no test would have found.
 

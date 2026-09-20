@@ -12,8 +12,9 @@ See [`PRODUCT.md`](PRODUCT.md) for what it is and what v1 deliberately is not.
 > attached, so a guest can scan the code on the host screen and be swinging.
 > There is a lobby, a solo opponent, three camera modes, sound and a scoring
 > umpire. What has **not** happened is a phone: everything has been verified
-> by 300 tests and by driving the real pages in headless Chrome, which has no
-> motion sensors and renders in software. How it *feels* is still unmeasured.
+> by 300 tests and by driving the real pages in headless Chrome — a full set
+> played out to 6-0 and a rematch — which has no motion sensors and renders in
+> software. How it *feels* is still unmeasured.
 > See [`llm-knowledge/architecture.md`](llm-knowledge/architecture.md).
 
 ## Requirements

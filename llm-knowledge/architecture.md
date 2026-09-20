@@ -225,10 +225,11 @@ tick and queues its swing exactly where a phone's swing goes.
 
 ## What has not been seen
 
-The lobby, the countdown, a solo rally and the controller's join flow have
-all now been **seen running in headless Chrome**, with no console errors on
-either page — the first time anything here has been watched rather than
-inferred.
+The **whole match loop** has now been seen running in headless Chrome —
+lobby, countdown, a solo match played through to a completed set, the winner
+screen, rematch, and back to the lobby — plus pause-on-disconnect and the
+controller's join flow, with no console errors on either page. The first time
+anything here has been watched rather than inferred.
 
 A real phone, a real swing and a real frame rate have not. Headless Chrome
 renders through SwiftShader and has no motion sensors, so it says nothing

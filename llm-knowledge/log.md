@@ -241,5 +241,11 @@ buried inside the concrete, and a lobby that jammed forever once both phones
 had disconnected once — which amended [[0006-relay-session-policy]]'s "a
 slot is never reclaimed".
 
-295 tests, typecheck and vault green. **Still not verified: a real phone, a
-real swing, a real frame rate.**
+300 tests, typecheck, lint and vault green. The whole match loop was then
+watched end to end in that same headless Chrome — lobby, countdown, a set
+played out to 6-0, the winner screen, rematch — after the first attempt at it
+failed for a harness reason worth remembering: a single CDP socket held open
+across a 20-minute wait dies, so poll with short-lived connections and attach
+to an existing tab instead of opening one.
+
+**Still not verified: a real phone, a real swing, a real frame rate.**
