@@ -50,6 +50,7 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0006-relay-session-policy]] | Host replacement, no slot reclaim, liveness defaults |
 | [[0007-host-arrival-time-for-swing-timing]] | Swing timing uses host arrival, never the phone's clock |
 | [[0008-timing-not-aim-for-shot-direction]] | Direction comes from timing's sign; the `aim` stream is dead |
+| [[0009-streaming-swing-detection]] | The phone emits a swing before it finishes. Why `detectSwings` cannot be streamed, and what firing early costs |
 
 ## Platform
 
@@ -87,6 +88,7 @@ the evidence that produced them.
 | [[2026-09-19-swing-detector-tuning]] | The duration/merge/classification thresholds that do separate them |
 | [[2026-09-20-shot-envelope]] | The shot-feel constants, and two fixture-design bugs that cost more than the tuning |
 | [[2026-09-20-serve-reachability-recheck]] | The "unreturnable serve" finding did not reproduce: every legal serve power gives a 0.48–0.67s return window |
+| [[2026-09-20-streaming-swing-latency]] | Batch detection is 1066ms late. Streaming is 117ms and fires on the backswing — and the fixtures are all denser than gameplay |
 | [[2026-09-20-serve-reachability]] | **Superseded.** The original, wrong claim — kept so nobody re-derives it |
 
 ## Sessions
