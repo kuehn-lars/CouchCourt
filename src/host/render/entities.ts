@@ -93,6 +93,12 @@ export function createBallVisual(scene: THREE.Scene): BallVisual {
 	let head = 0;
 	let filled = 0;
 
+	// Rotation axis for the ball's spin, reused every frame — building a
+	// Vector3 per frame is the allocation renderer rule 2 forbids.
+	const spinAxis = new THREE.Vector3();
+	const lastPos = { x: 0, y: 0, z: 0 };
+	let seeded = false;
+
 	const scratchPos = new THREE.Vector3();
 	const scratchScale = new THREE.Vector3();
 	const scratchQuat = new THREE.Quaternion();
@@ -126,6 +132,25 @@ export function createBallVisual(scene: THREE.Scene): BallVisual {
 		update(previous, current, alpha) {
 			const p = lerpVec(previous.p, current.p, alpha);
 			mesh.position.set(p.x, p.y, p.z);
+
+			// Roll the ball along its own path: axis perpendicular to travel,
+			// angle = distance / radius, so it looks like it is gripping the
+			// air rather than sliding through it. Purely cosmetic — the sim
+			// has no angular state and does not want one.
+			if (seeded) {
+				const dx = p.x - lastPos.x;
+				const dy = p.y - lastPos.y;
+				const dz = p.z - lastPos.z;
+				const travelled = Math.hypot(dx, dy, dz);
+				if (travelled > 1e-5) {
+					spinAxis.set(dz, 0, -dx).normalize();
+					mesh.rotateOnWorldAxis(spinAxis, travelled / BALL_VISUAL_RADIUS);
+				}
+			}
+			lastPos.x = p.x;
+			lastPos.y = p.y;
+			lastPos.z = p.z;
+			seeded = true;
 
 			const heightT = clamp(p.y / SHADOW_FADE_HEIGHT, 0, 1);
 			const radius = lerp(SHADOW_MAX_RADIUS, SHADOW_MIN_RADIUS, heightT);

@@ -58,6 +58,8 @@ export function detectEvents(
 }
 
 export interface Renderer {
+	/** A brief line at the bottom of the screen. */
+	note(text: string): void;
 	render(
 		previous: MatchState,
 		current: MatchState,
@@ -85,6 +87,8 @@ export function createRenderer(
 	const scoreUI = createScoreUI(uiRoot);
 
 	return {
+		note: scoreUI.note,
+
 		render(previous, current, alpha, dt, events, cameraMode) {
 			for (const event of events) {
 				switch (event.kind) {

@@ -125,6 +125,11 @@ export function createAudio(): Audio {
 						tone(now, 150, 0.12, 0.1, "sine");
 						break;
 					case "point": {
+						// Applause: broadband noise with a slow swell, which is
+						// what a crowd is. Quieter than the racket so a point
+						// never drowns the next serve.
+						burst(now + 0.05, 0.16, 1500, 0.7, 1.1);
+						burst(now + 0.12, 0.1, 3200, 0.5, 0.9);
 						// Two notes a fifth apart, the second a beat behind — the
 						// only non-percussive sound in the game, so a point never
 						// reads as another hit.

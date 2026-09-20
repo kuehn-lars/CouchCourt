@@ -86,6 +86,12 @@ let current: MatchState = previous;
 
 const JOIN_URL = `${location.origin}/controller/`;
 
+const CAMERA_LABEL: Record<CameraMode, string> = {
+	broadcast: "Broadcast",
+	follow: "Follow the ball",
+	side: "Side on",
+};
+
 const other = (side: Side): Side => (side === "near" ? "far" : "near");
 
 function sideFor(playerId: PlayerId): Side | undefined {
@@ -182,7 +188,10 @@ socket.addEventListener("message", (event) => {
 });
 
 window.addEventListener("keydown", (event) => {
-	if (event.key === "c" || event.key === "C") cameraMode = nextMode(cameraMode);
+	if (event.key === "c" || event.key === "C") {
+		cameraMode = nextMode(cameraMode);
+		renderer.note(`Camera: ${CAMERA_LABEL[cameraMode]}`);
+	}
 	if (event.key === "f" || event.key === "F") {
 		if (document.fullscreenElement) void document.exitFullscreen();
 		else void document.documentElement.requestFullscreen();

@@ -65,6 +65,9 @@ function buildPanel(side: Side, align: "left" | "right"): Panel {
 
 export interface ScoreUI {
 	update(score: Score): void;
+	/** A brief line at the bottom of the screen — what the camera just
+	 * changed to, and nothing weightier. */
+	note(text: string): void;
 }
 
 /**
@@ -116,11 +119,32 @@ export function createScoreUI(root: HTMLElement): ScoreUI {
 	`;
 	root.append(call);
 
+	const toast = document.createElement("div");
+	toast.style.cssText = `
+		position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+		font: 500 15px/1 system-ui, sans-serif; color: #eef6fb;
+		padding: 10px 18px; border-radius: 999px;
+		background: rgba(10, 20, 30, 0.6); backdrop-filter: blur(8px);
+		border: 1px solid rgba(255,255,255,0.12);
+		opacity: 0; transition: opacity 200ms ease;
+	`;
+	root.append(toast);
+	let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
 	const panels: Readonly<Record<Side, Panel>> = { near, far };
 	let lastScore: Score | null = null;
 	let hideAt = 0;
 
 	return {
+		note(text) {
+			toast.textContent = text;
+			toast.style.opacity = "1";
+			clearTimeout(toastTimer);
+			toastTimer = setTimeout(() => {
+				toast.style.opacity = "0";
+			}, 1600);
+		},
+
 		update(score) {
 			if (lastScore !== null) {
 				const text = callFor(lastScore, score);
