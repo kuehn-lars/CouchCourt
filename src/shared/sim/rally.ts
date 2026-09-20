@@ -95,9 +95,9 @@ export const SPIN_GRAVITY_SLICE = 0.15;
 
 /** The flight environment for `state`'s in-flight ball. Everything that
  * looks at the ball's future — the timing predictor, the player predictor,
- * the step itself — has to use the SAME env, or the sim predicts a
- * trajectory the ball does not fly. */
-function envFor(state: MatchState): BallEnv {
+ * the step itself, and `bot.ts` — has to use the SAME env, or something
+ * predicts a trajectory the ball does not fly. */
+export function envFor(state: MatchState): BallEnv {
 	const scale = state.spin >= 0 ? SPIN_GRAVITY_TOP : SPIN_GRAVITY_SLICE;
 	return { gravityScale: 1 + state.spin * scale, drag: DRAG_K };
 }
