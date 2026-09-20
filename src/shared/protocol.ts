@@ -38,6 +38,13 @@ export interface Swing {
 	power: number;
 	/** `performance.now()` on the phone at the detected peak of the swing. */
 	at: number;
+	/**
+	 * Wrist roll at the peak, -1 (slice) to +1 (topspin). Optional: absent
+	 * means flat, so a phone running an older build is still a playable
+	 * phone and the protocol version does not move. The sim turns it into a
+	 * gravity multiplier — see `sim/rally.ts`.
+	 */
+	spin?: number;
 }
 
 export interface LobbyPlayer {
@@ -111,7 +118,9 @@ export function isControllerMessage(x: unknown): x is ControllerMessage {
 				isFiniteNumber(x.power) &&
 				x.power >= 0 &&
 				x.power <= 1 &&
-				isFiniteNumber(x.at)
+				isFiniteNumber(x.at) &&
+				(x.spin === undefined ||
+					(isFiniteNumber(x.spin) && x.spin >= -1 && x.spin <= 1))
 			);
 		default:
 			return false;

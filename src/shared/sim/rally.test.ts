@@ -136,14 +136,28 @@ describe("terminal conditions", () => {
 	});
 });
 
+/**
+ * Serve fixtures, re-derived 2026-09-20 when `SERVE_ANGLE_SLOW/FAST` made a
+ * flat serve land in the box at **every** power. The old fixtures were bare
+ * powers (0.55 long, 0.15 netted) and they stopped being faults the moment
+ * the serve was aimed properly — a fixture that encodes a bug is a fixture
+ * that dies with the bug.
+ *
+ * Spin is what makes a serve missable now, so these name it. Found with a
+ * throwaway driver over the (power, spin) grid, not guessed:
+ * `llm-knowledge/experiments/2026-09-20-serve-that-lands.md`.
+ */
+/** Floats long: lands in the court, past the service line. */
+const LONG_SERVE: Swing = { kind: "serve", power: 0.6, at: 0, spin: -1 };
+/** Dips into the band. */
+const NETTED_SERVE: Swing = { kind: "serve", power: 1, at: 0, spin: 1 };
+/** Lands in the box at any power, which is now what flat means. */
+const GOOD_SERVE: Swing = { kind: "serve", power: 0.6, at: 0, spin: 0 };
+
 describe("serve faults", () => {
 	it("a serve past the service line is a fault, not a lost point, even though it lands inside the court", () => {
 		const s = createMatch("near");
-		const hit = tick(
-			s,
-			[{ side: "near", swing: swing("serve", 0.55), time: 0 }],
-			DT,
-		);
+		const hit = tick(s, [{ side: "near", swing: LONG_SERVE, time: 0 }], DT);
 		const resolved = drive(hit, (st) => st.phase !== "serve-flight");
 
 		expect(resolved.phase).toBe("waiting-serve");
@@ -155,11 +169,7 @@ describe("serve faults", () => {
 
 	it("a serve blocked by the net is also a fault", () => {
 		const s = createMatch("near");
-		const hit = tick(
-			s,
-			[{ side: "near", swing: swing("serve", 0.15), time: 0 }],
-			DT,
-		);
+		const hit = tick(s, [{ side: "near", swing: NETTED_SERVE, time: 0 }], DT);
 		const resolved = drive(hit, (st) => st.phase !== "serve-flight");
 
 		expect(resolved.phase).toBe("waiting-serve");
@@ -169,14 +179,14 @@ describe("serve faults", () => {
 	it("a second serve fault is a double fault: the receiver wins the point", () => {
 		const s = createMatch("near");
 		const firstFault = drive(
-			tick(s, [{ side: "near", swing: swing("serve", 0.55), time: 0 }], DT),
+			tick(s, [{ side: "near", swing: LONG_SERVE, time: 0 }], DT),
 			(st) => st.phase !== "serve-flight",
 		);
 		expect(firstFault.serveNumber).toBe(2);
 
 		const secondHit = tick(
 			firstFault,
-			[{ side: "near", swing: swing("serve", 0.55), time: firstFault.time }],
+			[{ side: "near", swing: LONG_SERVE, time: firstFault.time }],
 			DT,
 		);
 		const resolved = drive(secondHit, (st) => st.phase !== "serve-flight");
@@ -239,75 +249,43 @@ describe("determinism", () => {
 
 describe("a full set, replayed", () => {
 	/**
-	 * Discovered empirically (a throwaway driver logging its own decisions,
-	 * per the session log), not hand-guessed. A receiver *can* return a legal
-	 * serve in this sim (`llm-knowledge/experiments/2026-09-20-serve-reachability-recheck.md`)
-	 * — this script simply doesn't attempt one, to keep the replay small and
-	 * deterministic: `near`'s serve at power 0.35 lands legally and is never
-	 * swung at, so it stands as an unreturned point; `far`'s serve at 0.55
-	 * clears the net but lands past the service line every time (a fault, not
-	 * a lost point) — so `near` wins outright and `far` double-faults every
-	 * service game.
+	 * The determinism regression net: the same inputs must always produce the
+	 * same set. Every shot-feel constant is guarded by this.
 	 *
-	 * `{tick, side, swing}`, per the plan. No one swings at a return here —
-	 * that path is covered by the smaller terminal-condition tests above.
+	 * **Self-timing since 2026-09-20.** It used to be 36 hardcoded
+	 * `{tick, side, swing}` rows, derived by a throwaway driver from how long
+	 * each point happened to take. Re-tuning the serve moved every one of
+	 * those ticks and the script silently stopped serving into the right
+	 * phases — 36 magic numbers that encode nothing but yesterday's flight
+	 * times. Serving whenever the state says `waiting-serve` is just as
+	 * deterministic and survives the next tuning pass.
+	 *
+	 * `near` serves flat (in, and never swung at, so the point is theirs on
+	 * the second bounce); `far` slices (long, twice, every time). So `near`
+	 * takes the set 6-0 without a single return being attempted — the return
+	 * path is covered by the smaller terminal-condition tests above.
 	 */
-	const NEAR_ACE = swing("serve", 0.35);
-	const FAR_FAULT = swing("serve", 0.55);
-	const script: readonly { tick: number; side: Side; swing: Swing }[] = [
-		{ tick: 0, side: "near", swing: NEAR_ACE },
-		{ tick: 190, side: "near", swing: NEAR_ACE },
-		{ tick: 380, side: "near", swing: NEAR_ACE },
-		{ tick: 570, side: "near", swing: NEAR_ACE },
-		{ tick: 760, side: "far", swing: FAR_FAULT },
-		{ tick: 868, side: "far", swing: FAR_FAULT },
-		{ tick: 977, side: "far", swing: FAR_FAULT },
-		{ tick: 1085, side: "far", swing: FAR_FAULT },
-		{ tick: 1194, side: "far", swing: FAR_FAULT },
-		{ tick: 1302, side: "far", swing: FAR_FAULT },
-		{ tick: 1411, side: "far", swing: FAR_FAULT },
-		{ tick: 1519, side: "far", swing: FAR_FAULT },
-		{ tick: 1628, side: "near", swing: NEAR_ACE },
-		{ tick: 1818, side: "near", swing: NEAR_ACE },
-		{ tick: 2008, side: "near", swing: NEAR_ACE },
-		{ tick: 2198, side: "near", swing: NEAR_ACE },
-		{ tick: 2388, side: "far", swing: FAR_FAULT },
-		{ tick: 2496, side: "far", swing: FAR_FAULT },
-		{ tick: 2605, side: "far", swing: FAR_FAULT },
-		{ tick: 2713, side: "far", swing: FAR_FAULT },
-		{ tick: 2822, side: "far", swing: FAR_FAULT },
-		{ tick: 2930, side: "far", swing: FAR_FAULT },
-		{ tick: 3039, side: "far", swing: FAR_FAULT },
-		{ tick: 3147, side: "far", swing: FAR_FAULT },
-		{ tick: 3256, side: "near", swing: NEAR_ACE },
-		{ tick: 3446, side: "near", swing: NEAR_ACE },
-		{ tick: 3636, side: "near", swing: NEAR_ACE },
-		{ tick: 3826, side: "near", swing: NEAR_ACE },
-		{ tick: 4016, side: "far", swing: FAR_FAULT },
-		{ tick: 4124, side: "far", swing: FAR_FAULT },
-		{ tick: 4233, side: "far", swing: FAR_FAULT },
-		{ tick: 4341, side: "far", swing: FAR_FAULT },
-		{ tick: 4450, side: "far", swing: FAR_FAULT },
-		{ tick: 4558, side: "far", swing: FAR_FAULT },
-		{ tick: 4667, side: "far", swing: FAR_FAULT },
-		{ tick: 4775, side: "far", swing: FAR_FAULT },
-	];
-
-	function runScript(): MatchState {
-		const inputsAt = new Map<number, RallyInput[]>();
-		for (const { tick: t, side, swing: sw } of script) {
-			inputsAt.set(t, [{ side, swing: sw, time: t * DT }]);
+	function playSet(): MatchState {
+		let current = createMatch("near");
+		for (let i = 0; i < 20_000; i++) {
+			if (current.score.setWinner) return current;
+			const inputs: RallyInput[] =
+				current.phase === "waiting-serve"
+					? [
+							{
+								side: current.toHit,
+								swing: current.toHit === "near" ? GOOD_SERVE : LONG_SERVE,
+								time: current.time,
+							},
+						]
+					: [];
+			current = tick(current, inputs, DT);
 		}
-		return drive(
-			createMatch("near"),
-			(st) => st.score.setWinner !== null,
-			inputsAt,
-			6000,
-		);
+		throw new Error("the set never finished");
 	}
 
 	it("reaches a completed set with the expected score", () => {
-		const final = runScript();
+		const final = playSet();
 
 		expect(final.score.setWinner).toBe("near");
 		expect(final.score.games).toEqual({ near: 6, far: 0 });
@@ -315,7 +293,77 @@ describe("a full set, replayed", () => {
 	});
 
 	it("is the same run twice", () => {
-		const run = () => JSON.stringify(runScript());
+		const run = () => JSON.stringify(playSet());
 		expect(run()).toBe(run());
+	});
+});
+
+describe("spin", () => {
+	/**
+	 * How deep a serve of this spin flies before the court (or the net, or
+	 * the line judge) stops it: the ball's `z` on the last tick it is still
+	 * in flight.
+	 *
+	 * Reading the flight's end rather than `bounces` on purpose — a serve
+	 * that lands long is a fault, and `fault()` resets the ball before
+	 * anything can look at where it went. The whole point here is to compare
+	 * a legal landing with an illegal one.
+	 */
+	function landingZ(spin: number): number {
+		let cur = tick(
+			createMatch("near"),
+			[
+				{
+					side: "near",
+					swing: { kind: "serve", power: 0.6, at: 0, spin },
+					time: 0,
+				},
+			],
+			DT,
+		);
+		for (let i = 0; i < 3000; i++) {
+			const next = tick(cur, [], DT);
+			if (next.phase !== "serve-flight") return cur.ball.p.z;
+			cur = next;
+		}
+		throw new Error(`serve with spin ${spin} never came down`);
+	}
+
+	it("makes topspin land shorter than flat, and slice longer", () => {
+		const top = landingZ(1);
+		const flat = landingZ(0);
+		const slice = landingZ(-1);
+
+		// The server is `near`, hitting toward -z: shorter means closer to the
+		// net, which is a LARGER (less negative) z.
+		expect(top).toBeGreaterThan(flat);
+		expect(flat).toBeGreaterThan(slice);
+		// And it is a difference a player would see, not a rounding artefact.
+		expect(top - slice).toBeGreaterThan(0.5);
+	});
+
+	it("carries the spin of the shot in flight, and clears it on a new point", () => {
+		const served = tick(
+			createMatch("near"),
+			[
+				{
+					side: "near",
+					swing: { kind: "serve", power: 0.5, at: 0, spin: 0.75 },
+					time: 0,
+				},
+			],
+			DT,
+		);
+		expect(served.spin).toBeCloseTo(0.75, 6);
+		expect(createMatch("near").spin).toBe(0);
+	});
+
+	it("treats a swing with no spin field as flat", () => {
+		const served = tick(
+			createMatch("near"),
+			[{ side: "near", swing: swing("serve", 0.5), time: 0 }],
+			DT,
+		);
+		expect(served.spin).toBe(0);
 	});
 });

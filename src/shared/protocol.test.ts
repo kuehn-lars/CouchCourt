@@ -132,3 +132,35 @@ describe("parseHostMessage", () => {
 		expect(parseHostMessage("{nope")).toBeNull();
 	});
 });
+
+describe("swing spin", () => {
+	const swing = (extra: Record<string, unknown>) => ({
+		t: "swing",
+		kind: "forehand",
+		power: 0.5,
+		at: 12,
+		...extra,
+	});
+
+	it("accepts a swing with no spin at all — an older phone is still a phone", () => {
+		expect(isControllerMessage(swing({}))).toBe(true);
+	});
+
+	it("accepts spin across its full range", () => {
+		for (const spin of [-1, -0.25, 0, 0.5, 1]) {
+			expect(isControllerMessage(swing({ spin }))).toBe(true);
+		}
+	});
+
+	it("rejects spin outside [-1, 1] or not a number", () => {
+		for (const spin of [
+			-1.01,
+			1.01,
+			Number.NaN,
+			Number.POSITIVE_INFINITY,
+			"1",
+		]) {
+			expect(isControllerMessage(swing({ spin }))).toBe(false);
+		}
+	});
+});

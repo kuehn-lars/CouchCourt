@@ -262,3 +262,36 @@ describe("relay — liveness", () => {
 			expect(left).toEqual({ t: "player-left", playerId: assigned.playerId });
 		}));
 });
+
+describe("relay — swing forwarding", () => {
+	it("forwards a swing's spin to the host", () =>
+		withRelay({}, async ({ url }) => {
+			const host = await connect(url);
+			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+
+			const phone = await connect(url);
+			send(phone, { t: "hello", v: PROTOCOL_VERSION });
+			const [assigned] = (await nextMessages(phone, 1)) as [
+				{ playerId: string },
+			];
+			await nextMessages(host, 1); // player-joined
+
+			send(phone, {
+				t: "swing",
+				kind: "forehand",
+				power: 0.5,
+				at: 42,
+				spin: -0.6,
+			});
+			const [forwarded] = await nextMessages(host, 1);
+
+			// The relay rebuilds the swing field by field rather than passing
+			// the message through, so every new field has to be added here too
+			// — this test is the thing that notices when one is not.
+			expect(forwarded).toEqual({
+				t: "swing",
+				playerId: assigned.playerId,
+				swing: { kind: "forehand", power: 0.5, at: 42, spin: -0.6 },
+			});
+		}));
+});

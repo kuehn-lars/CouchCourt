@@ -91,6 +91,8 @@ the evidence that produced them.
 | [[2026-09-20-shot-envelope]] | The shot-feel constants, and two fixture-design bugs that cost more than the tuning |
 | [[2026-09-20-serve-reachability-recheck]] | The "unreturnable serve" finding did not reproduce: every legal serve power gives a 0.48–0.67s return window |
 | [[2026-09-20-streaming-swing-latency]] | Batch detection is 1066ms late. Streaming is 117ms and fires on the backswing — and the fixtures are all denser than gameplay |
+| [[2026-09-20-serve-that-lands]] | The serve landed at 7 powers in 21. Contact height and a power-lerped angle make it 21 of 21 |
+| [[2026-09-20-spin-from-wrist-roll]] | Where `Swing.spin` comes from, and why no committed fixture can confirm it |
 | [[2026-09-20-serve-reachability]] | **Superseded.** The original, wrong claim — kept so nobody re-derives it |
 
 ## Sessions

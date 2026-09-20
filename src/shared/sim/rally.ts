@@ -38,7 +38,7 @@ import {
 	predictCrossingX,
 } from "./players.ts";
 import { awardPoint, initialScore, other, type Score } from "./scoring.ts";
-import { CONTACT_HEIGHT_REF, resolveShot } from "./shot.ts";
+import { resolveShot, SERVE_CONTACT_HEIGHT } from "./shot.ts";
 import type { Ball, Player } from "./state.ts";
 
 export type RallyPhase =
@@ -58,6 +58,11 @@ export interface MatchState {
 	/** Bounces since the last hit. Two loses the point for whoever was `toHit`. */
 	readonly bounces: number;
 	readonly serveNumber: 1 | 2;
+	/** Spin of the shot currently in flight, -1 (slice) to +1 (topspin), as
+	 * the hitter's phone read it. Nothing but `envFor` reads it; it lives in
+	 * state because ball flight is stateless between ticks and the ball has
+	 * to keep curving after the swing that gave it the spin is long gone. */
+	readonly spin: number;
 	/** Elapsed sim time, seconds — the same clock `RallyInput.time` is stamped in. */
 	readonly time: number;
 }
@@ -70,17 +75,39 @@ export interface RallyInput {
 	readonly time: number;
 }
 
-/** Fixed for the whole match: no per-shot spin selection exists yet (that
- * would need a rule for which shots get it, which nothing has specified),
- * and phase 9 is where every one of these gets tuned, not phase 6. */
-const ENV: BallEnv = { gravityScale: 1, drag: DRAG_K };
+/**
+ * How far spin bends gravity — the whole "no spin vector, no Magnus force"
+ * simplification `ball.ts` documents, now actually driven by something the
+ * player did with their wrist.
+ *
+ * **Asymmetric, and measured.** Topspin adds gravity, which is forgiving: a
+ * ball that dips lands in. Slice removes it, which is not: with the tuned
+ * serve angle, a serve still lands across every power at gravity ×1.35, but
+ * by ×0.85 only 8 powers in 21 stay in the box and by ×0.7 essentially none
+ * do. A symmetric ±0.6 made a hard slicer unable to land any serve at any
+ * power — watched happening, see
+ * `llm-knowledge/experiments/2026-09-20-serve-that-lands.md`. So slice is
+ * worth less gravity than topspin is worth, and remains the risky shot
+ * rather than the impossible one.
+ */
+export const SPIN_GRAVITY_TOP = 0.35;
+export const SPIN_GRAVITY_SLICE = 0.15;
+
+/** The flight environment for `state`'s in-flight ball. Everything that
+ * looks at the ball's future — the timing predictor, the player predictor,
+ * the step itself — has to use the SAME env, or the sim predicts a
+ * trajectory the ball does not fly. */
+function envFor(state: MatchState): BallEnv {
+	const scale = state.spin >= 0 ? SPIN_GRAVITY_TOP : SPIN_GRAVITY_SLICE;
+	return { gravityScale: 1 + state.spin * scale, drag: DRAG_K };
+}
 
 const baselineZ = (side: Side): number =>
 	side === "near" ? BASELINE_Z : -BASELINE_Z;
 
 function heldServeBall(server: Side): Ball {
 	return {
-		p: { x: 0, y: CONTACT_HEIGHT_REF, z: baselineZ(server) },
+		p: { x: 0, y: SERVE_CONTACT_HEIGHT, z: baselineZ(server) },
 		v: { x: 0, y: 0, z: 0 },
 	};
 }
@@ -94,6 +121,7 @@ export function createMatch(server: Side): MatchState {
 		toHit: server,
 		bounces: 0,
 		serveNumber: 1,
+		spin: 0,
 		time: 0,
 	};
 }
@@ -107,6 +135,7 @@ function startPoint(state: MatchState): MatchState {
 		toHit: server,
 		bounces: 0,
 		serveNumber: 1,
+		spin: 0,
 		ball: heldServeBall(server),
 		players: { near: { side: "near", x: 0 }, far: { side: "far", x: 0 } },
 	};
@@ -132,6 +161,7 @@ function fault(state: MatchState): MatchState {
 		toHit: server,
 		serveNumber: 2,
 		bounces: 0,
+		spin: 0,
 		ball: heldServeBall(server),
 	};
 }
@@ -145,7 +175,7 @@ function fault(state: MatchState): MatchState {
 function timingErrorFor(state: MatchState, input: RallyInput): number {
 	const predicted = predictCrossingTime(
 		state.ball,
-		ENV,
+		envFor(state),
 		baselineZ(state.toHit),
 	);
 	if (predicted === undefined) return 0;
@@ -170,6 +200,7 @@ function applySwing(state: MatchState, input: RallyInput): MatchState {
 		ball: { p: state.ball.p, v: outgoing },
 		toHit: other(state.toHit),
 		bounces: 0,
+		spin: input.swing.spin ?? 0,
 		phase: state.phase === "waiting-serve" ? "serve-flight" : "rally",
 	};
 }
@@ -213,17 +244,18 @@ function resolveStep(
 }
 
 function movePlayers(state: MatchState, dt: number): MatchState {
+	const env = envFor(state);
 	return {
 		...state,
 		players: {
 			near: movePlayer(
 				state.players.near,
-				predictCrossingX(state.ball, ENV, BASELINE_Z),
+				predictCrossingX(state.ball, env, BASELINE_Z),
 				dt,
 			),
 			far: movePlayer(
 				state.players.far,
-				predictCrossingX(state.ball, ENV, -BASELINE_Z),
+				predictCrossingX(state.ball, env, -BASELINE_Z),
 				dt,
 			),
 		},
@@ -241,7 +273,7 @@ export function tick(
 	for (const input of inputs) next = applySwing(next, input);
 
 	if (next.phase !== "waiting-serve") {
-		const step = stepBall(next.ball, dt, ENV);
+		const step = stepBall(next.ball, dt, envFor(next));
 		next = resolveStep({ ...next, ball: step.ball }, step.net, step.bounce);
 	}
 

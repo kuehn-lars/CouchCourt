@@ -55,6 +55,25 @@ export const LAUNCH_ANGLE_MAX = 0.44;
  * net; below it, the launch angle steepens the lower it gets. */
 export const CONTACT_HEIGHT_REF = 1.1;
 
+/** Where a serve is struck, metres. Overhead, not at waist height. */
+export const SERVE_CONTACT_HEIGHT = 2.6;
+
+/**
+ * Serve launch angle, radians, lerped by power: a gentle serve is lofted in,
+ * a hard one is hit down. **Measured, not guessed** — for every power from
+ * 0.15 to 0.95 there is a band of angles that lands in the service box, the
+ * band's midpoint is very nearly linear in power, and these two numbers are
+ * that line's ends. See
+ * `llm-knowledge/experiments/2026-09-20-serve-that-lands.md`.
+ *
+ * The effect is that a flat serve lands in the box at EVERY power, instead
+ * of only the 0.30-0.45 sliver a fixed angle allowed. That sliver is what
+ * made the first serve a coin toss: `PRODUCT.md` asks the game to guess in
+ * the player's favour, and a serve nobody can land is the opposite.
+ */
+export const SERVE_ANGLE_SLOW = 0.11;
+export const SERVE_ANGLE_FAST = -0.07;
+
 /** Extra launch angle, radians, for a contact right at ground level. Raised
  * from the phase-5 placeholder (0.3) so a low, well-timed contact reliably
  * clears the net instead of driving it into the band — see
@@ -100,8 +119,10 @@ export function resolveShot(
 
 	const heightDeficit = clamp(1 - contact.y / CONTACT_HEIGHT_REF, 0, 1);
 	const angle =
-		lerp(LAUNCH_ANGLE_MAX, LAUNCH_ANGLE_MIN, quality) +
-		heightDeficit * HEIGHT_ANGLE_BOOST;
+		swing.kind === "serve"
+			? lerp(SERVE_ANGLE_SLOW, SERVE_ANGLE_FAST, clamp(swing.power, 0, 1))
+			: lerp(LAUNCH_ANGLE_MAX, LAUNCH_ANGLE_MIN, quality) +
+				heightDeficit * HEIGHT_ANGLE_BOOST;
 
 	const forwardSpeed = speed * Math.cos(angle);
 	const verticalSpeed = speed * Math.sin(angle);

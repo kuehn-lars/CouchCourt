@@ -58,6 +58,27 @@ export const POWER_CEIL_DEG_S = 1400;
  */
 export const POWER_FLOOR = 0.15;
 
+/**
+ * deg/s of `beta` — the one rotation axis neither `classify` nor `powerOf`
+ * reads — below which a swing is called flat. Wrist roll under this is the
+ * noise every real swing carries: measured across the committed fixtures,
+ * `|beta|` at the peak of a correctly-classified swing runs 34-618 with a
+ * median of 163, and the sign is not consistent within a label, because
+ * nobody recorded those captures with spin in mind.
+ *
+ * **So this mapping is a design decision, not a measurement.** It is bounded,
+ * signed and dead-zoned so it cannot do anything drastic, and the first
+ * person with a phone in hand should check whether rolling the wrist over
+ * the ball really does move `beta` positive — see
+ * `llm-knowledge/experiments/2026-09-20-spin-from-wrist-roll.md`.
+ */
+export const SPIN_DEADZONE_DEG_S = 100;
+
+/** `|beta|` at the peak that reads as full spin. Just under the largest
+ * value any committed swing fixture reaches (618), so a deliberate roll can
+ * saturate it and an ordinary one cannot. */
+export const SPIN_FULL_DEG_S = 600;
+
 export function rotMagnitude(rot: readonly [number, number, number]): number {
 	return Math.sqrt(rot[0] ** 2 + rot[1] ** 2 + rot[2] ** 2);
 }
@@ -140,6 +161,15 @@ function classify(peak: MotionSample): SwingKind {
 	return alpha > 0 ? "forehand" : "backhand";
 }
 
+/** Signed wrist roll at the peak, -1 (slice) to +1 (topspin). */
+function spinOf(peak: MotionSample): number {
+	const beta = peak.rot[1];
+	const over = Math.abs(beta) - SPIN_DEADZONE_DEG_S;
+	if (over <= 0) return 0;
+	const scaled = Math.min(1, over / (SPIN_FULL_DEG_S - SPIN_DEADZONE_DEG_S));
+	return Math.sign(beta) * scaled;
+}
+
 function powerOf(peakMagnitude: number): number {
 	const ratio =
 		(peakMagnitude - POWER_FLOOR_DEG_S) /
@@ -160,6 +190,7 @@ export function swingFromPeak(peak: MotionSample): Swing {
 		kind: classify(peak),
 		power: powerOf(rotMagnitude(peak.rot)),
 		at: peak.t,
+		spin: spinOf(peak),
 	};
 }
 

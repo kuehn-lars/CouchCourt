@@ -148,7 +148,18 @@ export function attachRelay(
 					sendTo(hostSocket, {
 						t: "swing",
 						playerId,
-						swing: { kind: msg.kind, power: msg.power, at: msg.at },
+						// Field by field, not a spread of `msg`, so the `t`
+						// discriminator never leaks into the swing. Every new
+						// `Swing` field has to be added here — see
+						// `tests/integration/relay.test.ts`, which is the thing
+						// that notices when one is not. Spread, not assign, for
+						// exactOptionalPropertyTypes.
+						swing: {
+							kind: msg.kind,
+							power: msg.power,
+							at: msg.at,
+							...(msg.spin !== undefined ? { spin: msg.spin } : {}),
+						},
 					});
 				}
 				return;
