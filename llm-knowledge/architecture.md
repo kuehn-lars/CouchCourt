@@ -48,10 +48,10 @@ This is the path that matters. Everything else in the codebase supports it.
  devicemotion 60Hz
    │  MotionSample[]
    ▼
- detectSwings()          ①
+ createSwingStream()     ①✅
    │  Swing{kind,power,at}
    ▼
- ws.send {t:"swing"}     ②  ──▶  parseControllerMessage
+ ws.send {t:"swing"}     ②✅ ──▶  parseControllerMessage
                                  attach playerId from socket
                                  forward to host       ──▶  onmessage
                                                               │
@@ -83,7 +83,8 @@ This is the path that matters. Everything else in the codebase supports it.
  buzz  ◀──  {t:"feedback"}  ◀──  route to playerId  ◀──  send feedback ④
 ```
 
-① ② **Not built.** See "The two open seams" below.
+① ② **Built 2026-09-20**, not yet seen running on a phone. See "The
+remaining open seam" below.
 ③ The swing is stamped with the **host's** sim clock, never the phone's
 `swing.at` — [[0007-host-arrival-time-for-swing-timing]].
 ④ `hit`/`miss` per swing, `point` to both phones on a score change.
@@ -166,23 +167,22 @@ The rule that keeps it working, and that has already been broken once:
 to the web project. Tests are typechecked by a third project that enforces
 nothing. Full account in [[0002-host-authoritative-simulation]].
 
-## The two open seams
+## The remaining open seam
 
-**As of 2026-09-20 the game cannot be played**, and it is worth being precise
-about why, because every individual subsystem is finished and tested. The host
-is wired end to end. Both ends of the pipe are not.
+**As of 2026-09-20 seam 1 is closed and seam 2 is not**, and it is worth
+being precise about both, because every individual subsystem is finished and
+tested.
 
-**Seam 1 — the controller is a placeholder.** `src/controller/index.html` says
-"Controller. Not built yet." and links to the trace recorder. There is no
-controller entry module, so the phone never opens a socket, never sends
-`hello`, and never sends a swing. `src/controller/motion.ts` — the iOS
-permission gate, the hard part — exists and works, but its only caller is
-`src/controller/record.ts`, the recorder.
-
-Consequence worth stating plainly: **`detectSwings` has no production
-caller.** The detector is complete and tuned against 20 real traces
-([[2026-09-19-swing-detector-tuning]]) and nothing in the running system calls
-it. `grep -rn detectSwings src` finds its definition and its test.
+**Seam 1 — closed, unverified on hardware.** `src/controller/main.ts` is the
+real entry point: permission gate → `devicemotion` → `toSample` →
+`createSwingStream` → `session.send`. The phone opens a socket, sends
+`hello` (with `sessionStorage`-backed resume), and streams swings via
+[[0009-streaming-swing-detection]]'s live detector rather than a batched
+`detectSwings` call. See [[modules/controller]] for what was built and, just
+as importantly, what was **not** verified — no session has opened this page
+on a phone yet. `detectSwings` (the batch detector) itself still has no
+production caller by design; the streaming detector shares its classification
+code instead. See [[modules/shared-swing]].
 
 **Seam 2 — there is no production server.** `src/server/` has the relay and
 the lobby, both tested, but no entry point that runs them. The relay reaches a
@@ -192,8 +192,8 @@ was a deliberate deferral, not an oversight — no decision exists yet for how
 production static serving works, and there was nothing real in `dist/` to
 serve when the relay was written.
 
-Closing either seam is the next real work. Neither has an ADR yet, because
-neither has been designed.
+Closing this seam is the next real work. It has no ADR yet, because it has
+not been designed.
 
 ## What is deliberately not here
 

@@ -17,7 +17,7 @@ whole system. [[README]] explains how the vault is maintained.
 
 | | |
 | --- | --- |
-| [[architecture]] | How the whole thing connects: the swing path end to end, what each hop may assume, where state lives, and the two seams that mean **the game cannot currently be played** |
+| [[architecture]] | How the whole thing connects: the swing path end to end, what each hop may assume, where state lives, and the one remaining seam that means **the game cannot currently be played end to end** |
 | [[0002-host-authoritative-simulation]] | The most load-bearing decision in the codebase. Most of the structure follows from it |
 | [[log]] | What happened, in order, and what each session promoted |
 
@@ -101,12 +101,20 @@ folders above and recorded in [[log]]. See `llm-knowledge/sessions/README.md`.
 
 Things that are true today and that a session should not be surprised by.
 
-- **The game cannot be played end to end.** No controller entry module, so
-  `detectSwings` has no production caller; and no `src/server/main.ts`, so the
-  relay exists only in dev. [[architecture]] has the detail.
-- **Nothing has been seen running.** No session has opened the host page in a
-  browser or played a rally on real phones. The renderer and phase 9's tuned
-  constants are both unverified against how the game actually feels.
+- **The game cannot be played end to end.** The controller is built
+  (2026-09-20) but there is no `src/server/main.ts`, so the relay exists only
+  in dev. [[architecture]] has the detail.
+- **Nothing has been seen running.** No session has opened the host page or
+  the controller page in a browser, or played a rally on real phones. The
+  renderer, phase 9's tuned constants, and the whole controller (permission
+  gate, swing streaming, reconnect) are all unverified against how the game
+  actually feels and behaves on real hardware. See [[modules/controller]]'s
+  "What is and is not verified".
+- **The streaming detector's backswing-misfire finding is against
+  multi-rep fixtures only.** Every committed trace is a multi-swing capture;
+  the game only ever sees single swings. [[0009-streaming-swing-detection]]'s
+  "What would overturn this" names six single-swing traces, recorded with
+  rally-like spacing, as the next thing to check with a phone in hand.
 - **Nothing decides who serves first.** `main.ts` hardcodes `near`; there is
   no lobby UI and no protocol message for it.
 - **How long iOS waits before suspending a backgrounded tab is unmeasured**,

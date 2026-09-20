@@ -5,6 +5,7 @@ tags: [decision, swing, controller, latency, core]
 status: current
 code:
   - `src/shared/swing/detector.ts`
+  - `src/shared/swing/stream.ts`
   - `src/shared/sim/shot.ts`
 ---
 
