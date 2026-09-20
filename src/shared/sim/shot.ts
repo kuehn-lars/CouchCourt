@@ -25,9 +25,12 @@ export const CLEAN_WINDOW = 0.12;
 /** Beyond this many seconds either side, the racket meets nothing. */
 export const MISS_WINDOW = 0.28;
 
-/** Groundstroke launch speed range, m/s, weakest to full power. */
+/** Groundstroke launch speed range, m/s, weakest to full power. Measured
+ * against `sim/playability.test.ts`'s envelope
+ * (`llm-knowledge/experiments/2026-09-20-shot-envelope.md`): 30 sent a
+ * full-power, well-timed shot ~4.5m past the baseline. */
 export const GROUND_SPEED_MIN = 15;
-export const GROUND_SPEED_MAX = 30;
+export const GROUND_SPEED_MAX = 24;
 
 /** Serve launch speed range, m/s — hit from overhead, so a higher ceiling. */
 export const SERVE_SPEED_MIN = 18;
@@ -53,8 +56,13 @@ export const LAUNCH_ANGLE_MAX = 0.44;
  * net; below it, the launch angle steepens the lower it gets. */
 export const CONTACT_HEIGHT_REF = 1.1;
 
-/** Extra launch angle, radians, for a contact right at ground level. */
-export const HEIGHT_ANGLE_BOOST = 0.3;
+/** Extra launch angle, radians, for a contact right at ground level. Raised
+ * from the phase-5 placeholder (0.3) so a low, well-timed contact reliably
+ * clears the net instead of driving it into the band — see
+ * `llm-knowledge/experiments/2026-09-20-shot-envelope.md`. Serves are
+ * unaffected: their contact height always equals `CONTACT_HEIGHT_REF`, so
+ * `heightDeficit` is always 0 for them. */
+export const HEIGHT_ANGLE_BOOST = 0.55;
 
 /** Sideways speed, m/s, at the very edge of the miss window. Timing error's
  * sign and magnitude scale linearly into this — the direction decision. */

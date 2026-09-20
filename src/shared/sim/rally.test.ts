@@ -240,17 +240,16 @@ describe("determinism", () => {
 describe("a full set, replayed", () => {
 	/**
 	 * Discovered empirically (a throwaway driver logging its own decisions,
-	 * per the session log), not hand-guessed: with players locked to their own
-	 * baseline (phase 4) and the shot constants as phase 9 leaves them, a
-	 * legally-served ball that lands short in the box double-bounces before
-	 * ever reaching the receiver's fixed position — so a receiver in this sim
-	 * cannot return *any* legal serve, and the interesting scripting question
-	 * collapses to "who wins their own serve". Power 0.35 aces every time;
-	 * 0.55 clears the net but lands past the service line every time (a fault,
-	 * not a lost point) — so `near` wins outright and `far` double-faults
-	 * every service game.
+	 * per the session log), not hand-guessed. A receiver *can* return a legal
+	 * serve in this sim (`llm-knowledge/experiments/2026-09-20-serve-reachability-recheck.md`)
+	 * — this script simply doesn't attempt one, to keep the replay small and
+	 * deterministic: `near`'s serve at power 0.35 lands legally and is never
+	 * swung at, so it stands as an unreturned point; `far`'s serve at 0.55
+	 * clears the net but lands past the service line every time (a fault, not
+	 * a lost point) — so `near` wins outright and `far` double-faults every
+	 * service game.
 	 *
-	 * `{tick, side, swing}`, per the plan. No one ever returns a shot here —
+	 * `{tick, side, swing}`, per the plan. No one swings at a return here —
 	 * that path is covered by the smaller terminal-condition tests above.
 	 */
 	const NEAR_ACE = swing("serve", 0.35);

@@ -85,10 +85,10 @@ The things that will cost you an afternoon if you do not read them first.
   peak threshold cannot separate a backhand from a hand gesture
 - [[2026-09-19-swing-detector-tuning]] — the duration/merge/classification
   thresholds that do separate them, tuned against the traces
-- [[2026-09-20-serve-reachability]] — with today's untuned constants, a
-  legally-served ball double-bounces before reaching the baseline-locked
-  receiver: every legal serve is currently an ace. Phase 9's problem, found
-  building phase 6.
+- [[2026-09-20-serve-reachability]] — superseded; see the recheck below
+- [[2026-09-20-serve-reachability-recheck]] — the "unreturnable serve" finding
+  didn't reproduce: every legal serve power gives the receiver a 0.48-0.67s
+  return window. Reachability was never phase 9's problem.
 
 ## Not yet written
 

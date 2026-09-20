@@ -2,12 +2,17 @@
 title: A legal serve is currently unreturnable — found building the rally machine
 updated: 2026-09-20
 tags: [experiment, sim, tuning, phase-9]
-status: current
+status: superseded
 code:
   - `src/shared/sim/rally.ts`
   - `src/shared/sim/players.ts`
   - `src/shared/sim/court.ts`
 ---
+
+**Superseded by [[2026-09-20-serve-reachability-recheck]] — the central claim
+below does not reproduce.** Left in place, not deleted, so a session that
+re-derives this doesn't waste an evening rediscovering the same wrong
+conclusion; read the recheck note instead.
 
 # A legal serve is currently unreturnable
 

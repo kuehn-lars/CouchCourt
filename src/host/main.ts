@@ -1,9 +1,9 @@
 /**
- * The host entry point: the rAF loop, the socket wiring and the two state
- * references the renderer (phase 8) will interpolate between, nothing else
- * (`llm-knowledge/plans/2026-09-19-simulation.md`, phase 7). Not unit tested,
- * same as `host/render/` will be — it is all DOM and socket I/O, and the one
- * part worth testing without a browser is `loop.ts`'s `advance`.
+ * The host entry point: the rAF loop, the socket wiring, the two state
+ * references the renderer interpolates between, and the render call itself
+ * (`llm-knowledge/plans/2026-09-19-simulation.md`, phases 7 and 8). Not unit
+ * tested — it is all DOM and socket I/O, and the one part worth testing
+ * without a browser is `loop.ts`'s `advance`.
  *
  * The relay is our own server, not a phone: unlike `isControllerMessage` /
  * `isHostMessage` (the two directions the server itself guards, since a
@@ -26,6 +26,18 @@ import {
 	tick,
 } from "../shared/sim/index.ts";
 import { advance, FIXED_DT } from "./loop.ts";
+import {
+	createRenderer,
+	detectEvents,
+	type RenderEvent,
+} from "./render/index.ts";
+
+const canvas = document.getElementById("scene");
+const uiRoot = document.getElementById("ui");
+if (!(canvas instanceof HTMLCanvasElement) || uiRoot === null) {
+	throw new Error("host/index.html is missing #scene or #ui");
+}
+const renderer = createRenderer(canvas, uiRoot);
 
 const socket = new WebSocket(
 	`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`,
@@ -72,6 +84,10 @@ socket.addEventListener("message", (event) => {
 	}
 });
 
+/** Render effects to draw once the frame's ticks are done, per `frame()`
+ * below — cleared after every `renderer.render` call. */
+const frameEvents: RenderEvent[] = [];
+
 /**
  * Runs one fixed-step tick. `inputs` holds at most one swing — the queue is
  * drained one input per tick rather than dumped into the frame's first tick,
@@ -83,6 +99,7 @@ function runTick(inputs: readonly RallyInput[]): void {
 	const before = current;
 	previous = current;
 	current = tick(before, inputs, FIXED_DT);
+	frameEvents.push(...detectEvents(before, current));
 
 	const swung = inputs[0];
 	if (swung) {
@@ -117,6 +134,8 @@ function frame(now: number): void {
 			const input = pending.shift();
 			runTick(input ? [input] : []);
 		}
+		renderer.render(previous, current, result.alpha, frameDt, frameEvents);
+		frameEvents.length = 0;
 	}
 	lastTime = now;
 	requestAnimationFrame(frame);
