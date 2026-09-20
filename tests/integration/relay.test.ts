@@ -146,6 +146,7 @@ describe("relay — resume", () => {
 		withRelay({}, async ({ url }) => {
 			const host = await connect(url);
 			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+			await nextMessages(host, 1); // the empty lobby, sent on connect
 
 			const ws1 = await connect(url);
 			send(ws1, { t: "hello", v: PROTOCOL_VERSION });
@@ -154,17 +155,17 @@ describe("relay — resume", () => {
 			];
 			const playerId = assigned.playerId;
 			expect(assigned.side).toBe("near");
-			await nextMessages(host, 1); // player-joined
+			await nextMessages(host, 1); // lobby, with the player in it
 
 			ws1.close();
 			await waitClose(ws1);
-			await nextMessages(host, 1); // player-left
+			await nextMessages(host, 1); // lobby, now empty again
 
 			const ws1b = await connect(url);
 			send(ws1b, { t: "hello", v: PROTOCOL_VERSION, resume: playerId });
 			const [resumed] = await nextMessages(ws1b, 1);
 			expect(resumed).toEqual({ t: "assigned", playerId, side: "near" });
-			await nextMessages(host, 1); // player-joined (again)
+			await nextMessages(host, 1); // lobby, with the resumed player
 
 			send(ws1b, {
 				t: "swing",
@@ -186,11 +187,12 @@ describe("relay — identity and routing", () => {
 		withRelay({}, async ({ url }) => {
 			const host = await connect(url);
 			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+			await nextMessages(host, 1); // the empty lobby, sent on connect
 
 			const ws1 = await connect(url);
 			send(ws1, { t: "hello", v: PROTOCOL_VERSION });
 			const [assigned] = (await nextMessages(ws1, 1)) as [{ playerId: string }];
-			await nextMessages(host, 1); // player-joined
+			await nextMessages(host, 1); // lobby, with the player in it
 
 			// A controller message carries no playerId at all — the guard in
 			// protocol.ts would reject one that tried to add one.
@@ -207,11 +209,12 @@ describe("relay — identity and routing", () => {
 		withRelay({}, async ({ url }) => {
 			const host = await connect(url);
 			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+			await nextMessages(host, 1); // the empty lobby, sent on connect
 
 			const ws1 = await connect(url);
 			send(ws1, { t: "hello", v: PROTOCOL_VERSION });
 			const [assigned] = (await nextMessages(ws1, 1)) as [{ playerId: string }];
-			await nextMessages(host, 1); // player-joined
+			await nextMessages(host, 1); // lobby, with the player in it
 
 			send(ws1, { t: "ready", ready: true });
 			const [lobbyUpdate] = await nextMessages(ws1, 1);
@@ -226,12 +229,8 @@ describe("relay — identity and routing", () => {
 					},
 				],
 			});
-			const [playerReady] = await nextMessages(host, 1);
-			expect(playerReady).toEqual({
-				t: "player-ready",
-				playerId: assigned.playerId,
-				ready: true,
-			});
+			const [hostLobby] = await nextMessages(host, 1);
+			expect(hostLobby).toEqual(lobbyUpdate);
 
 			send(host, { t: "feedback", playerId: assigned.playerId, kind: "hit" });
 			const [feedback] = await nextMessages(ws1, 1);
@@ -240,15 +239,16 @@ describe("relay — identity and routing", () => {
 });
 
 describe("relay — liveness", () => {
-	it("terminates a socket that goes silent and tells the host it left", () =>
+	it("terminates a socket that goes silent and tells the host it disconnected", () =>
 		withRelay({ pingIntervalMs: 30 }, async ({ url }) => {
 			const host = await connect(url);
 			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+			await nextMessages(host, 1); // the empty lobby, sent on connect
 
 			const ws1 = await connect(url);
 			send(ws1, { t: "hello", v: PROTOCOL_VERSION });
 			const [assigned] = (await nextMessages(ws1, 1)) as [{ playerId: string }];
-			await nextMessages(host, 1); // player-joined
+			await nextMessages(host, 1); // lobby, with the player in it
 
 			// Simulate iOS suspending the tab: the socket goes dark with no close
 			// frame, so it can't answer the server's pings either. Pausing the
@@ -259,6 +259,94 @@ describe("relay — liveness", () => {
 			(ws1 as any)._socket.pause();
 
 			const [left] = await nextMessages(host, 1);
-			expect(left).toEqual({ t: "player-left", playerId: assigned.playerId });
+			expect(left).toEqual({
+				t: "lobby",
+				players: [
+					{
+						playerId: assigned.playerId,
+						side: "near",
+						ready: false,
+						connected: false,
+					},
+				],
+			});
+		}));
+});
+
+describe("relay — swing forwarding", () => {
+	it("forwards a swing's spin to the host", () =>
+		withRelay({}, async ({ url }) => {
+			const host = await connect(url);
+			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+			await nextMessages(host, 1); // the empty lobby, sent on connect
+
+			const phone = await connect(url);
+			send(phone, { t: "hello", v: PROTOCOL_VERSION });
+			const [assigned] = (await nextMessages(phone, 1)) as [
+				{ playerId: string },
+			];
+			await nextMessages(host, 1); // lobby, with the player in it
+
+			send(phone, {
+				t: "swing",
+				kind: "forehand",
+				power: 0.5,
+				at: 42,
+				spin: -0.6,
+			});
+			const [forwarded] = await nextMessages(host, 1);
+
+			// The relay rebuilds the swing field by field rather than passing
+			// the message through, so every new field has to be added here too
+			// — this test is the thing that notices when one is not.
+			expect(forwarded).toEqual({
+				t: "swing",
+				playerId: assigned.playerId,
+				swing: { kind: "forehand", power: 0.5, at: 42, spin: -0.6 },
+			});
+		}));
+});
+
+describe("relay — lobby snapshots and match state", () => {
+	it("gives the host the whole lobby, on connect and on every change", () =>
+		withRelay({}, async ({ url }) => {
+			const host = await connect(url);
+			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+
+			// A host that reloads mid-lobby has to learn who is already here.
+			// Incremental joined/left events cannot tell it that.
+			const [empty] = await nextMessages(host, 1);
+			expect(empty).toEqual({ t: "lobby", players: [] });
+
+			const phone = await connect(url);
+			send(phone, { t: "hello", v: PROTOCOL_VERSION });
+			const [joined] = await nextMessages(host, 1);
+			expect(joined).toMatchObject({
+				t: "lobby",
+				players: [{ side: "near", ready: false, connected: true }],
+			});
+
+			send(phone, { t: "ready", ready: true });
+			const [readied] = await nextMessages(host, 1);
+			expect(readied).toMatchObject({
+				t: "lobby",
+				players: [{ side: "near", ready: true }],
+			});
+		}));
+
+	it("broadcasts the host's match state to every phone", () =>
+		withRelay({}, async ({ url }) => {
+			const host = await connect(url);
+			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+			await nextMessages(host, 1); // the empty lobby
+
+			const phone = await connect(url);
+			send(phone, { t: "hello", v: PROTOCOL_VERSION });
+			await nextMessages(phone, 2); // assigned, lobby
+			await nextMessages(host, 1); // lobby
+
+			send(host, { t: "match", phase: "playing", server: "far" });
+			const [match] = await nextMessages(phone, 1);
+			expect(match).toEqual({ t: "match", phase: "playing", server: "far" });
 		}));
 });

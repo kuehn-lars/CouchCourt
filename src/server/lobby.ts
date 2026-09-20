@@ -66,8 +66,30 @@ export class Lobby {
 		}
 
 		const takenSides = new Set([...this.#players.values()].map((p) => p.side));
-		const side = SIDES.find((s) => !takenSides.has(s));
-		if (!side) return { ok: false, reason: "full" };
+		let side = SIDES.find((s) => !takenSides.has(s));
+
+		if (!side) {
+			// Both sides are spoken for, but one of those players is gone. A
+			// slot held by a phone that is not here is how a living-room game
+			// gets stuck: the battery dies, and nobody can play until someone
+			// restarts the server.
+			//
+			// Reclaiming is safe against the case
+			// `llm-knowledge/decisions/0006-relay-session-policy.md` was
+			// protecting, because `resume` is handled above this and wins: a
+			// player who comes back with their own `playerId` gets their own
+			// side, and only a genuinely NEW phone can take an absent one.
+			// The reclaimed session is deleted rather than left dangling, so
+			// its owner is told `unknown-session` and rejoins as a newcomer
+			// instead of being shadowed by whoever took their place.
+			const absent = [...this.#players.values()].find((p) => !p.connected);
+			if (!absent) return { ok: false, reason: "full" };
+			this.#players.delete(absent.playerId);
+			for (const [conn, playerId] of this.#connToPlayer) {
+				if (playerId === absent.playerId) this.#connToPlayer.delete(conn);
+			}
+			side = absent.side;
+		}
 
 		const playerId = this.#newId();
 		const player: LobbyPlayer = {

@@ -9,6 +9,7 @@ code:
   - `src/server/relay.ts`
   - `scripts/relay-plugin.ts`
   - `vite.config.ts`
+  - `package.json`
 ---
 
 # How SwingCourt fits together
@@ -24,7 +25,7 @@ answer is here or in the [[index]]'s module row for it.
 
 | Runs where | What it is | Lives in |
 | --- | --- | --- |
-| Mac, Node | Dev server: serves both pages **and** hosts the WebSocket relay | `src/server/`, `scripts/relay-plugin.ts` |
+| Mac, Node | Vite: serves the pages **and** hosts the WebSocket relay. `npm run dev` in development, `npm start` (`vite build && vite preview`) in production — same plugin, same port, same certificates | `src/server/`, `scripts/relay-plugin.ts` |
 | Mac, browser | Host display: runs the authoritative simulation, renders it | `src/host/` |
 | iPhone, Safari | Controller: the racket | `src/controller/` |
 
@@ -33,6 +34,10 @@ Both browsers talk to one Node process over **one port** (5173, from
 `httpServer` by a plugin rather than run as a second process, so the page and
 its socket share an origin and there is no CORS story, no second port in the
 QR code, and no separate dev command. See [[modules/tooling]].
+
+Under TLS that `httpServer` is an **`Http2SecureServer`**, not an
+`https.Server` — in dev and preview alike, with no config asking for it. The
+relay has always been attached to one. [[vite-https-is-http2]].
 
 The server holds **player slots and nothing else**. There is no game state on
 it, nothing persists across a restart, and there is no database — see
@@ -83,8 +88,10 @@ This is the path that matters. Everything else in the codebase supports it.
  buzz  ◀──  {t:"feedback"}  ◀──  route to playerId  ◀──  send feedback ④
 ```
 
-① ② **Built 2026-09-20**, not yet seen running on a phone. See "The
-remaining open seam" below.
+① ② **Built 2026-09-20**, not yet seen running on a phone. The `Swing`
+also carries `spin`, read from the phone's `beta` rotation axis, which
+becomes the in-flight ball's `gravityScale` — the one place phone motion
+reaches the physics beyond power. [[2026-09-20-spin-from-wrist-roll]].
 ③ The swing is stamped with the **host's** sim clock, never the phone's
 `swing.at` — [[0007-host-arrival-time-for-swing-timing]].
 ④ `hit`/`miss` per swing, `point` to both phones on a score change.
@@ -167,11 +174,10 @@ The rule that keeps it working, and that has already been broken once:
 to the web project. Tests are typechecked by a third project that enforces
 nothing. Full account in [[0002-host-authoritative-simulation]].
 
-## The remaining open seam
+## Both seams are closed
 
-**As of 2026-09-20 seam 1 is closed and seam 2 is not**, and it is worth
-being precise about both, because every individual subsystem is finished and
-tested.
+**As of 2026-09-20 both are closed.** What is left is not wiring, it is
+hardware verification — see "What has not been seen" below.
 
 **Seam 1 — closed, unverified on hardware.** `src/controller/main.ts` is the
 real entry point: permission gate → `devicemotion` → `toSample` →
@@ -184,16 +190,51 @@ on a phone yet. `detectSwings` (the batch detector) itself still has no
 production caller by design; the streaming detector shares its classification
 code instead. See [[modules/shared-swing]].
 
-**Seam 2 — there is no production server.** `src/server/` has the relay and
-the lobby, both tested, but no entry point that runs them. The relay reaches a
-socket only through the dev-time Vite plugin. `npm run build` emits two static
-pages under `dist/` with nothing to serve them and no relay behind them. This
-was a deliberate deferral, not an oversight — no decision exists yet for how
-production static serving works, and there was nothing real in `dist/` to
-serve when the relay was written.
+**Seam 2 — closed.** `npm start` is `vite build && vite preview`, and
+`relayPlugin` attaches to the preview server as well as the dev one. There is
+no hand-written Node server, because Vite already does static serving and TLS
+correctly and the alternative was eighty lines of MIME tables and traversal
+guards. [[0010-vite-preview-as-production-server]].
 
-Closing this seam is the next real work. It has no ADR yet, because it has
-not been designed.
+Verified live: `/`, `/host/` and `/controller/` all serve over TLS on the LAN
+address, and a `wss://` client gets `assigned` back from the relay.
+
+## The match, end to end
+
+The swing path above is one tick of something larger. The host owns the whole
+match:
+
+```
+lobby ──(Start / Play the machine)──▶ countdown ──(3s)──▶ playing
+  ▲                                                          │
+  └──────────────(Back to the lobby)──── over ◀──(setWinner)──┘
+```
+
+Every transition is `{ t: "match", phase, server, winner? }` from the host,
+broadcast by the relay to every phone. The relay stores none of it. In the
+other direction the host is sent `{ t: "lobby", players }` — a **snapshot**,
+because a host that reloads cannot rebuild a roster from deltas it was not
+connected for.
+
+**Who serves first** is decided in the lobby: the first player to announce
+themselves ready. That closes a gap this page carried from the beginning.
+
+**Solo mode** puts `createBot` ([[modules/shared-sim]]) on the empty side.
+It is an input source, not a simulation feature: the host calls it once per
+tick and queues its swing exactly where a phone's swing goes.
+
+## What has not been seen
+
+The **whole match loop** has now been seen running in headless Chrome —
+lobby, countdown, a solo match played through to a completed set, the winner
+screen, rematch, and back to the lobby — plus pause-on-disconnect and the
+controller's join flow, with no console errors on either page. The first time
+anything here has been watched rather than inferred.
+
+A real phone, a real swing and a real frame rate have not. Headless Chrome
+renders through SwiftShader and has no motion sensors, so it says nothing
+about 60fps on a MacBook GPU and nothing at all about feel, which is the bar
+`PRODUCT.md` sets.
 
 ## What is deliberately not here
 

@@ -85,17 +85,11 @@ describe("Lobby — controller slot assignment", () => {
 		});
 	});
 
-	it("does not free a disconnected player's slot for a fresh join", () => {
-		const lobby = new Lobby(ids());
-		const firstConn = {};
-		lobby.connectController(firstConn, { v: PROTOCOL_VERSION });
-		lobby.connectController({}, { v: PROTOCOL_VERSION });
-		lobby.disconnectController(firstConn);
-
-		const outcome = lobby.connectController({}, { v: PROTOCOL_VERSION });
-
-		expect(outcome).toEqual({ ok: false, reason: "full" });
-	});
+	// The test that used to live here asserted the opposite — that a
+	// disconnected player's slot stays theirs forever. That was
+	// `llm-knowledge/decisions/0006-relay-session-policy.md`'s policy, and it
+	// was written before there was a lobby anyone could get stuck in. See
+	// "reclaiming a slot from a player who is gone", below.
 });
 
 describe("Lobby — ready state", () => {
@@ -219,5 +213,62 @@ describe("Lobby — host", () => {
 
 		expect(wasActive).toBe(true);
 		expect(lobby.isHost(host)).toBe(false);
+	});
+});
+
+describe("reclaiming a slot from a player who is gone", () => {
+	it("gives a disconnected player's side to a new phone rather than saying full", () => {
+		const lobby = new Lobby(ids());
+		const a = {};
+		const b = {};
+		lobby.connectController(a, { v: PROTOCOL_VERSION });
+		lobby.connectController(b, { v: PROTOCOL_VERSION });
+		lobby.disconnectController(a);
+
+		// Someone picks up a third phone because the first one died. Before
+		// this, the answer was "full" and the match could not start again
+		// without restarting the server.
+		const third = lobby.connectController({}, { v: PROTOCOL_VERSION });
+		expect(third).toMatchObject({ ok: true, side: "near" });
+		expect(lobby.players()).toHaveLength(2);
+	});
+
+	it("still refuses when both sides are connected", () => {
+		const lobby = new Lobby(ids());
+		lobby.connectController({}, { v: PROTOCOL_VERSION });
+		lobby.connectController({}, { v: PROTOCOL_VERSION });
+		expect(lobby.connectController({}, { v: PROTOCOL_VERSION })).toEqual({
+			ok: false,
+			reason: "full",
+		});
+	});
+
+	it("prefers a free side over reclaiming a disconnected one", () => {
+		const lobby = new Lobby(ids());
+		const a = {};
+		lobby.connectController(a, { v: PROTOCOL_VERSION });
+		lobby.disconnectController(a);
+		// `far` is untouched, so the newcomer goes there and the absent
+		// player keeps their identity and their side to resume into.
+		expect(lobby.connectController({}, { v: PROTOCOL_VERSION })).toMatchObject({
+			ok: true,
+			side: "far",
+		});
+		expect(lobby.players()).toHaveLength(2);
+	});
+
+	it("a reclaimed player cannot resume: their session is gone, not stale", () => {
+		const lobby = new Lobby(ids());
+		const a = {};
+		const b = {};
+		const first = lobby.connectController(a, { v: PROTOCOL_VERSION });
+		lobby.connectController(b, { v: PROTOCOL_VERSION });
+		lobby.disconnectController(a);
+		lobby.connectController({}, { v: PROTOCOL_VERSION });
+
+		const playerId = first.ok ? first.playerId : "";
+		expect(
+			lobby.connectController({}, { v: PROTOCOL_VERSION, resume: playerId }),
+		).toEqual({ ok: false, reason: "unknown-session" });
 	});
 });

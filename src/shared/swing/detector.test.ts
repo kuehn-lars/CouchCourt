@@ -8,6 +8,8 @@ import {
 	POWER_FLOOR,
 	POWER_FLOOR_DEG_S,
 	SERVE_GAMMA_THRESHOLD_DEG_S,
+	SPIN_DEADZONE_DEG_S,
+	SPIN_FULL_DEG_S,
 	SWING_ROT_THRESHOLD_DEG_S,
 	swingFromPeak,
 } from "./detector.ts";
@@ -196,7 +198,28 @@ describe("swingFromPeak", () => {
 				(1 - POWER_FLOOR) *
 					((900 - POWER_FLOOR_DEG_S) / (POWER_CEIL_DEG_S - POWER_FLOOR_DEG_S)),
 			at: 500,
+			spin: 0,
 		});
+	});
+
+	it("reads spin from the peak's beta axis, signed and dead-zoned", () => {
+		const at = (beta: number) =>
+			swingFromPeak({ t: 500, acc: [0, 9.8, 0], rot: [900, beta, 0] }).spin;
+
+		// Inside the dead zone: flat. Wrist noise is not a spin decision.
+		expect(at(0)).toBe(0);
+		expect(at(SPIN_DEADZONE_DEG_S - 1)).toBe(0);
+		expect(at(-(SPIN_DEADZONE_DEG_S - 1))).toBe(0);
+
+		// Saturates at the full-roll figure, and never leaves [-1, 1].
+		expect(at(SPIN_FULL_DEG_S)).toBe(1);
+		expect(at(SPIN_FULL_DEG_S * 3)).toBe(1);
+		expect(at(-SPIN_FULL_DEG_S * 3)).toBe(-1);
+
+		// Between the two it is linear and keeps beta's sign.
+		const mid = (SPIN_DEADZONE_DEG_S + SPIN_FULL_DEG_S) / 2;
+		expect(at(mid)).toBeCloseTo(0.5, 6);
+		expect(at(-mid)).toBeCloseTo(-0.5, 6);
 	});
 
 	it("agrees with detectSwings on a real fixture's peak", () => {

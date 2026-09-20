@@ -32,6 +32,7 @@ for why, and [[architecture]] for where it sits.
 | `src/shared/sim/players.ts` | `predictCrossingX`/`Time`, `movePlayer` — automatic positioning |
 | `src/shared/sim/scoring.ts` | `awardPoint`, `Score`, tiebreak rotation |
 | `src/shared/sim/state.ts` | `Vec3`, `Ball`, `Player` — flat readonly data |
+| `src/shared/sim/bot.ts` | `createBot(side, skill)` — the solo opponent. **Not part of `tick`** |
 | `src/shared/sim/index.ts` | Barrel re-export. No logic |
 
 ## Internal wiring
@@ -44,6 +45,9 @@ rally.ts  ── imports ──▶  ball.ts     (stepBall)
    │                      shot.ts     (resolveShot, CONTACT_HEIGHT_REF)
    │                      state.ts, ../protocol.ts (Side, Swing)
    │
+bot.ts    ── imports ──▶  rally.ts    (envFor, MatchState)
+                          players.ts  (predictCrossingTime)
+                          court.ts, shot.ts (BASELINE_Z, MISS_WINDOW)
 players.ts ── imports ──▶ ball.ts     (stepBall — the SAME physics, deliberately)
                           court.ts    (SINGLES_HALF_WIDTH)
 ball.ts    ── imports ──▶ court.ts    (BALL_RADIUS, NET_POST_X, netHeightAt)
@@ -88,6 +92,43 @@ Phases: `waiting-serve → serve-flight → rally → point-over`.
   are separate branches in `resolveStep`, not a priority order. A tick that
   would do both defers the second by 8ms.
 
+## The bot is an input source, not a simulation feature
+
+`tick` has never heard of it. `src/host/main.ts` calls `bot.swing(state)`
+once per tick and pushes whatever comes back onto the same `pending` queue a
+phone's swing lands in. The bot reads the `MatchState` the renderer reads and
+answers with the `Swing` a phone would send — no privileged access to
+anything.
+
+That matters because a bot `tick` special-cased would be a second way for the
+ball to move, and the replay test rests on there being exactly one.
+
+**Skill is a planned timing error.** The bot commits to a contact moment when
+the ball starts coming — `time + predictCrossingTime(...) + error` — and
+stops re-deciding, the way a player does. `shot.ts` turns being early or late
+into a weak or mistimed shot with no further help, and the error's *sign* is
+the direction mechanic ([[0008-timing-not-aim-for-shot-direction]]), which is
+why the bias table alternates.
+
+Measured: two skill-1 bots rally **indefinitely** — 273 hits and not one
+point in 40,000 ticks. Against a 0.8 opponent, a 0.7 bot gives rallies of
+about nine shots and an even match, which is why 0.7 is what solo mode uses.
+
+## Spin bends gravity, per shot
+
+`MatchState.spin` carries the in-flight ball's spin, and `envFor(state)`
+turns it into `BallEnv.gravityScale` — the hook `ball.ts` always documented
+("up to ~2.0 stands in for topspin") and nothing drove until 2026-09-20.
+
+**Everything that looks at the ball's future must use the same `envFor`**:
+the step itself, `predictCrossingTime` for swing timing, `predictCrossingX`
+for player movement, and the bot. Using a different env in one of them means
+predicting a trajectory the ball does not fly.
+
+The coefficients are asymmetric — `SPIN_GRAVITY_TOP` 0.35, `SPIN_GRAVITY_SLICE`
+0.15 — and the asymmetry is measured, not aesthetic:
+[[2026-09-20-serve-that-lands]].
+
 ## Constants, and which kind each is
 
 Three different kinds live here and they are not interchangeable:
@@ -102,6 +143,14 @@ Three different kinds live here and they are not interchangeable:
 asserts an **envelope**, not exact numbers: a well-timed shot lands in ≥60% of
 the power range, worst-case timing at max power essentially never lands, no
 legal power reaches the far fence, a minimum-power serve clears the net.
+
+It did **not** catch the serve being nearly unplayable. Only 7 powers in 35
+landed in the service box, and nothing asserted anything about the serve's
+own envelope — the fault fixtures in `rally.test.ts` were *using* the broken
+range as their "lands long" and "nets" cases, so the bug had tests depending
+on it. [[2026-09-20-serve-that-lands]] has the numbers and the fix; the
+lesson is that a fixture chosen because it happens to fail is a fixture that
+dies with the bug.
 
 ## Traps this module has already sprung
 

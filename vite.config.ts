@@ -36,11 +36,13 @@ function devServerHttps() {
 	return { key: readFileSync(key), cert: readFileSync(cert) };
 }
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ command, mode, isPreview }) => {
 	// Only when actually serving a browser. As a module-level constant this also
 	// warned during `vite build` and `vitest`, which put "iOS will refuse motion
 	// sensors" into every CI log — advice both useless and untrue there.
 	// Vitest runs as command "serve" with mode "test", hence both checks.
+	// `vite preview` is a third "serve" — it is the production server
+	// (decision 0010), so it wants TLS but not the recorder.
 	const serving = command === "serve" && mode !== "test";
 	const https = serving ? devServerHttps() : undefined;
 
@@ -53,15 +55,22 @@ export default defineConfig(({ command, mode }) => {
 		// Vitest also runs as command "serve" (with mode "test"), which is
 		// exactly the case `serving` exists to exclude. Without this gate a
 		// filesystem-writing endpoint would come alive on every `vitest run`.
+		// The relay belongs to both serve-time servers (dev and preview); the
+		// recorder writes to the repo's fixture folder and belongs only to dev.
 		plugins: serving
-			? [traceEndpoint(fromRoot("./tests/fixtures/motion")), relayPlugin()]
+			? isPreview
+				? [relayPlugin()]
+				: [traceEndpoint(fromRoot("./tests/fixtures/motion")), relayPlugin()]
 			: [],
 		build: {
 			outDir: fromRoot("./dist"),
 			emptyOutDir: true,
 			rollupOptions: {
-				// Two pages, one build. The host renders the court; the phone is a racket.
+				// Three pages, one build: the redirect, the court, and the racket.
 				input: {
+					// `/` is a redirect to the host page, so a Mac that opens the
+					// bare LAN address lands somewhere.
+					index: fromRoot("./src/index.html"),
 					host: fromRoot("./src/host/index.html"),
 					controller: fromRoot("./src/controller/index.html"),
 				},
@@ -73,6 +82,13 @@ export default defineConfig(({ command, mode }) => {
 			host: true,
 			// Spread rather than assign: exactOptionalPropertyTypes forbids an
 			// explicit `https: undefined`.
+			...(https ? { https } : {}),
+		},
+		// `npm start` — same port, same certificates, same relay, serving the
+		// built pages instead of the source ones.
+		preview: {
+			port: PORT,
+			host: true,
 			...(https ? { https } : {}),
 		},
 		test: {

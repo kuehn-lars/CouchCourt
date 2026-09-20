@@ -7,13 +7,15 @@ either end — players scan a QR code and start swinging.
 
 See [`PRODUCT.md`](PRODUCT.md) for what it is and what v1 deliberately is not.
 
-> **Status: every part built, not yet joined up.** The simulation, the
-> renderer, the WebSocket relay and the swing detector all exist and are
-> tested. The game still cannot be played: the phone controller is a
-> placeholder, so nothing calls the detector, and there is no production server
-> entry, so the relay runs only under `npm run dev`. See
-> [`llm-knowledge/architecture.md`](llm-knowledge/architecture.md) for exactly
-> where the two seams are.
+> **Status: playable end to end, and never yet played by a person.**
+> `npm start` builds and serves both pages over LAN HTTPS with the relay
+> attached, so a guest can scan the code on the host screen and be swinging.
+> There is a lobby, a solo opponent, three camera modes, sound and a scoring
+> umpire. What has **not** happened is a phone: everything has been verified
+> by 300 tests and by driving the real pages in headless Chrome — a full set
+> played out to 6-0 and a rematch — which has no motion sensors and renders in
+> software. How it *feels* is still unmeasured.
+> See [`llm-knowledge/architecture.md`](llm-knowledge/architecture.md).
 
 ## Requirements
 
@@ -26,8 +28,11 @@ See [`PRODUCT.md`](PRODUCT.md) for what it is and what v1 deliberately is not.
 ```bash
 npm install
 npm run certs   # fetch TLS certificates for your LAN address
-npm run dev
+npm start       # build, serve, and host the relay
 ```
+
+`npm run dev` is the same thing against source, with hot reload and the motion
+trace recorder attached.
 
 `npm run certs` prints the URLs to open. HTTPS is not optional: iOS refuses
 motion sensors outside a secure context.
@@ -40,17 +45,30 @@ rebind protection and dropping the answer. It is a one-time fix on the router
 and the script tells you where to look — details in
 [`llm-knowledge/platform/lan-https-dns-rebind.md`](llm-knowledge/platform/lan-https-dns-rebind.md).
 
+## Playing
+
+1. `npm start` on the Mac, and open the host URL `npm run certs` printed.
+2. The screen shows a QR code. Scan it with an iPhone camera.
+3. Tap **Enable motion** once. That tap is also your ready signal.
+4. On the host screen: **Start the match** with two phones in, or **Play the
+   machine** with one.
+5. Swing. The first player who was ready serves.
+
+`C` cycles the camera (broadcast, follow, side-on); `F` is fullscreen. If a
+phone drops out mid-match the game freezes and waits for it.
+
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Vite dev server, HTTPS when `./certs` exists |
+| `npm start` | Build, then serve both pages **and** the relay. This is how you play |
+| `npm run dev` | Vite dev server, HTTPS when `./certs` exists, trace recorder attached |
 | `npm run certs` | Fetch LAN certificates, diagnose router DNS |
 | `npm run check` | Biome lint and format check |
 | `npm run format` | Biome, writing fixes |
 | `npm run typecheck` | All three tsconfig projects |
 | `npm test` | Vitest |
-| `npm run build` | Production build |
+| `npm run build` | Production build into `dist/` |
 | `npm run vault:check` | Knowledge vault integrity |
 
 CI runs everything except `dev` and `certs` on each pull request.
@@ -59,7 +77,7 @@ CI runs everything except `dev` and `certs` on each pull request.
 
 ```
 src/shared/       pure logic — protocol, simulation, swing detection
-src/server/       static files, WebSocket relay, player slots
+src/server/       WebSocket relay and player slots (Vite serves the files)
 src/host/         the Mac display (Three.js)
 src/controller/   the iPhone racket (iOS Safari)
 tests/            integration tests and recorded motion traces

@@ -8,6 +8,8 @@ code:
   - `src/host/loop.ts`
   - `src/host/loop.test.ts`
   - `src/host/render/`
+  - `src/host/ui/lobby.ts`
+  - `src/host/audio/index.ts`
   - `src/host/index.html`
 ---
 
@@ -20,20 +22,48 @@ currently wired end to end.
 
 | File | Holds | Tested |
 | --- | --- | --- |
-| `src/host/main.ts` | rAF loop, socket wiring, the two state references, feedback | no — DOM and socket I/O |
+| `src/host/main.ts` | match state machine, rAF loop, socket wiring, the two state references, feedback | no — DOM and socket I/O |
 | `src/host/loop.ts` | `advance(accumulator, frameDt)` — the fixed-timestep accumulator | yes, `src/host/loop.test.ts` |
 | `src/host/render/index.ts` | `createRenderer`, `detectEvents` | no |
-| `src/host/render/scene.ts` | Renderer, camera, lights, gradient background, fog | no |
+| `src/host/render/camera.ts` | `cameraPose(mode, ball)` — pose and FOV per mode, as plain numbers | **yes**, `src/host/render/camera.test.ts` |
+| `src/host/render/scene.ts` | Renderer, lights, gradient background, fog; eases toward `cameraPose` | no |
 | `src/host/render/court.ts` | Static ground, lines, sagging net, posts | no |
+| `src/host/render/stadium.ts` | Ground disc, tiered bowl, instanced crowd, floodlights | no |
 | `src/host/render/entities.ts` | Ball + blob shadow + trail; the two player rigs | no |
 | `src/host/render/effects.ts` | Particle pool and shockwave rings | no |
-| `src/host/render/ui.ts` | DOM score overlay | no |
+| `src/host/render/ui.ts` | DOM score overlay in the top corners, and the umpire's call | `callFor` only, `src/host/render/ui.test.ts` |
+| `src/host/ui/lobby.ts` | Join QR, roster, start/solo/rematch, countdown, winner | no |
+| `src/host/audio/index.ts` | Synthesised hit / bounce / point. No asset files | no |
 | `src/host/index.html` | `#scene` canvas, `#ui` div, loads `main.ts` | — |
 
-The split is deliberate: `loop.ts` is the one piece of the visual stack that
-is pure, and it is the highest-value code in it, so it is the one thing tested.
-Everything else is DOM- and canvas-shaped wiring (`CLAUDE.md` §3,
-[[0003-threejs-renderer]]).
+The split is deliberate: `loop.ts` and `camera.ts` are the pieces of the
+visual stack that are pure, they are the highest-value code in it, and they
+are the two things tested. Everything else is DOM- and canvas-shaped wiring
+(`CLAUDE.md` §3, [[0003-threejs-renderer]]).
+
+## The match state machine
+
+`main.ts` owns it. The server relays it and stores none of it
+([[0002-host-authoritative-simulation]]).
+
+```
+lobby ──(Start / Play the machine)──▶ countdown ──(3s)──▶ playing
+  ▲                                                          │
+  └──────────────(Back to the lobby)──── over ◀──(setWinner)──┘
+```
+
+Each transition sends `{ t: "match", phase, server, winner? }`, which the
+relay broadcasts to every phone.
+
+**Who serves is decided here**, closing the gap this page used to record:
+the first player to announce themselves ready serves. In solo, that player is
+by definition the human. No coin toss (nobody can see one) and no toggle
+(nobody is standing at the host screen).
+
+**Solo mode** builds a `createBot(otherSide, 0.7)` and calls it once per
+tick. Its swing is pushed onto the same `pending` queue a phone's swing lands
+in, so there is exactly one path into the simulation — see
+[[modules/shared-sim]].
 
 ## The frame
 
@@ -115,10 +145,18 @@ not as an error.
    segments in one `InstancedMesh`, one draw call.
 6. **No post-processing.** The gradient background, fog and ACES tone mapping
    do the atmospheric work a bloom pass would buy, at no frame cost.
-7. **Camera fixed high behind the near baseline**, with a small eased lateral
-   drift toward the ball. Ease it, never cut. A camera that follows the hitter
-   flips the world every shot and disorients both players; a side-on broadcast
-   view is fairer but removes the depth cue the whole game is built on.
+7. **Superseded 2026-09-20 — see [[2026-09-20-camera-framing]].** This rule
+   used to read "camera fixed high behind the near baseline, with a small
+   eased lateral drift". It is now three modes in `camera.ts`, cycled with
+   `C`, and the default is a **long lens from a long way back** rather than a
+   wide one from close in. The part of the old rule that survives: *ease,
+   never cut*, and never flip the world to follow the hitter.
+
+   What killed the old framing is a number. At 7.5m behind the baseline with
+   a 55° lens, the far player is 31.5m away and the near player 7.9m, so the
+   far player renders at **0.25x** the near player's height. The complaint
+   "you can only see one character" is that ratio. 26m back with a 19° lens
+   makes it 0.55.
 
 The net mesh's top edge literally calls `netHeightAt(x)` per vertex, so the
 sag on screen is the same sag the physics uses rather than a decoration.

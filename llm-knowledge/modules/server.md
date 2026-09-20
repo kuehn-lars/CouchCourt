@@ -23,7 +23,7 @@ needs a real `ws` server:
 | --- | --- | --- |
 | `src/server/lobby.ts` | `Lobby` — a pure state machine over opaque connection tokens. No sockets, no timers | `src/server/lobby.test.ts` |
 | `src/server/relay.ts` | `attachRelay` — real `ws` sockets, the heartbeat, translation to wire messages | `tests/integration/relay.test.ts` |
-| `scripts/relay-plugin.ts` | Attaches the relay to Vite's `httpServer` in dev | — |
+| `scripts/relay-plugin.ts` | Attaches the relay to Vite's `httpServer`, in **dev and preview** | `tests/integration/preview-relay.test.ts` |
 
 `Conn` is `object`, any reference — `relay.ts` passes the `WebSocket` instance
 itself. That is what keeps `Lobby` socket-free and unit-testable.
@@ -41,7 +41,7 @@ heartbeat.
 ```
 first message on a socket
   ├── parses as controller `hello`  ──▶ lobby.connectController
-  │     ok    ──▶ send `assigned`, broadcast `lobby`, tell host `player-joined`
+  │     ok    ──▶ send `assigned`, broadcast `lobby` (phones AND host)
   │     !ok   ──▶ send `rejected` {full | bad-version | unknown-session}, close
   ├── parses as `host-hello`        ──▶ lobby.connectHost
   │     bad version ──▶ ws.close() with no message
@@ -66,15 +66,30 @@ written up in [[0006-relay-session-policy]]:
 - **A version-mismatched host is closed without being told why**, for the same
   reason. A controller gets `{t:"rejected", reason}` first, because a
   controller is a guest.
-- **A disconnected player's slot is never reclaimed for someone else.** Today,
-  a player who leaves and never returns holds their side for the life of the
-  server process. With 1v1 as the only mode there is no scenario that needs
-  more, and guessing at a policy would build against a requirement nobody has
-  stated.
+- **A disconnected player's slot IS reclaimed — amended 2026-09-20.** A phone
+  with no session takes an absent player's side, and that player's session is
+  deleted. `resume` is handled first and still wins, so a player whose phone
+  slept always gets their own side back; only a genuinely new phone can take
+  an absent one. The original "never reclaimed" policy jammed the lobby solid
+  the first evening it had a Start button — see [[0006-relay-session-policy]].
 - **`pingIntervalMs` defaults to 15s and is an unmeasured guess**, not a tuned
   constant — unlike the swing detector's thresholds, there is no experiment
   behind it. One interval is both the ping cadence and the timeout, the
   canonical `ws` pattern.
+
+## The lobby is a snapshot, not a stream
+
+The host is sent `{ t: "lobby", players }` — the whole roster — on connect
+and on every change. `player-joined`, `player-left` and `player-ready` were
+deleted on 2026-09-20.
+
+A host that reloads mid-lobby cannot rebuild the roster from deltas it was
+not connected for, and two places deriving "who is here" from different
+event streams is the drift this protocol exists to avoid. The phones get the
+same message. One message, one truth.
+
+The host's own match state travels the other way: `{ t: "match", phase,
+server, winner? }`, host → relay → every phone. The relay stores none of it.
 
 ## Invariants
 
@@ -102,18 +117,25 @@ reconnect does not restore *which player you were*. Resume-by-`playerId` has
 to be written either way, and once it exists Socket.IO's reconnect is
 redundant with it. Full reasoning: [[0005-raw-websockets-over-socket-io]].
 
-## The gap: no production entry
+## There is no production entry, and that is the answer
 
-There is no `src/server/main.ts`. The relay reaches a socket **only** through
-the dev-time Vite plugin, so `npm run build` produces static pages with no
-server behind them. Deliberate deferral — no decision exists for how
-production static serving works, and there was nothing real in `dist/` to
-serve when this was written. See [[architecture]]'s "two open seams".
+Closed 2026-09-20 by [[0010-vite-preview-as-production-server]]: `npm start`
+is `vite build && vite preview`, and `relayPlugin` attaches to the preview
+server as well as the dev one. No hand-written Node server exists, because
+Vite already does static serving and TLS correctly and the alternative was
+eighty lines of MIME tables and traversal guards.
 
-Note for whoever closes it: `tsconfig.base.json`'s `erasableSyntaxOnly` exists
-because the server is intended to run under Node's native type stripping
-(`node src/server/main.ts`, no build step). Keep it that way or the flag stops
-earning its place.
+Two things a future session should not have to rediscover:
+
+- **Vite's TLS server is an `Http2SecureServer`**, in dev and preview alike
+  — [[vite-https-is-http2]]. The relay has always been attached to one. It
+  works because `allowHTTP1` is set, and there is an integration test on that
+  exact server shape.
+- `tsconfig.base.json`'s `erasableSyntaxOnly` was originally justified by a
+  Node-run server entry that now does not exist. It still earns its place:
+  `scripts/*.ts` and `vite.config.ts` are loaded by Vite's own TS pipeline,
+  and the flag is what keeps `src/shared/` free of syntax that needs
+  emitting. Do not remove it on the grounds that the server is gone.
 
 ## See also
 

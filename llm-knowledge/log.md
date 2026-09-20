@@ -192,3 +192,60 @@ two of six task commits (Tasks 2 and 4) carry a `Co-Authored-By` trailer
 naming the implementing subagent's own model rather than the literal text the
 dispatch asked for. Parked rather than fixed (see the plan's ledger); harmless
 to the code, worth a rebase if the history bothers anyone.
+
+## [2026-09-20] build | Playable: entry point, lobby, solo, camera, stadium, sound
+
+One session on `feature/playable`, working from a six-part request: build the
+production entry point, a lobby, a single-player mode, better camera controls
+("you can currently only see one character"), sound, a better-looking scene,
+and ball physics that depend on phone motion.
+
+**Seam 2 closed** — `npm start` is `vite build && vite preview` with the relay
+attached by the same plugin that attaches it in dev
+([[0010-vite-preview-as-production-server]]). Found while proving it: Vite's
+TLS server is an `Http2SecureServer` in every mode, and `relay-plugin.ts`'s
+comment had claimed the opposite since the day it was written
+([[vite-https-is-http2]]). Both hops now have integration tests, the TLS one
+against the real server shape.
+
+**Phone motion reaches the ball.** `Swing.spin` from the peak's `beta` axis
+→ `MatchState.spin` → per-shot `gravityScale`. Measuring it exposed something
+worse: **the serve landed in the box at only 7 powers in 35**, and two
+committed fault fixtures were depending on that brokenness. A serve is hit
+overhead and aimed, so contact is at 2.6m and the launch angle lerps by power
+along the measured landing band — a flat serve now lands at every power, and
+spin is what makes it missable ([[2026-09-20-serve-that-lands]],
+[[2026-09-20-spin-from-wrist-roll]]).
+
+**Solo mode** — `createBot(side, skill)`, an input source rather than a
+simulation feature. Skill is a planned timing error. Two perfect bots rally
+indefinitely, which is why 0.7 is the default.
+
+**The camera complaint had a number behind it.** A frustum test passed for
+the old camera; the thing that was wrong is apparent size — the far player
+rendered at 0.25x the near player's height. 26m back with a 19° lens makes it
+0.55, and the test pins the ratio with the old value written in beside it
+([[2026-09-20-camera-framing]]). Three modes, cycled with `C`.
+
+**Lobby, stadium, sound.** A QR join code (one new dependency,
+[[0011-qrcode-generator-dependency]]), a roster, solo/versus/rematch, a
+countdown, and who-serves-first finally decided. A tiered bowl with a
+1,400-instance crowd. Synthesised hit/bounce/point, no asset files.
+
+**Nothing here had ever been seen running.** With no browser tooling in the
+session, headless Chrome plus a ~40-line CDP client over the `ws` dependency,
+and a fake phone speaking the wire protocol from Node, produced screenshots
+and console capture. Three bugs came straight out of that and no test would
+have found any of them: `el.hidden` beaten by a `display` rule, a crowd
+buried inside the concrete, and a lobby that jammed forever once both phones
+had disconnected once — which amended [[0006-relay-session-policy]]'s "a
+slot is never reclaimed".
+
+300 tests, typecheck, lint and vault green. The whole match loop was then
+watched end to end in that same headless Chrome — lobby, countdown, a set
+played out to 6-0, the winner screen, rematch — after the first attempt at it
+failed for a harness reason worth remembering: a single CDP socket held open
+across a 20-minute wait dies, so poll with short-lived connections and attach
+to an existing tab instead of opening one.
+
+**Still not verified: a real phone, a real swing, a real frame rate.**

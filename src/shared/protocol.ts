@@ -25,6 +25,13 @@ export type SwingKind = "forehand" | "backhand" | "serve";
 /** What the host tells a phone happened, so it can buzz. */
 export type FeedbackKind = "hit" | "miss" | "point";
 
+/**
+ * Where the match is. Owned by the host — the server relays it and stores
+ * none of it, exactly like every other piece of game state
+ * (`llm-knowledge/decisions/0002-host-authoritative-simulation.md`).
+ */
+export type MatchPhase = "lobby" | "countdown" | "playing" | "over";
+
 /** ~20Hz. Where the racket is pointing, used for shot direction. Radians. */
 export interface Aim {
 	yaw: number;
@@ -38,6 +45,13 @@ export interface Swing {
 	power: number;
 	/** `performance.now()` on the phone at the detected peak of the swing. */
 	at: number;
+	/**
+	 * Wrist roll at the peak, -1 (slice) to +1 (topspin). Optional: absent
+	 * means flat, so a phone running an older build is still a playable
+	 * phone and the protocol version does not move. The sim turns it into a
+	 * gravity multiplier — see `sim/rally.ts`.
+	 */
+	spin?: number;
 }
 
 export interface LobbyPlayer {
@@ -54,24 +68,41 @@ export type ControllerMessage =
 	| ({ t: "aim" } & Aim)
 	| ({ t: "swing" } & Swing);
 
+/** What the host says about the match, and what every phone is told. */
+export interface MatchInfo {
+	phase: MatchPhase;
+	/** Who serves this match. */
+	server: Side;
+	/** Set only in phase `over`. */
+	winner?: Side;
+}
+
 /** server -> controller */
 export type ControllerBoundMessage =
 	| { t: "assigned"; playerId: PlayerId; side: Side }
 	| { t: "rejected"; reason: "full" | "bad-version" | "unknown-session" }
 	| { t: "lobby"; players: LobbyPlayer[] }
+	| ({ t: "match" } & MatchInfo)
 	/** Drives haptics and on-phone feedback. Not authoritative for anything. */
 	| { t: "feedback"; kind: FeedbackKind };
 
 /** host -> server */
 export type HostMessage =
 	| { t: "host-hello"; v: number }
+	| ({ t: "match" } & MatchInfo)
 	| { t: "feedback"; playerId: PlayerId; kind: FeedbackKind };
 
-/** server -> host */
+/**
+ * server -> host.
+ *
+ * The lobby is sent as a **snapshot**, not as joined/left/ready deltas. A
+ * host that reloads or reconnects mid-lobby cannot rebuild the roster from
+ * deltas it was not connected for, and two places deriving "who is here"
+ * from different event streams is exactly the drift this protocol exists to
+ * avoid. One message, one truth.
+ */
 export type HostBoundMessage =
-	| { t: "player-joined"; playerId: PlayerId; side: Side }
-	| { t: "player-left"; playerId: PlayerId }
-	| { t: "player-ready"; playerId: PlayerId; ready: boolean }
+	| { t: "lobby"; players: LobbyPlayer[] }
 	| { t: "aim"; playerId: PlayerId; aim: Aim }
 	| { t: "swing"; playerId: PlayerId; swing: Swing };
 
@@ -79,6 +110,15 @@ const FEEDBACK_KINDS: readonly FeedbackKind[] = ["hit", "miss", "point"];
 
 const isFeedbackKind = (x: unknown): x is FeedbackKind =>
 	FEEDBACK_KINDS.includes(x as FeedbackKind);
+
+const MATCH_PHASES: readonly MatchPhase[] = [
+	"lobby",
+	"countdown",
+	"playing",
+	"over",
+];
+
+const isSide = (x: unknown): x is Side => x === "near" || x === "far";
 
 const isRecord = (x: unknown): x is Record<string, unknown> =>
 	typeof x === "object" && x !== null;
@@ -111,7 +151,9 @@ export function isControllerMessage(x: unknown): x is ControllerMessage {
 				isFiniteNumber(x.power) &&
 				x.power >= 0 &&
 				x.power <= 1 &&
-				isFiniteNumber(x.at)
+				isFiniteNumber(x.at) &&
+				(x.spin === undefined ||
+					(isFiniteNumber(x.spin) && x.spin >= -1 && x.spin <= 1))
 			);
 		default:
 			return false;
@@ -132,6 +174,12 @@ export function isHostMessage(x: unknown): x is HostMessage {
 	switch (x.t) {
 		case "host-hello":
 			return isFiniteNumber(x.v);
+		case "match":
+			return (
+				MATCH_PHASES.includes(x.phase as MatchPhase) &&
+				isSide(x.server) &&
+				(x.winner === undefined || isSide(x.winner))
+			);
 		case "feedback":
 			return typeof x.playerId === "string" && isFeedbackKind(x.kind);
 		default:
