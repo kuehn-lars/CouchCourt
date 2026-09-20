@@ -69,7 +69,7 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
 	scene.background = gradientBackground();
 	scene.fog = new THREE.Fog(SKY_HORIZON, FOG_NEAR, FOG_FAR);
 
-	const start = cameraPose("broadcast", { ballX: 0, ballY: 1, ballZ: 0 });
+	const start = cameraPose("broadcast", { ballX: 0, ballZ: 0 });
 	const camera = new THREE.PerspectiveCamera(
 		start.fov,
 		window.innerWidth / window.innerHeight,
@@ -119,11 +119,7 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
 	window.addEventListener("resize", resize);
 
 	function updateCamera(mode: CameraMode, ball: Ball3): void {
-		const pose = cameraPose(mode, {
-			ballX: ball.x,
-			ballY: ball.y,
-			ballZ: ball.z,
-		});
+		const pose = cameraPose(mode, { ballX: ball.x, ballZ: ball.z });
 		const ease = mode === lastMode ? EASE : EASE_MODE_CHANGE;
 		lastMode = mode;
 

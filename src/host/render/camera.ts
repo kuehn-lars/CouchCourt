@@ -19,11 +19,7 @@
  * about: **both baselines, both players, and the ball between them.**
  */
 
-import {
-	BASELINE_Z,
-	NET_POST_X,
-	SINGLES_HALF_WIDTH,
-} from "../../shared/sim/court.ts";
+import { BASELINE_Z, NET_POST_X } from "../../shared/sim/court.ts";
 
 export type CameraMode = "broadcast" | "follow" | "side";
 
@@ -49,9 +45,10 @@ export interface CameraPose {
 }
 
 export interface CameraInput {
-	/** Interpolated ball position, metres. */
+	/** Interpolated ball position, metres. Height is not read: no mode
+	 * follows the ball upward, because a camera that tilts with a lob is a
+	 * camera that loses the court. */
 	readonly ballX: number;
-	readonly ballY: number;
 	readonly ballZ: number;
 }
 
@@ -169,10 +166,3 @@ export function nextMode(mode: CameraMode): CameraMode {
 	const i = CAMERA_MODES.indexOf(mode);
 	return CAMERA_MODES[(i + 1) % CAMERA_MODES.length] ?? "broadcast";
 }
-
-/** Where each player stands, for framing checks and for the renderer. */
-export const playerAnchor = (side: "near" | "far", x: number): Vec3Mutable => ({
-	x: clamp(x, -SINGLES_HALF_WIDTH, SINGLES_HALF_WIDTH),
-	y: 0.9,
-	z: side === "near" ? BASELINE_Z : -BASELINE_Z,
-});

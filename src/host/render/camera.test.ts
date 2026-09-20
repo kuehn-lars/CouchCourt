@@ -15,9 +15,18 @@ import {
 	type CameraPose,
 	cameraPose,
 	nextMode,
-	playerAnchor,
 	type Vec3Mutable,
 } from "./camera.ts";
+
+/** Where a player stands, at chest height — the point that has to be on
+ * screen. Lives here rather than in `camera.ts` because nothing but this
+ * test needs it, and a production export that exists for a test is just a
+ * test in the wrong file. */
+const playerAnchor = (side: "near" | "far", x: number): Vec3Mutable => ({
+	x: Math.max(-SINGLES_HALF_WIDTH, Math.min(SINGLES_HALF_WIDTH, x)),
+	y: 0.9,
+	z: side === "near" ? BASELINE_Z : -BASELINE_Z,
+});
 
 /** 16:9, the shape of nearly every screen this will run on. */
 const ASPECT = 16 / 9;
@@ -63,7 +72,7 @@ function isVisible(pose: CameraPose, point: Vec3Mutable): boolean {
 	);
 }
 
-const BALL_AT_NET = { ballX: 0, ballY: 1.2, ballZ: 0 };
+const BALL_AT_NET = { ballX: 0, ballZ: 0 };
 
 describe("cameraPose", () => {
 	/** Follow is excluded on purpose — see the note on it in camera.ts. */
@@ -78,11 +87,7 @@ describe("cameraPose", () => {
 	it.each(BOTH_PLAYER_MODES)(
 		"keeps both players in frame in %s mode even out at the sidelines",
 		(mode) => {
-			const pose = cameraPose(mode, {
-				ballX: SINGLES_HALF_WIDTH,
-				ballY: 1,
-				ballZ: 0,
-			});
+			const pose = cameraPose(mode, { ballX: SINGLES_HALF_WIDTH, ballZ: 0 });
 			expect(isVisible(pose, playerAnchor("near", SINGLES_HALF_WIDTH))).toBe(
 				true,
 			);
@@ -95,7 +100,7 @@ describe("cameraPose", () => {
 	it("keeps the hitter in frame while following the ball to their end", () => {
 		// The one promise follow does make: you can see who is about to hit.
 		for (const z of [-BASELINE_Z, -6, 0, 6, BASELINE_Z]) {
-			const pose = cameraPose("follow", { ballX: 0, ballY: 1.2, ballZ: z });
+			const pose = cameraPose("follow", { ballX: 0, ballZ: z });
 			const hitter = z < 0 ? "far" : "near";
 			expect(isVisible(pose, playerAnchor(hitter, 0))).toBe(true);
 		}
@@ -104,7 +109,7 @@ describe("cameraPose", () => {
 	it("keeps the ball in frame all the way down the court in every mode", () => {
 		for (const mode of CAMERA_MODES) {
 			for (let z = -BASELINE_Z; z <= BASELINE_Z; z += 1) {
-				const pose = cameraPose(mode, { ballX: 0, ballY: 1.5, ballZ: z });
+				const pose = cameraPose(mode, { ballX: 0, ballZ: z });
 				expect(isVisible(pose, { x: 0, y: 1.5, z })).toBe(true);
 			}
 		}
