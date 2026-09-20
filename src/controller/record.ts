@@ -17,6 +17,7 @@ import {
 	toSample,
 } from "../shared/swing/trace.ts";
 import { requestMotionPermission } from "./motion.ts";
+import { keepAwake, type WakeLockHandle } from "./wake-lock.ts";
 
 const COUNTDOWN_SECONDS = 5;
 const DEVICE_KEY = "swingcourt-recorder-device";
@@ -115,52 +116,7 @@ const emptyCapture = (): Capture => ({
 let capture = emptyCapture();
 let capturing = false;
 
-type WakeLockState = "idle" | "active" | "released" | "unsupported" | "error";
-let wakeLockState: WakeLockState = "idle";
-let wakeLock: WakeLockSentinel | null = null;
-let wakeLockWanted = false;
-
-async function acquireWakeLock(): Promise<void> {
-	if (!("wakeLock" in navigator)) {
-		wakeLockState = "unsupported";
-		updateReadout();
-		return;
-	}
-	try {
-		wakeLock = await navigator.wakeLock.request("screen");
-		wakeLockState = "active";
-		wakeLock.addEventListener("release", () => {
-			wakeLockState = "released";
-			updateReadout();
-		});
-	} catch {
-		wakeLockState = "error";
-	}
-	updateReadout();
-}
-
-function releaseWakeLock(): void {
-	wakeLockWanted = false;
-	const sentinel = wakeLock;
-	wakeLock = null;
-	if (sentinel !== null) {
-		void sentinel.release();
-	}
-}
-
-// Wake locks are released whenever the page is backgrounded and do not come
-// back on their own. iOS auto-locks the screen after 30s-2min of no touches,
-// and a locked phone stops delivering devicemotion entirely — so this is not
-// optional during a countdown or capture that can run up to 35s untouched.
-document.addEventListener("visibilitychange", () => {
-	if (
-		document.visibilityState === "visible" &&
-		wakeLockWanted &&
-		wakeLock === null
-	) {
-		void acquireWakeLock();
-	}
-});
+let wakeLock: WakeLockHandle | null = null;
 
 // The readout is telemetry, not data. Repainting it on every sample means ~60
 // DOM writes a second inside the listener that is supposed to be measuring the
@@ -181,7 +137,7 @@ function updateReadout(): void {
 		`hz: ${measuredHz(capture.samples)}\n` +
 		`peak |rotationRate|: ${capture.peak.toFixed(1)} deg/s\n` +
 		`dropped: ${capture.dropped}\n` +
-		`wake lock: ${wakeLockState}`;
+		`wake lock: ${wakeLock?.state() ?? "idle"}`;
 }
 
 // devicemotion listener is added once, after motion access is confirmed;
@@ -242,7 +198,7 @@ function beginCapture(seconds: number): void {
 
 function stopCapture(): void {
 	capturing = false;
-	releaseWakeLock();
+	wakeLock?.release();
 	countdownEl.textContent = "";
 	updateReadout();
 	shortButton.disabled = false;
@@ -268,14 +224,13 @@ function stopCapture(): void {
 	}
 }
 
-async function onDurationTap(seconds: number): Promise<void> {
+function onDurationTap(seconds: number): void {
 	if (selectedLabel === null || capturing) return;
 	shortButton.disabled = true;
 	longButton.disabled = true;
 	saveButton.disabled = true;
 	statusEl.textContent = "";
-	wakeLockWanted = true;
-	await acquireWakeLock();
+	wakeLock = keepAwake(updateReadout);
 	runCountdown(COUNTDOWN_SECONDS, () => beginCapture(seconds));
 }
 
