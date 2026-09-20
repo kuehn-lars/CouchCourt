@@ -32,6 +32,7 @@ import { type Bot, createBot } from "../shared/sim/bot.ts";
 import {
 	createMatch,
 	type MatchState,
+	other,
 	type RallyInput,
 	tick,
 } from "../shared/sim/index.ts";
@@ -91,8 +92,6 @@ const CAMERA_LABEL: Record<CameraMode, string> = {
 	follow: "Follow the ball",
 	side: "Side on",
 };
-
-const other = (side: Side): Side => (side === "near" ? "far" : "near");
 
 function sideFor(playerId: PlayerId): Side | undefined {
 	return players.find((p) => p.playerId === playerId)?.side;
