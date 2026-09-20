@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Side, Swing } from "../protocol.ts";
+import type { Swing } from "../protocol.ts";
 import { BALL_RADIUS } from "./court.ts";
 import {
 	createMatch,

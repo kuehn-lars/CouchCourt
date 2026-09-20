@@ -87,7 +87,6 @@ function tiers(): Tier[] {
  * than a shape with a hole in it, and reads identically from 30m away. */
 function tierSlabs(tier: Tier, material: THREE.Material): THREE.Mesh[] {
 	const { y, innerX, innerZ, depth } = tier;
-	const outerX = innerX + depth;
 	const outerZ = innerZ + depth;
 	const height = SLAB_HEIGHT;
 	const slab = (sx: number, sz: number, x: number, z: number): THREE.Mesh => {
