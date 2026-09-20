@@ -151,12 +151,34 @@ One page-level constraint encoded in both HTML files: a racket swing must
 never scroll, rubber-band or pinch-zoom the page — `user-scalable=no`,
 `touch-action: none`, `overscroll-behavior: none`, `viewport-fit=cover`.
 
+## The match screen, added 2026-09-20
+
+`createSession` gained two optional handlers, and `main.ts` renders them:
+
+- `onMatch(info)` — the host's `{ phase, server, winner }`, relayed. The
+  phone shows "Waiting for the host to start", "Get ready", "You serve —
+  swing!", "Match over". It **decides nothing** from this
+  ([[0002-host-authoritative-simulation]]); it is presentation of a relayed
+  fact.
+- `onFeedback(kind)` — `hit` / `miss` / `point`, as a full-screen colour
+  flash. The flash is not a fallback: **iOS Safari has no
+  `navigator.vibrate`** at all, it is a Chrome/Android API, so on the target
+  device the screen is the only feedback channel there is. `vibrate` is still
+  called where it exists, because that costs one line.
+
 ## What is and is not verified
 
 Everything above is verified by tests (`session.test.ts`'s `backoffMs`,
 `stream.test.ts` in `shared/swing/`) and a typechecker, and by `npm run build`
-actually emitting `dist/controller/index.html` wired to a bundled script. **No
-session has opened this page on a phone.** Specifically unverified:
+actually emitting `dist/controller/index.html` wired to a bundled script.
+
+**Seen running 2026-09-20, in headless Chrome only:** the page loads with no
+console errors, the permission gate's button takes it through to the play
+screen (`requestMotionPermission` returns `"unsupported"` there, which is the
+path a non-iOS browser takes), it opens a socket, is assigned a side, sends
+`ready`, and renders "Far side / Ready / Waiting for the host."
+
+**No session has opened this page on a phone.** Specifically unverified:
 
 - Whether `main.ts`'s wiring actually works against a real `devicemotion`
   stream and a real WebSocket round trip — everything below `main.ts` is
@@ -167,8 +189,12 @@ session has opened this page on a phone.** Specifically unverified:
 - Whether reconnect-after-suspension actually resumes a session on a real
   iPhone, versus only against the backoff-formula unit test.
 
-Closing this gap needs a phone in hand: `npm run dev`, scan the QR code,
-tap Enable, swing. Not done in this session — [[0009-streaming-swing-detection]]'s
+- Whether `Swing.spin`'s `beta` axis actually tracks rolling the wrist over
+  the ball — [[2026-09-20-spin-from-wrist-roll]] is explicit that no
+  committed fixture can confirm it.
+
+Closing this gap needs a phone in hand: `npm start`, scan the QR code on the
+host's lobby screen, tap Enable, swing. Not done in this session — [[0009-streaming-swing-detection]]'s
 "What would overturn this" also still needs six single-swing fixtures
 recorded with rally-like spacing, which the same phone session should collect.
 

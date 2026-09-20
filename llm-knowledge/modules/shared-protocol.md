@@ -75,6 +75,22 @@ The one place with **no** guard is `src/host/main.ts`, which parses
 `HostBoundMessage` with a plain cast. That is deliberate and it reads like an
 oversight, so [[wire-protocol]] records the reasoning.
 
+## Changes of 2026-09-20
+
+- **`Swing.spin`** — optional, -1 (slice) to +1 (topspin), read from the
+  phone's `beta` rotation axis. Optional on purpose: a phone running an older
+  build is still a playable phone, and `PROTOCOL_VERSION` does not move for
+  an additive field. The sim reads `spin ?? 0`.
+  **The relay rebuilds `swing` field by field**, so a new `Swing` field that
+  is not added there is silently dropped on the wire. That happened with
+  `spin`; `tests/integration/relay.test.ts` is now the thing that notices.
+- **`MatchPhase` / `MatchInfo` and `{ t: "match" }`** — host → server → every
+  phone. The host owns the match state machine; the server stores none of it.
+- **`{ t: "lobby", players }` now goes to the host too**, and
+  `player-joined` / `player-left` / `player-ready` are **deleted**. A host
+  that reloads mid-lobby cannot rebuild a roster from deltas it was not
+  connected for. See [[modules/server]].
+
 ## Fields with a trap in them
 
 - **`Swing.at` is the phone's own `performance.now()`.** It is valid for

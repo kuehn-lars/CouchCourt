@@ -152,7 +152,11 @@ export function cameraPose(mode: CameraMode, input: CameraInput): CameraPose {
 			z: BASELINE_Z + BROADCAST_BACK,
 		},
 		target: {
-			x: ballX * BROADCAST_DRIFT * 0.5,
+			// The SAME x as the camera: a pure lateral dolly, no pan. Tracking
+			// the target at half the camera's drift turns the dolly into a
+			// slight inward rotation, and the court visibly skews across the
+			// frame on a wide rally — seen happening, then fixed.
+			x: ballX * BROADCAST_DRIFT,
 			y: BROADCAST_TARGET_Y,
 			z: BROADCAST_TARGET_Z,
 		},

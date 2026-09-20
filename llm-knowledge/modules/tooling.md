@@ -29,17 +29,40 @@ package manager.
 | Command | Does |
 | --- | --- |
 | `npm run dev` | Vite dev server; HTTPS when `./certs` exists; relay + trace endpoint attached |
+| `npm start` | `vite build && vite preview` — **this is production**, [[0010-vite-preview-as-production-server]]. Relay attached, trace endpoint **not** |
 | `npm run certs` | Fetch LAN certificates, diagnose router DNS |
 | `npm run check` | `biome ci .` — lint and format |
 | `npm run format` | `biome check --write .` |
 | `npm run typecheck` | **Three** tsc projects |
 | `npm test` | Vitest |
-| `npm run build` | `vite build` — two static pages into `dist/` |
+| `npm run build` | `vite build` — three static pages into `dist/`: the `/` redirect, the host and the controller |
 | `npm run vault:check` | Vault integrity |
 
 CI runs everything except `dev` and `certs` on every PR, each step guarded by
 `if: ${{ !cancelled() }}` so one lint error does not mask every test failure —
 one run reports everything that is wrong.
+
+## The `serving` gate now has three cases, not two
+
+`vite.config.ts`'s predicate used to separate "actually serving a browser"
+from Vitest. There is a third case now, and it needs `isPreview` from Vite
+7's `ConfigEnv`:
+
+| | dev (`vite`) | preview (`vite preview`) | vitest | build |
+| --- | --- | --- | --- | --- |
+| `command` | serve | **serve** | serve | build |
+| `mode` | development | production | test | production |
+| `isPreview` | false | **true** | false | — |
+| relay plugin | yes | **yes** | no | no |
+| trace endpoint | yes | **no** | no | no |
+
+The trace endpoint writes into `tests/fixtures/motion/`, so it belongs only
+to dev. The relay belongs to both real servers. `apply: "serve"` alone
+distinguishes none of these — that is [[vitest-is-a-vite-serve]]'s trap, and
+preview is its third case.
+
+And: **any `https` option makes Vite's server an `Http2SecureServer`**, not
+an `https.Server`, in dev and preview alike. [[vite-https-is-http2]].
 
 ## The three tsconfig projects
 
