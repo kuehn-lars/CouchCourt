@@ -67,15 +67,74 @@ export interface ScoreUI {
 	update(score: Score): void;
 }
 
+/**
+ * The call, as an umpire would say it, or `null` when nothing worth
+ * announcing happened. Pure, and the only place the score is turned into
+ * words.
+ *
+ * Reference inequality is what "the score changed" means everywhere in this
+ * codebase (`awardPoint` always returns a new object), so this is a diff of
+ * two consecutive `Score` values and nothing more.
+ */
+export function callFor(before: Score, after: Score): string | null {
+	if (before === after) return null;
+	if (after.setWinner) return `Set — ${SIDE_LABEL[after.setWinner]}`;
+	for (const side of ["near", "far"] as const) {
+		if (after.games[side] !== before.games[side]) {
+			return `Game — ${SIDE_LABEL[side]}`;
+		}
+	}
+	if (after.tiebreak) {
+		return `${after.tiebreak.points.near} – ${after.tiebreak.points.far}`;
+	}
+	const near = after.points.near;
+	const far = after.points.far;
+	if (near === "AD") return `Advantage ${SIDE_LABEL.near}`;
+	if (far === "AD") return `Advantage ${SIDE_LABEL.far}`;
+	if (near === 40 && far === 40) return "Deuce";
+	if (near === far) return `${near} all`;
+	return `${near} – ${far}`;
+}
+
+/** How long a call stays on screen, seconds. */
+const CALL_SECONDS = 1.8;
+
 export function createScoreUI(root: HTMLElement): ScoreUI {
 	const near = buildPanel("near", "left");
 	const far = buildPanel("far", "right");
 	root.append(near.root, far.root);
 
+	// The call, centred and high — above the net, below the far player, so it
+	// never sits on top of either player or the ball's usual path.
+	const call = document.createElement("div");
+	call.style.cssText = `
+		position: fixed; top: 16%; left: 50%; transform: translateX(-50%);
+		font: 700 clamp(28px, 4vw, 56px)/1.1 system-ui, sans-serif;
+		color: #f4f8fb; letter-spacing: -.01em; white-space: nowrap;
+		text-shadow: 0 6px 30px rgba(0,0,0,.75);
+		opacity: 0; transition: opacity 260ms ease;
+	`;
+	root.append(call);
+
 	const panels: Readonly<Record<Side, Panel>> = { near, far };
+	let lastScore: Score | null = null;
+	let hideAt = 0;
 
 	return {
 		update(score) {
+			if (lastScore !== null) {
+				const text = callFor(lastScore, score);
+				if (text !== null) {
+					call.textContent = text;
+					call.style.opacity = "1";
+					hideAt = performance.now() + CALL_SECONDS * 1000;
+				} else if (hideAt !== 0 && performance.now() > hideAt) {
+					call.style.opacity = "0";
+					hideAt = 0;
+				}
+			}
+			lastScore = score;
+
 			for (const side of ["near", "far"] as const) {
 				const panel = panels[side];
 				panel.games.textContent = String(score.games[side]);

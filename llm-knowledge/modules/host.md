@@ -31,7 +31,7 @@ currently wired end to end.
 | `src/host/render/stadium.ts` | Ground disc, tiered bowl, instanced crowd, floodlights | no |
 | `src/host/render/entities.ts` | Ball + blob shadow + trail; the two player rigs | no |
 | `src/host/render/effects.ts` | Particle pool and shockwave rings | no |
-| `src/host/render/ui.ts` | DOM score overlay, in the top corners | no |
+| `src/host/render/ui.ts` | DOM score overlay in the top corners, and the umpire's call | `callFor` only, `src/host/render/ui.test.ts` |
 | `src/host/ui/lobby.ts` | Join QR, roster, start/solo/rematch, countdown, winner | no |
 | `src/host/audio/index.ts` | Synthesised hit / bounce / point. No asset files | no |
 | `src/host/index.html` | `#scene` canvas, `#ui` div, loads `main.ts` | — |

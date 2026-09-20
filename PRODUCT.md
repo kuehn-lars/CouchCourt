@@ -134,32 +134,34 @@ page per subsystem mapping it to the files responsible for it.
 
 ## Status
 
-**Every part is built. They are not yet joined up.**
+**Playable end to end, and never yet played by a person.**
 
-Done and tested: the repository harness, the motion trace recorder, the swing
-detector (`src/shared/swing/detector.ts`) tuned against 20 committed traces,
-the WebSocket relay (`src/server/`) with slot assignment, resume-by-`playerId`
-and ping/pong liveness, the full simulation (`src/shared/sim/` — ball physics,
-shot feel, automatic movement, scoring, a deterministic replayable rally
-machine) and the Three.js host renderer (`src/host/`). 234 tests.
+`npm start` builds and serves both pages over LAN HTTPS with the WebSocket
+relay attached, so a guest can scan the code on the host screen and be
+swinging. Built and tested: the swing detector (tuned against 20 committed
+traces), the streaming detector the phone actually uses, the relay with slot
+assignment, resume and liveness, the full simulation (ball physics, shot
+feel, automatic movement, scoring, a deterministic replayable rally machine),
+a solo opponent, the Three.js renderer with three camera modes, a lobby with
+a join QR code, and synthesised sound. 300 tests.
 
-**Two seams keep it from being playable**, both deliberate deferrals rather
-than oversights:
+**Seen running, in headless Chrome only** (2026-09-20): the lobby, the
+countdown, a solo rally scoring real points, and the controller's join flow
+through its permission gate — with no console errors on either page. That is
+the first time any of this had been watched rather than inferred, and it
+produced three bugs no test would have found.
 
-- The phone controller is still a placeholder, so nothing calls the detector.
-- There is no production server entry, so the relay runs only under
-  `npm run dev`.
+**Not verified: a real phone, a real swing, a real frame rate.** Headless
+Chrome has no motion sensors and renders in software, so how the game *feels*
+— the bar this document actually sets — is still unmeasured. So is whether
+`Swing.spin`'s rotation axis tracks the wrist the way it assumes
+(`llm-knowledge/experiments/2026-09-20-spin-from-wrist-roll.md` is explicit
+that no committed fixture can confirm it).
 
-Nothing has been seen running either: no session has opened the host page in a
-browser or played a rally on real phones, so the renderer and the tuned shot
-constants are unverified against how the game actually feels.
-
-`llm-knowledge/architecture.md` has the detail on both seams.
-
-**Both iOS gates of those first thirty seconds are now proven** on an iPhone 14
+**Both iOS gates of those first thirty seconds are proven** on an iPhone 14
 Pro running iOS 26.6.1: the LAN HTTPS path, and `requestPermission()` for the
-motion sensors. The riskiest part of the onboarding is cleared before any tennis
-has been written, which is the order this project argues for.
+motion sensors. The riskiest part of the onboarding was cleared before any
+tennis was written, which is the order this project argues for.
 
 20 motion traces are committed in `tests/fixtures/motion/` — forehands,
 backhands and serves, plus the negatives that matter more: a phone on a table,
