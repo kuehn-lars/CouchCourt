@@ -1,6 +1,6 @@
 ---
 title: Index
-updated: 2026-09-19
+updated: 2026-09-20
 tags: [meta]
 status: current
 ---
@@ -23,6 +23,7 @@ lies costs more than no pointer.
 | --- | --- | --- |
 | Wire protocol, message validation | `src/shared/protocol.ts` | [[wire-protocol]] |
 | Simulation, physics, scoring | `src/shared/sim/` | [[tennis-scoring]] |
+| Shot feel, playability tuning | `src/shared/sim/shot.ts`, `src/shared/sim/playability.test.ts` | [[2026-09-20-shot-envelope]] |
 | Swing detection | `src/shared/swing/detector.ts` | [[2026-09-19-swing-detector-tuning]] |
 | Purity boundary enforcement | `tsconfig.web.json`, `tsconfig.node.json`, `tsconfig.test.json` | [[0002-host-authoritative-simulation]] |
 | WebSocket relay, player slots | `src/server/` | [[0005-raw-websockets-over-socket-io]], [[0006-relay-session-policy]] |
@@ -48,12 +49,6 @@ works from either direction.
   codebase.
 - [[wire-protocol]] — the controller/server/host contract and its intent.
 
-## In progress
-
-- [[2026-09-19-simulation]] — the simulation build plan, on branch
-  `feature/simulation`. Nothing in it is built yet. Read it before touching
-  `src/shared/sim/`; it is deleted when the last phase lands.
-
 ## Decisions
 
 - [[0001-single-package-vite-mpa]] — one package, not a monorepo
@@ -62,6 +57,8 @@ works from either direction.
 - [[0004-lan-https-via-local-ip-co]] — publicly trusted certs for LAN addresses
 - [[0005-raw-websockets-over-socket-io]] — `ws` over Socket.IO
 - [[0006-relay-session-policy]] — host replacement, no slot reclaim, liveness defaults
+- [[0007-host-arrival-time-for-swing-timing]] — swing timing uses host arrival
+  time, never the phone's own clock
 
 ## Platform
 
@@ -89,11 +86,6 @@ The things that will cost you an afternoon if you do not read them first.
 - [[2026-09-20-serve-reachability-recheck]] — the "unreturnable serve" finding
   didn't reproduce: every legal serve power gives the receiver a 0.48-0.67s
   return window. Reachability was never phase 9's problem.
-
-## Not yet written
-
-Deliberately empty of links, because CI rejects links to notes that do not
-exist. These are the gaps a future session should fill:
-
-- Court geometry and ball physics constants, once tuned — planned as phase 9 of
-  [[2026-09-19-simulation]]
+- [[2026-09-20-shot-envelope]] — the shot-feel constants (`GROUND_SPEED_MAX`,
+  `HEIGHT_ANGLE_BOOST`), tuned against a measured playability envelope, and
+  two fixture-design bugs that cost more time than the tuning itself

@@ -53,10 +53,14 @@ built until it is.
 - Serve alternates every game.
 - Two serve attempts. A missed first serve is a fault; a missed second is a
   double fault and loses the point.
-- Whether a let (serve clips the net and lands in) is replayed or ignored is
-  **an open gameplay question**, not a rules question. Real tennis replays it.
-  Replaying it in a motion game means a player swings and nothing happens, which
-  feels broken. Decide it when serving exists, and record the decision here.
+- **A let is ignored: a serve that clips the net and lands in plays on**,
+  decided before any simulation code was written and implemented in
+  `sim/ball.ts`'s `stepBall`: when the ball's centre
+  crosses the net plane still above the band (a clip, not a block), it
+  carries on over, damped by `NET_CLIP_DAMPING`, rather than being treated as
+  a fault. Real tennis replays a let; replaying it in a motion game means a
+  player swings and nothing happens, which feels broken, so SwingCourt does
+  not replay it.
 
 ## Deliberately simplified
 
