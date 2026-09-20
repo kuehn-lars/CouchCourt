@@ -5,6 +5,7 @@ import {
 	MAX_LOOKAHEAD,
 	movePlayer,
 	PLAYER_SPEED,
+	predictCrossingTime,
 	predictCrossingX,
 } from "./players.ts";
 import type { Ball, Player } from "./state.ts";
@@ -68,6 +69,40 @@ describe("predictCrossingX", () => {
 			expected as number,
 			10,
 		);
+	});
+});
+
+describe("predictCrossingTime", () => {
+	it("agrees with stepBall's own trajectory at the crossing", async () => {
+		const { stepBall } = await import("./ball.ts");
+		const start = ball([2, 1.5, 8], [6, 3, -14]);
+		const dt = 1 / 120;
+
+		let current = start;
+		let expected: number | undefined;
+		for (let i = 0; i < MAX_LOOKAHEAD / dt; i++) {
+			const before = current.p.z;
+			const step = stepBall(current, dt, VACUUM);
+			const after = step.ball.p.z;
+			if (before > -BASELINE_Z !== after > -BASELINE_Z) {
+				const f = (before - -BASELINE_Z) / (before - after);
+				expected = (i + f) * dt;
+				break;
+			}
+			current = step.ball;
+		}
+
+		expect(expected).toBeDefined();
+		expect(predictCrossingTime(start, VACUUM, -BASELINE_Z)).toBeCloseTo(
+			expected as number,
+			10,
+		);
+	});
+
+	it("is undefined for a ball that never reaches the plane", () => {
+		// Headed straight up: z never moves, so it never crosses z = -BASELINE_Z.
+		const start = ball([0, 1, 5], [0, 10, 0]);
+		expect(predictCrossingTime(start, VACUUM, -BASELINE_Z)).toBeUndefined();
 	});
 });
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
 	BASELINE_Z,
+	isInBounds,
+	isInServiceBox,
 	NET_HEIGHT_CENTRE,
 	NET_HEIGHT_POST,
 	NET_POST_X,
@@ -38,6 +40,44 @@ describe("service boxes", () => {
 		for (const corner of serviceBoxCorners("far")) {
 			expect(corner.z).toBeLessThanOrEqual(0);
 		}
+	});
+});
+
+describe("isInServiceBox", () => {
+	it("accepts a bounce inside the far box for a serve from near", () => {
+		expect(isInServiceBox(0, -3, "far")).toBe(true);
+	});
+
+	it("rejects a bounce beyond the service line, even inside the court", () => {
+		expect(isInServiceBox(0, -SERVICE_LINE_Z - 1, "far")).toBe(false);
+		expect(Math.abs(-SERVICE_LINE_Z - 1)).toBeLessThan(BASELINE_Z);
+	});
+
+	it("rejects a bounce on the wrong side of the net", () => {
+		expect(isInServiceBox(0, 3, "far")).toBe(false);
+	});
+
+	it("rejects a bounce wide of the singles sideline", () => {
+		expect(isInServiceBox(SINGLES_HALF_WIDTH + 0.5, -3, "far")).toBe(false);
+	});
+
+	it("mirrors for a serve from far, landing in the near box", () => {
+		expect(isInServiceBox(0, 3, "near")).toBe(true);
+		expect(isInServiceBox(0, -3, "near")).toBe(false);
+	});
+});
+
+describe("isInBounds", () => {
+	it("accepts a bounce inside the singles court", () => {
+		expect(isInBounds(0, -10)).toBe(true);
+	});
+
+	it("rejects a bounce past the baseline", () => {
+		expect(isInBounds(0, -BASELINE_Z - 0.5)).toBe(false);
+	});
+
+	it("rejects a bounce wide of the singles sideline", () => {
+		expect(isInBounds(SINGLES_HALF_WIDTH + 0.5, -5)).toBe(false);
 	});
 });
 

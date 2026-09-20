@@ -63,6 +63,38 @@ export function predictCrossingX(
 	return clamp(current.p.x, -SINGLES_HALF_WIDTH, SINGLES_HALF_WIDTH);
 }
 
+/**
+ * Seconds until `ball`'s centre crosses the plane `z = targetZ`, or
+ * `undefined` if it never does within `MAX_LOOKAHEAD`. Used by `rally.ts` to
+ * find how early or late an actual swing arrived against this prediction —
+ * unlike `predictCrossingX` there is no sane clamp for "never crosses", so
+ * the caller decides what a missing prediction means for timing.
+ *
+ * Same loop as `predictCrossingX`, kept separate rather than sharing it: the
+ * two return different things on the not-found path (a clamped fallback `x`
+ * versus no time at all), so unifying them would just move the fallback
+ * decision into a shared function that has to know about both callers.
+ */
+export function predictCrossingTime(
+	ball: Ball,
+	env: BallEnv,
+	targetZ: number,
+): number | undefined {
+	let current = ball;
+	for (let i = 0; i < MAX_LOOKAHEAD / PREDICTION_DT; i++) {
+		const before = current.p.z;
+		const step = stepBall(current, PREDICTION_DT, env);
+		const after = step.ball.p.z;
+
+		if (before > targetZ !== after > targetZ) {
+			const f = (before - targetZ) / (before - after);
+			return (i + f) * PREDICTION_DT;
+		}
+		current = step.ball;
+	}
+	return undefined;
+}
+
 /** Ease `player` toward `targetX`, moving at most `PLAYER_SPEED * dt`. */
 export function movePlayer(
 	player: Player,

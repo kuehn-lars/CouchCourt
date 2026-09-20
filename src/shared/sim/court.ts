@@ -13,6 +13,8 @@
  * `llm-knowledge/decisions/0002-host-authoritative-simulation.md`.
  */
 
+import type { Side } from "../protocol.ts";
+
 /** Baseline to baseline. */
 export const COURT_LENGTH = 23.77;
 
@@ -53,4 +55,30 @@ export const BALL_RADIUS = 0.0335;
 export function netHeightAt(x: number): number {
 	const t = Math.min(Math.abs(x) / NET_POST_X, 1);
 	return NET_HEIGHT_CENTRE + t * (NET_HEIGHT_POST - NET_HEIGHT_CENTRE);
+}
+
+/**
+ * Whether `(x, z)` is inside the singles court. Deliberately does not check
+ * which side of the net it is on — a rally shot can only land wide or long
+ * of the correct side already (the ball's own direction guarantees the
+ * sign), the one exception being a net rebound, which `rally.ts` catches
+ * from the crossing event itself rather than from where it lands.
+ */
+export function isInBounds(x: number, z: number): boolean {
+	return Math.abs(x) <= SINGLES_HALF_WIDTH && Math.abs(z) <= BASELINE_Z;
+}
+
+/**
+ * Whether `(x, z)` is inside `side`'s service box: between the net and the
+ * service line, within the singles sidelines. Deuce/ad court is not
+ * modelled — that needs a server `x` position `Player` does not carry, and
+ * nothing asks for it — so a serve landing anywhere in the correct half
+ * counts, not just the diagonal box.
+ */
+export function isInServiceBox(x: number, z: number, side: Side): boolean {
+	const withinDepth =
+		side === "near"
+			? z >= 0 && z <= SERVICE_LINE_Z
+			: z <= 0 && z >= -SERVICE_LINE_Z;
+	return withinDepth && Math.abs(x) <= SINGLES_HALF_WIDTH;
 }

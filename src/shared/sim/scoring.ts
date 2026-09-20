@@ -38,7 +38,9 @@ export function initialScore(server: Side): Score {
 	};
 }
 
-function other(side: Side): Side {
+/** The side that is not `side`. Exported for `rally.ts`, which needs "the
+ * other player" as often as scoring does. */
+export function other(side: Side): Side {
 	return side === "near" ? "far" : "near";
 }
 
