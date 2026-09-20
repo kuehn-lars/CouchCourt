@@ -58,7 +58,7 @@ export const POWER_CEIL_DEG_S = 1400;
  */
 export const POWER_FLOOR = 0.15;
 
-function rotMagnitude(rot: readonly [number, number, number]): number {
+export function rotMagnitude(rot: readonly [number, number, number]): number {
 	return Math.sqrt(rot[0] ** 2 + rot[1] ** 2 + rot[2] ** 2);
 }
 
@@ -148,13 +148,23 @@ function powerOf(peakMagnitude: number): number {
 	return POWER_FLOOR + (1 - POWER_FLOOR) * clamped;
 }
 
-function toSwing(episode: Run): Swing {
-	const peak = peakOf(episode);
+/**
+ * A `Swing` from the single sample at an episode's peak. Split out of
+ * `toSwing` so the streaming detector in `stream.ts`, which tracks its peak
+ * incrementally and never holds an episode, classifies and scales power
+ * through exactly this code. Two detectors, one definition of what a swing is
+ * — see `llm-knowledge/decisions/0009-streaming-swing-detection.md`.
+ */
+export function swingFromPeak(peak: MotionSample): Swing {
 	return {
 		kind: classify(peak),
 		power: powerOf(rotMagnitude(peak.rot)),
 		at: peak.t,
 	};
+}
+
+function toSwing(episode: Run): Swing {
+	return swingFromPeak(peakOf(episode));
 }
 
 export function detectSwings(samples: readonly MotionSample[]): Swing[] {

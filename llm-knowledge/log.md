@@ -155,3 +155,40 @@ cannot currently be played. The host is wired end to end, the controller is a
 placeholder, `detectSwings` has no production caller, and there is no
 production server entry. Every subsystem is individually finished and tested.
 See [[architecture]]'s "two open seams".
+
+## [2026-09-20] build | Controller (seam 1): the phone streams swings
+
+Design-then-implement across two sessions on `feature/controller`. Design
+session measured that a rolling buffer into `detectSwings` cannot be fast
+(median 1066ms) and that firing early costs almost nothing the simulation
+reads, then wrote a 7-task TDD plan. Implementation session executed it via
+`superpowers:subagent-driven-development` — a fresh implementer + reviewer
+per task, six tasks reviewed clean, one parked finding.
+
+Shipped: `src/shared/swing/stream.ts` (`createSwingStream`, the live
+counterpart to `detectSwings`, sharing its classification code via a newly
+exported `swingFromPeak`); `src/controller/session.ts` (socket identity,
+`sessionStorage`-backed resume, exponential backoff); `src/controller/wake-lock.ts`
+(extracted from the recorder, now shared); `src/controller/main.ts` (the real
+entry point — `detectSwings` finally has a production sibling calling into
+its shared code). 260→263 tests, all green; `npm run build` confirmed to emit
+a working `dist/controller/`.
+
+Promoted: `stream.ts` added to [[0009-streaming-swing-detection]]'s `code:`.
+Rewrote [[modules/controller]] and [[modules/shared-swing]];
+[[architecture]]'s "two open seams" is now one.
+
+**Not verified: nothing has met a phone.** No session has opened the
+controller page on real hardware, so the wake lock's behavior over a whole
+match, the reconnect logic against a real suspend/resume cycle, and the
+streaming detector's backswing-misfire finding (measured only against
+multi-rep fixtures, never a single-swing capture) all remain open. Recording
+six single-swing fixtures and playing a rally on real phones is the next
+session's first task, not this one's — see [[modules/controller]]'s "What is
+and is not verified".
+
+Also found: a cosmetic, twice-repeated defect in this session's own process —
+two of six task commits (Tasks 2 and 4) carry a `Co-Authored-By` trailer
+naming the implementing subagent's own model rather than the literal text the
+dispatch asked for. Parked rather than fixed (see the plan's ledger); harmless
+to the code, worth a rebase if the history bothers anyone.

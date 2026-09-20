@@ -17,7 +17,7 @@ whole system. [[README]] explains how the vault is maintained.
 
 | | |
 | --- | --- |
-| [[architecture]] | How the whole thing connects: the swing path end to end, what each hop may assume, where state lives, and the two seams that mean **the game cannot currently be played** |
+| [[architecture]] | How the whole thing connects: the swing path end to end, what each hop may assume, where state lives, and the one remaining seam that means **the game cannot currently be played end to end** |
 | [[0002-host-authoritative-simulation]] | The most load-bearing decision in the codebase. Most of the structure follows from it |
 | [[log]] | What happened, in order, and what each session promoted |
 
@@ -50,6 +50,7 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0006-relay-session-policy]] | Host replacement, no slot reclaim, liveness defaults |
 | [[0007-host-arrival-time-for-swing-timing]] | Swing timing uses host arrival, never the phone's clock |
 | [[0008-timing-not-aim-for-shot-direction]] | Direction comes from timing's sign; the `aim` stream is dead |
+| [[0009-streaming-swing-detection]] | The phone emits a swing before it finishes. Why `detectSwings` cannot be streamed, and what firing early costs |
 
 ## Platform
 
@@ -87,6 +88,7 @@ the evidence that produced them.
 | [[2026-09-19-swing-detector-tuning]] | The duration/merge/classification thresholds that do separate them |
 | [[2026-09-20-shot-envelope]] | The shot-feel constants, and two fixture-design bugs that cost more than the tuning |
 | [[2026-09-20-serve-reachability-recheck]] | The "unreturnable serve" finding did not reproduce: every legal serve power gives a 0.48–0.67s return window |
+| [[2026-09-20-streaming-swing-latency]] | Batch detection is 1066ms late. Streaming is 117ms and fires on the backswing — and the fixtures are all denser than gameplay |
 | [[2026-09-20-serve-reachability]] | **Superseded.** The original, wrong claim — kept so nobody re-derives it |
 
 ## Sessions
@@ -99,12 +101,20 @@ folders above and recorded in [[log]]. See `llm-knowledge/sessions/README.md`.
 
 Things that are true today and that a session should not be surprised by.
 
-- **The game cannot be played end to end.** No controller entry module, so
-  `detectSwings` has no production caller; and no `src/server/main.ts`, so the
-  relay exists only in dev. [[architecture]] has the detail.
-- **Nothing has been seen running.** No session has opened the host page in a
-  browser or played a rally on real phones. The renderer and phase 9's tuned
-  constants are both unverified against how the game actually feels.
+- **The game cannot be played end to end.** The controller is built
+  (2026-09-20) but there is no `src/server/main.ts`, so the relay exists only
+  in dev. [[architecture]] has the detail.
+- **Nothing has been seen running.** No session has opened the host page or
+  the controller page in a browser, or played a rally on real phones. The
+  renderer, phase 9's tuned constants, and the whole controller (permission
+  gate, swing streaming, reconnect) are all unverified against how the game
+  actually feels and behaves on real hardware. See [[modules/controller]]'s
+  "What is and is not verified".
+- **The streaming detector's backswing-misfire finding is against
+  multi-rep fixtures only.** Every committed trace is a multi-swing capture;
+  the game only ever sees single swings. [[0009-streaming-swing-detection]]'s
+  "What would overturn this" names six single-swing traces, recorded with
+  rally-like spacing, as the next thing to check with a phone in hand.
 - **Nothing decides who serves first.** `main.ts` hardcodes `near`; there is
   no lobby UI and no protocol message for it.
 - **How long iOS waits before suspending a backgrounded tab is unmeasured**,

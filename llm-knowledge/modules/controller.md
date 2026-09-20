@@ -4,6 +4,10 @@ updated: 2026-09-20
 tags: [module, controller, ios]
 status: current
 code:
+  - `src/controller/main.ts`
+  - `src/controller/session.ts`
+  - `src/controller/session.test.ts`
+  - `src/controller/wake-lock.ts`
   - `src/controller/motion.ts`
   - `src/controller/index.html`
   - `src/controller/record.ts`
@@ -13,29 +17,93 @@ code:
 
 # Module: `src/controller` — the iPhone racket
 
-The phone half. **Mostly not built** — and what exists is the hard part, so
-read this before assuming the folder is empty.
+The phone half. **Built as of 2026-09-20** — [[architecture]]'s seam 1 is
+closed: the phone opens a socket, streams swings, and survives iOS dropping
+its connection. **Not yet seen running on a phone** — see "What is and is not
+verified" below before trusting this page over your own hands.
 
 ## Files
 
 | File | What it is | State |
 | --- | --- | --- |
-| `src/controller/motion.ts` | `requestMotionPermission()` — the iOS permission gate | working, used only by the recorder |
-| `src/controller/index.html` | The controller page | **placeholder** — "Controller. Not built yet." |
-| `src/controller/record.html` | The trace recorder UI | working, dev tool |
-| `src/controller/record.ts` | The recorder: capture, countdown, live readout, save | working, dev tool |
+| `src/controller/main.ts` | The real entry point: gate → motion listener → stream → session | built, untested on hardware |
+| `src/controller/session.ts` | Socket identity, resume, reconnect backoff | `backoffMs` tested; socket wiring untested by design (DOM/WebSocket wiring) |
+| `src/controller/wake-lock.ts` | `keepAwake()` — screen wake lock with re-acquire on visibility | untested by design (browser API wiring, no logic to assert) |
+| `src/controller/motion.ts` | `requestMotionPermission()` — the iOS permission gate | working, now used by both the controller and the recorder |
+| `src/controller/index.html` | The controller page | built — permission gate + play screen, replaces the old placeholder |
+| `src/controller/record.html` | The trace recorder UI | working, dev tool, unchanged |
+| `src/controller/record.ts` | The recorder: capture, countdown, live readout, save | working, dev tool; now imports `keepAwake` from `wake-lock.ts` instead of holding its own copy |
 
-There is no controller entry module. The phone never opens a WebSocket, never
-sends `hello`, and never sends a swing — [[architecture]]'s seam 1.
+The controller no longer links to the recorder from its own page — `record.html`
+is still reachable by typing the path, but there is no in-app link now that the
+real controller exists to link to instead.
+
+## What the controller actually does
+
+`main.ts` wires five already-independent pieces together and contains no
+logic of its own:
+
+```
+enable tap → requestMotionPermission()          motion.ts
+                │ granted/unsupported
+                ▼
+           startPlaying()
+                │
+                ├─▶ keepAwake()                  wake-lock.ts
+                ├─▶ createSession({onState,onSide})  session.ts
+                │        │ onSide fires once "assigned" arrives
+                │        ▼
+                │   send {t:"ready", ready:true}
+                │
+                └─▶ window.addEventListener("devicemotion", onMotion)
+                         │
+                         ▼
+                    toSample(t, event)            shared/swing/trace.ts
+                         │
+                         ▼
+                    stream.push(sample)           shared/swing/stream.ts
+                         │ Swing | null
+                         ▼
+                    session.send({t:"swing", ...swing})
+```
+
+`{t:"ready"}` is sent from inside `onSide`, not right after `createSession`
+returns — the socket is not open yet at that point and `Session.send`'s
+`readyState === OPEN` guard would drop it silently. This was a bug caught
+during the design session's own self-review before implementation started
+(see `sessions/2026-09-20-1452-controller-design.md`), not discovered live.
+
+## `session.ts` — identity outlives the socket
+
+`playerId` lives in `sessionStorage`, not a variable, because
+[[ios-safari-tab-suspension]] is emphatic that the socket dying mid-match is
+normal, not exceptional. On every `open`, the stored id (if any) is replayed
+as `{t:"hello", resume}`. On `close`, `backoffMs(attempt)` schedules a
+reconnect: 500ms doubling to a flat 8s, so a phone that was in a pocket for
+ten minutes still comes back promptly rather than after a delay that grew
+while nobody was watching. `visibilitychange` reconnects immediately on
+foregrounding rather than waiting for the relay's 15s ping to notice.
+
+A `{t:"rejected", reason:"unknown-session"}` clears the stored id and lets the
+next `hello` arrive fresh, rather than retrying a resume that can only fail
+again — this is the one rejection reason that does **not** set the
+reconnect loop's terminal `givenUp` flag.
+
+## `stream.ts` is `shared/swing/`'s module, not this one
+
+The streaming swing detector `createSwingStream` lives in
+`src/shared/swing/stream.ts` and is documented in [[modules/shared-swing]] —
+it is pure logic with no DOM dependency, tuned entirely against the recorded
+fixtures, and this module only calls it. See that page and
+[[0009-streaming-swing-detection]] for how it works and why it emits before a
+swing finishes.
 
 ## What actually works today: the recorder
 
-`record.html` is reached by tapping through from `index.html`, because
-`npm run certs` prints only that one URL and a LAN hostname is miserable to
-type on a phone. It is a **dev tool** and is excluded from the production
-build — Vite's dev `indexHtmlMiddleware` serves any `.html` under the root, so
-it needs no `rollupOptions.input` entry, and adding one would only ship a dead
-Save button.
+`record.html` is reached by typing its path directly (`npm run certs` prints
+only the controller's own URL now). It is a **dev tool** and is excluded from
+the production build — Vite's dev `indexHtmlMiddleware` serves any `.html`
+under the root, so it needs no `rollupOptions.input` entry.
 
 Flow: permission gate → pick a label → pick Short (6s) or Long (30s) →
 **five-second countdown** → capture → POST to the dev-only endpoint
@@ -68,7 +136,8 @@ alternative:
   standing in the living room holding the phone.** Do not "simplify" it.
 - **No `await` before the call in that same function.** An `await` on anything
   else first loses the user gesture and the call rejects. Everything
-  downstream belongs in `.then()`, not after an `await` of this.
+  downstream belongs in `.then()`, not after an `await` of this — `main.ts`'s
+  `enableButton` handler follows this exactly, same as `record.ts` always did.
 - **A missing API is `"unsupported"`, not an error.** Desktop Safari, Chrome
   and Android fire `devicemotion` with no grant, and that is what keeps the
   page developable on a Mac.
@@ -76,39 +145,40 @@ alternative:
 **Denial is sticky per origin.** Recovering means Settings → Safari → Clear
 History and Website Data, which no guest at a party will do. So the prompt
 must be explained *before* the tap that triggers it and never fired
-speculatively on page load. That makes the permission gate a real UI state,
-not a formality — which is a constraint on whoever builds the real controller.
+speculatively on page load — `main.ts`'s gate section does this.
 
-## When the real controller is built
+One page-level constraint encoded in both HTML files: a racket swing must
+never scroll, rubber-band or pinch-zoom the page — `user-scalable=no`,
+`touch-action: none`, `overscroll-behavior: none`, `viewport-fit=cover`.
 
-Everything it needs already exists. The shape it has to take:
+## What is and is not verified
 
-- `devicemotion` listener → `toSample` → a rolling buffer → `detectSwings`
-  (`src/shared/swing/detector.ts`, currently with no caller) → `{t:"swing"}`.
-- `hello` with `PROTOCOL_VERSION`; store the returned `playerId` in
-  `sessionStorage` and resend it as `{t:"hello", resume: playerId}` on
-  reconnect. **Session identity must outlive the socket** — iOS dropping the
-  connection is normal behaviour, not an edge case
-  ([[ios-safari-tab-suspension]]).
-- `visibilitychange` is the early warning that backgrounding is coming; it is
-  nicer for the host to be told than to discover it from a timeout.
-- `feedback` messages arrive for haptics. They are not authoritative.
-- The `aim` stream is in the protocol and **no v1 code reads it**
-  ([[0008-timing-not-aim-for-shot-direction]]). Sending it is optional;
-  wiring it into gameplay is a decision nobody has made.
+Everything above is verified by tests (`session.test.ts`'s `backoffMs`,
+`stream.test.ts` in `shared/swing/`) and a typechecker, and by `npm run build`
+actually emitting `dist/controller/index.html` wired to a bundled script. **No
+session has opened this page on a phone.** Specifically unverified:
 
-One page-level constraint already encoded in both HTML files: a racket swing
-must never scroll, rubber-band or pinch-zoom the page —
-`user-scalable=no`, `touch-action: none`, `overscroll-behavior: none`,
-`viewport-fit=cover`.
+- Whether `main.ts`'s wiring actually works against a real `devicemotion`
+  stream and a real WebSocket round trip — everything below `main.ts` is
+  tested in isolation, but the integration itself has not run.
+- Whether the wake lock actually keeps the screen on through a real match on
+  real hardware — `record.ts` proved the underlying API works for a 30s
+  capture; a whole match is a longer, unverified claim.
+- Whether reconnect-after-suspension actually resumes a session on a real
+  iPhone, versus only against the backoff-formula unit test.
+
+Closing this gap needs a phone in hand: `npm run dev`, scan the QR code,
+tap Enable, swing. Not done in this session — [[0009-streaming-swing-detection]]'s
+"What would overturn this" also still needs six single-swing fixtures
+recorded with rally-like spacing, which the same phone session should collect.
 
 ## A dev-loop trap worth knowing before you hold a phone
 
 `vite.config.ts` imports `scripts/trace-endpoint.ts`, which imports
 `src/shared/swing/trace.ts`. Vite restarts the dev server when any config
 dependency changes — so **editing shared code mid-session restarts the server,
-reloads the phone, costs the Enable tap again, and discards the in-memory
-capture.** Do not edit `src/shared/` with a phone in your hand.
+reloads the phone, costs the Enable tap again, and discards in-progress
+state.** Do not edit `src/shared/` with a phone in your hand.
 
 ## Reference device
 
@@ -118,6 +188,6 @@ releases, so record provenance with any new traces.
 
 ## See also
 
-[[architecture]] · [[modules/shared-swing]] · [[ios-motion-permission]] ·
-[[ios-safari-tab-suspension]] · [[0004-lan-https-via-local-ip-co]] ·
-[[2026-09-19-ios-devicemotion-sampling]]
+[[architecture]] · [[modules/shared-swing]] · [[0009-streaming-swing-detection]] ·
+[[ios-motion-permission]] · [[ios-safari-tab-suspension]] ·
+[[0004-lan-https-via-local-ip-co]] · [[2026-09-19-ios-devicemotion-sampling]]

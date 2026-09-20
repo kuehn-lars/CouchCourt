@@ -5,8 +5,10 @@ tags: [module, swing-detection, motion]
 status: current
 code:
   - `src/shared/swing/detector.ts`
+  - `src/shared/swing/stream.ts`
   - `src/shared/swing/trace.ts`
   - `src/shared/swing/detector.test.ts`
+  - `src/shared/swing/stream.test.ts`
   - `src/shared/swing/trace.test.ts`
   - `tests/fixtures/motion/`
 ---
@@ -17,28 +19,46 @@ Turns a stream of phone motion samples into the semantic `Swing` events the
 wire carries. Pure, so it is tuned offline against 20 recorded traces instead
 of in a living room. **This is the project's main testing leverage.**
 
+There are now **two detectors sharing one definition of what a swing is.**
+`detector.ts` holds a batch detector (`detectSwings`) that sees a whole trace
+at once, and `stream.ts` holds a live detector (`createSwingStream`) that
+emits mid-swing. See [[0009-streaming-swing-detection]] for why both exist —
+the short version is that batch cannot be fast enough for a live game.
+
 ## Files
 
 | File | Holds |
 | --- | --- |
 | `src/shared/swing/trace.ts` | `MotionSample`, `MotionTrace`, `isTrace`, `toSample`, `formatTrace`, `measuredHz`, `longestGapMs`, `nextTraceName`, `MAX_GAP_MS` |
-| `src/shared/swing/detector.ts` | `detectSwings` and every tuned threshold |
+| `src/shared/swing/detector.ts` | `detectSwings` (batch), `rotMagnitude`, `swingFromPeak`, and every tuned threshold |
+| `src/shared/swing/stream.ts` | `createSwingStream` (live), `PEAK_DECAY_EMIT` |
 | `tests/fixtures/motion/` | 20 committed captures, seven labels, plus their README |
 
 ## Wiring — and the seam
 
 ```
-record.ts (controller) ──▶ trace.ts   toSample, measuredHz, longestGapMs
-trace-endpoint.ts      ──▶ trace.ts   isTrace, formatTrace, nextTraceName
-detector.ts            ──▶ trace.ts   MotionSample
-fixtures.test.ts       ──▶ trace.ts   isTrace, measuredHz, longestGapMs
+record.ts (controller)    ──▶ trace.ts    toSample, measuredHz, longestGapMs
+trace-endpoint.ts         ──▶ trace.ts    isTrace, formatTrace, nextTraceName
+detector.ts                    trace.ts    MotionSample
+stream.ts                 ──▶ detector.ts  rotMagnitude, swingFromPeak,
+                                            SWING_ROT_THRESHOLD_DEG_S,
+                                            MIN_SWING_DURATION_MS,
+                                            EPISODE_MERGE_GAP_MS
+fixtures.test.ts          ──▶ trace.ts    isTrace, measuredHz, longestGapMs
 
-detectSwings           ◀── NOTHING in production
+controller/main.ts         ──▶ stream.ts   createSwingStream            ◀── production caller
+detectSwings (batch)       ◀── NOTHING in production, still only its own test
 ```
 
-**`detectSwings` has no caller outside its own test.** The detector is
-finished and tuned; the controller that would feed it does not exist yet. See
-[[architecture]]'s "two open seams" and [[modules/controller]].
+**`detectSwings` itself still has no production caller** — the controller
+uses the streaming detector, never a rolling buffer into batch (measured
+1066ms too slow, see [[2026-09-20-streaming-swing-latency]]). But the
+classification/scaling logic `detectSwings` depends on — `rotMagnitude` and
+`swingFromPeak`, split out of a private `toSwing` specifically so both
+detectors share one definition — now runs in production every time the phone
+streams a swing. [[architecture]]'s seam 1 (no controller entry module) is
+closed; see [[modules/controller]] for what was built and what is still
+unverified on real hardware.
 
 `trace.ts` deliberately holds both the **writer** (`formatTrace`) and the
 **reader** (`isTrace`) of the on-disk format, and `trace.test.ts` round-trips
@@ -111,5 +131,6 @@ as nothing. `PRODUCT.md` asks to guess in the player's favour.
 
 ## See also
 
-[[architecture]] · [[modules/controller]] · [[ios-motion-permission]] ·
+[[architecture]] · [[modules/controller]] · [[0009-streaming-swing-detection]] ·
+[[2026-09-20-streaming-swing-latency]] · [[ios-motion-permission]] ·
 [[2026-09-19-ios-devicemotion-sampling]] · [[2026-09-19-swing-detector-tuning]]
