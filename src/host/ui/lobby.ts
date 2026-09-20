@@ -25,6 +25,9 @@ export interface LobbyView {
 	readonly winner: Side | null;
 	/** Set in solo play, so the roster can show who the bot is. */
 	readonly botSide: Side | null;
+	/** A side whose phone has dropped mid-match. The simulation is frozen
+	 * while this is set. */
+	readonly waitingFor: Side | null;
 	readonly joinUrl: string;
 }
 
@@ -166,8 +169,25 @@ export function createLobbyUI(
 
 	return {
 		update(view) {
-			panel.hidden = view.phase === "playing";
-			if (view.phase === "playing") return;
+			// The panel is the pause screen too: a match with a dropped phone
+			// is frozen, and the player who is coming back needs their side to
+			// still be waiting for them when they do.
+			const paused = view.phase === "playing" && view.waitingFor !== null;
+			panel.hidden = view.phase === "playing" && !paused;
+			if (panel.hidden) return;
+
+			if (paused && view.waitingFor) {
+				qrBox.hidden = true;
+				urlText.hidden = true;
+				slots.hidden = true;
+				count.hidden = true;
+				actions.hidden = true;
+				hint.hidden = false;
+				title.textContent = `Waiting for ${SIDE_LABEL[view.waitingFor]}`;
+				lede.textContent =
+					"Their phone dropped out. The match is paused — it resumes the moment they are back.";
+				return;
+			}
 
 			if (view.joinUrl !== renderedUrl) {
 				renderedUrl = view.joinUrl;

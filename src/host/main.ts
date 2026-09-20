@@ -96,6 +96,21 @@ function playerIdFor(side: Side): PlayerId | undefined {
 	return players.find((p) => p.side === side && p.connected)?.playerId;
 }
 
+/**
+ * The side of a human player whose phone is not currently connected, or
+ * `null`. While this is set mid-match the simulation is frozen: iOS drops
+ * the socket whenever the phone locks or takes a notification
+ * (`llm-knowledge/platform/ios-safari-tab-suspension.md`), and `PRODUCT.md`
+ * asks that such a player come back as the same player rather than as a
+ * spectator who lost four games in the meantime.
+ */
+function waitingFor(): Side | null {
+	for (const player of players) {
+		if (!player.connected && player.side !== botSide) return player.side;
+	}
+	return null;
+}
+
 function announce(): void {
 	send({
 		t: "match",
@@ -231,7 +246,13 @@ function frame(now: number): void {
 			announce();
 		}
 
-		const result = advance(accumulator, frameDt);
+		const paused = phase === "playing" && waitingFor() !== null;
+		// Drop the backlog rather than carrying it: a pause is the same case
+		// as a restored suspended tab, and `advance`'s own catch-up cap exists
+		// for exactly that reason (`llm-knowledge/modules/host.md`).
+		if (paused) accumulator = 0;
+
+		const result = advance(paused ? 0 : accumulator, paused ? 0 : frameDt);
 		accumulator = result.accumulator;
 		for (let i = 0; i < result.ticks; i++) {
 			if (phase !== "playing") break;
@@ -263,6 +284,7 @@ function frame(now: number): void {
 			countdown: Math.ceil((countdownUntil - now) / 1000),
 			winner,
 			botSide,
+			waitingFor: waitingFor(),
 			joinUrl: JOIN_URL,
 		});
 	}
