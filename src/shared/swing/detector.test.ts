@@ -7,11 +7,10 @@ import {
 	POWER_CEIL_DEG_S,
 	POWER_FLOOR,
 	POWER_FLOOR_DEG_S,
-	SERVE_GAMMA_THRESHOLD_DEG_S,
 	SPIN_DEADZONE_DEG_S,
 	SPIN_FULL_DEG_S,
 	SWING_ROT_THRESHOLD_DEG_S,
-	swingFromPeak,
+	swingFrom,
 } from "./detector.ts";
 import { isTrace, type MotionSample, type MotionTrace } from "./trace.ts";
 
@@ -96,26 +95,36 @@ describe("detectSwings", () => {
 		expect(swings[0]?.kind).toBe("backhand");
 	});
 
-	it("detects a large gamma at the peak as a serve, even with a strongly positive alpha", () => {
-		// Positive alpha alone would classify as forehand — gamma must win.
-		const baseRot: [number, number, number] = [
-			900,
-			0,
-			SERVE_GAMMA_THRESHOLD_DEG_S,
-		];
-		const peakRot: [number, number, number] = [
-			900,
-			0,
-			SERVE_GAMMA_THRESHOLD_DEG_S + 50,
-		];
+	// The exact shape that used to break: the loudest sample of a hard
+	// forehand is dominated by gamma, and reading alpha *there* reads noise.
+	// `forehand-06`'s peaks are (3, 241, 1012) and (202, 105, 1063) and all
+	// ten of its swings came out wrong. The largest turn decides instead.
+	it("classifies from the largest turn, not from the loudest sample", () => {
 		const samples: MotionSample[] = Array.from({ length: 24 }, (_, i) => ({
 			t: i * STEP_MS,
 			acc: [0, 9.8, 0],
-			rot: i === 12 ? peakRot : baseRot,
+			// Sample 12 is by far the loudest and its alpha says "backhand".
+			// Sample 6 is quieter overall but turned hardest, and says
+			// "forehand". The swing is a forehand.
+			rot: i === 12 ? [-90, 0, 1200] : i === 6 ? [700, 0, 200] : [400, 0, 200],
 		}));
 		const swings = detectSwings(samples);
 		expect(swings).toHaveLength(1);
-		expect(swings[0]?.kind).toBe("serve");
+		expect(swings[0]?.kind).toBe("forehand");
+	});
+
+	// The phone stopped guessing serves on 2026-09-21: hard forehands in the
+	// 30s captures reach |gamma| of 1063, so the old threshold labelled them
+	// serves. The sim assigns serves from `phase` instead.
+	it("never reports a serve, however violent the wrist", () => {
+		const samples: MotionSample[] = Array.from({ length: 24 }, (_, i) => ({
+			t: i * STEP_MS,
+			acc: [0, 9.8, 0],
+			rot: [900, 0, i === 12 ? 1400 : 800],
+		}));
+		const swings = detectSwings(samples);
+		expect(swings).toHaveLength(1);
+		expect(swings[0]?.kind).toBe("forehand");
 	});
 
 	it("reports `at` as the timestamp of the peak sample", () => {
@@ -187,12 +196,12 @@ describe("detectSwings", () => {
 	});
 });
 
-describe("swingFromPeak", () => {
-	it("builds the same swing detectSwings would from that peak", () => {
-		// A serve: |gamma| over SERVE_GAMMA_THRESHOLD_DEG_S at the peak.
+describe("swingFrom", () => {
+	it("takes power, spin and `at` from the peak and only the kind from the turn", () => {
 		const peak: MotionSample = { t: 500, acc: [0, 9.8, 0], rot: [0, 0, 900] };
-		expect(swingFromPeak(peak)).toEqual({
-			kind: "serve",
+		const turn: MotionSample = { t: 420, acc: [0, 9.8, 0], rot: [-600, 0, 0] };
+		expect(swingFrom(peak, turn)).toEqual({
+			kind: "backhand",
 			power:
 				POWER_FLOOR +
 				(1 - POWER_FLOOR) *
@@ -204,7 +213,10 @@ describe("swingFromPeak", () => {
 
 	it("reads spin from the peak's beta axis, signed and dead-zoned", () => {
 		const at = (beta: number) =>
-			swingFromPeak({ t: 500, acc: [0, 9.8, 0], rot: [900, beta, 0] }).spin;
+			swingFrom(
+				{ t: 500, acc: [0, 9.8, 0], rot: [900, beta, 0] },
+				{ t: 500, acc: [0, 9.8, 0], rot: [900, beta, 0] },
+			).spin;
 
 		// Inside the dead zone: flat. Wrist noise is not a spin decision.
 		expect(at(0)).toBe(0);
@@ -222,16 +234,19 @@ describe("swingFromPeak", () => {
 		expect(at(-mid)).toBeCloseTo(-0.5, 6);
 	});
 
-	it("agrees with detectSwings on a real fixture's peak", () => {
-		// Whatever detectSwings reports for a trace, rebuilding from the peak
-		// sample it chose must give an identical Swing. This is the guard that
-		// stops the two detectors drifting.
-		const samples = run(0, 40, 0, 800);
+	it("agrees with detectSwings on the peak it chose", () => {
+		// Whatever detectSwings reports for a trace, rebuilding from the
+		// samples it chose must give an identical Swing. This is the guard
+		// that stops the two detectors drifting.
+		const samples = runWithPeak(0, 40, 0, 800, 20, 1000);
 		const [swing] = detectSwings(samples);
 		expect(swing).toBeDefined();
 		const peak = samples.find((s) => s.t === swing?.at);
 		expect(peak).toBeDefined();
-		if (peak) expect(swingFromPeak(peak)).toEqual(swing);
+		const turn = samples.reduce((best, s) =>
+			Math.abs(s.rot[0]) > Math.abs(best.rot[0]) ? s : best,
+		);
+		if (peak) expect(swingFrom(peak, turn)).toEqual(swing);
 	});
 });
 
@@ -264,7 +279,19 @@ describe("detectSwings against the committed motion traces", () => {
 		expect(negativeFiles.length).toBeGreaterThan(0);
 	});
 
-	it.each(swingFiles)(
+	// Serve traces are held to detection only. The phone no longer decides
+	// what a serve is — the sim does, from `phase` — so asserting a kind here
+	// would be asserting a guess this codebase deliberately stopped making.
+	const groundstrokeFiles = swingFiles.filter((name) =>
+		/^(forehand|backhand)-/.test(name),
+	);
+
+	it("has groundstroke fixtures of both kinds", () => {
+		expect(groundstrokeFiles.some((n) => n.startsWith("forehand-"))).toBe(true);
+		expect(groundstrokeFiles.some((n) => n.startsWith("backhand-"))).toBe(true);
+	});
+
+	it.each(groundstrokeFiles)(
 		"%s: every detected swing matches the recorded label",
 		(name) => {
 			const trace = load(name);
@@ -279,6 +306,11 @@ describe("detectSwings against the committed motion traces", () => {
 			}
 		},
 	);
+
+	it.each(swingFiles)("%s: reads as at least one swing", (name) => {
+		const trace = load(name);
+		expect(detectSwings(trace.samples).length).toBeGreaterThan(0);
+	});
 
 	// "A swing that felt like a forehand reads as a forehand, and setting the
 	// phone down mid-conversation never reads as a shot." — PRODUCT.md

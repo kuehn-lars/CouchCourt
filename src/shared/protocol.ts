@@ -15,11 +15,34 @@
 /** Bumped on any breaking change. A controller with a different version is rejected. */
 export const PROTOCOL_VERSION = 1;
 
+/** Largest `Swing.lag` the host will accept, milliseconds. A swing cannot
+ * have taken longer than the detector's whole episode window to announce, and
+ * anything larger is a broken or hostile controller. */
+export const MAX_SWING_LAG_MS = 1000;
+
+/**
+ * What to assume when a `Swing` carries no `lag` — a controller built before
+ * the field existed. The measured median delay of the current detector across
+ * all 26 committed traces, so an older phone is judged as if it behaved like
+ * a current one, which is very nearly true. Assuming 0 instead would punish
+ * it for a delay it is still incurring.
+ */
+export const DEFAULT_SWING_LAG_MS = 200;
+
 export type PlayerId = string;
 
 /** Which end of the court a player is on. Assigned by the server, never chosen. */
 export type Side = "near" | "far";
 
+/**
+ * `serve` is assigned by the **simulation**, from `phase === "waiting-serve"`,
+ * and is never claimed by a phone. The phone used to guess it from a wrist
+ * pronation spike; six 30s captures showed hard forehands producing the same
+ * spike, so the guess was deleted rather than retuned — see
+ * `src/shared/swing/detector.ts` and
+ * `llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md`. A
+ * controller that sends one anyway is not rejected; the sim overrides it.
+ */
 export type SwingKind = "forehand" | "backhand" | "serve";
 
 /** What the host tells a phone happened, so it can buzz. */
@@ -52,6 +75,20 @@ export interface Swing {
 	 * gravity multiplier — see `sim/rally.ts`.
 	 */
 	spin?: number;
+	/**
+	 * Milliseconds the phone's detector spent between the swing's peak and
+	 * announcing it — both read from the phone's own clock, so this is a
+	 * *duration* and carries none of the cross-device clock skew that
+	 * `llm-knowledge/decisions/0007-host-arrival-time-for-swing-timing.md`
+	 * refuses to trust. The host subtracts it from arrival time to recover
+	 * when the swing actually happened.
+	 *
+	 * Optional for the same reason `spin` is: an older controller is still a
+	 * playable controller. Absent means "no idea", and the host falls back to
+	 * a measured typical value rather than to zero — see
+	 * `llm-knowledge/decisions/0013-detector-latency-is-compensated.md`.
+	 */
+	lag?: number;
 }
 
 export interface LobbyPlayer {
@@ -153,7 +190,11 @@ export function isControllerMessage(x: unknown): x is ControllerMessage {
 				x.power <= 1 &&
 				isFiniteNumber(x.at) &&
 				(x.spin === undefined ||
-					(isFiniteNumber(x.spin) && x.spin >= -1 && x.spin <= 1))
+					(isFiniteNumber(x.spin) && x.spin >= -1 && x.spin <= 1)) &&
+				// Bounded, not just finite: a swing claiming a 30-second lag
+				// would back-date itself out of the rally entirely.
+				(x.lag === undefined ||
+					(isFiniteNumber(x.lag) && x.lag >= 0 && x.lag <= MAX_SWING_LAG_MS))
 			);
 		default:
 			return false;

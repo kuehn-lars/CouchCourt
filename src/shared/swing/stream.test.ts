@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { Swing } from "../protocol.ts";
+import { MAX_SWING_LAG_MS, type Swing } from "../protocol.ts";
 import { detectSwings } from "./detector.ts";
 import { createSwingStream } from "./stream.ts";
 import {
@@ -57,7 +57,36 @@ describe("createSwingStream", () => {
 	// The reason stream.ts exists rather than a rolling buffer into
 	// detectSwings. See experiments/2026-09-20-streaming-swing-latency.md —
 	// the batch equivalent sits at a median of 1066ms.
-	it("emits within 250ms of the peak at p90", () => {
+	// Raw latency stopped being the thing to guard on 2026-09-21. Holding
+	// EMIT_HOLD_MS past the decay trigger buys the direction accuracy the
+	// whole shot now rests on, and pushes p90 to ~334ms — past MISS_WINDOW.
+	// What keeps that affordable is that the swing REPORTS the delay, so the
+	// host can subtract it. So the guarantee to hold is `lag`'s accuracy, not
+	// a latency ceiling: a lag that is wrong is worse than a lag that is big.
+	it("reports `lag` as exactly the delay between the peak and the emission", () => {
+		let checked = 0;
+		for (const name of positives) {
+			for (const e of replay(load(name).samples)) {
+				expect(e.swing.lag).toBeCloseTo(e.emitAt - e.swing.at, 6);
+				checked++;
+			}
+		}
+		expect(checked).toBeGreaterThan(20);
+	});
+
+	it("never reports a lag the protocol would reject", () => {
+		for (const name of positives) {
+			for (const e of replay(load(name).samples)) {
+				expect(e.swing.lag).toBeGreaterThanOrEqual(0);
+				expect(e.swing.lag).toBeLessThanOrEqual(MAX_SWING_LAG_MS);
+			}
+		}
+	});
+
+	// Still bounded, just at a figure that reflects the hold. Emitting a
+	// second after the swing is the batch detector's failure, and this is the
+	// guard that it has not quietly come back.
+	it("emits within 450ms of the peak at p90", () => {
 		const latencies: number[] = [];
 		for (const name of positives) {
 			for (const e of replay(load(name).samples)) {
@@ -67,7 +96,7 @@ describe("createSwingStream", () => {
 		latencies.sort((a, b) => a - b);
 		const p90 = latencies[Math.floor(latencies.length * 0.9)];
 		expect(p90).toBeDefined();
-		expect(p90).toBeLessThanOrEqual(250);
+		expect(p90).toBeLessThanOrEqual(450);
 	});
 
 	// Both detectors must agree about what a swing IS, even where they
@@ -85,7 +114,62 @@ describe("createSwingStream", () => {
 
 		const streamed = replay(samples);
 		const [batch] = detectSwings(samples);
-		expect(streamed[0]?.swing).toEqual(batch);
+		// `lag` is the one field only the streaming detector can know — the
+		// batch detector has no emission moment to measure against.
+		const { lag, ...streamedSwing } = streamed[0]?.swing ?? {};
+		expect(streamedSwing).toEqual(batch);
+		expect(lag).toBeGreaterThan(0);
+	});
+
+	// THE guard for the feature the whole game now rests on: the ball goes
+	// where the swing went, so a wrong `kind` is a shot flying the wrong way.
+	// Before 2026-09-21 this stood at 34/64; `forehand-06` alone was 0/10.
+	//
+	// Stated as a floor over all groundstroke traces rather than per trace,
+	// because these are 30s of continuous reps with no pause between them —
+	// harder than a rally, where swings arrive one at a time. Isolated swings
+	// cut from the same captures score 50/52. See
+	// llm-knowledge/experiments/2026-09-21-swing-direction-classifier.md.
+	describe("direction against the recorded labels", () => {
+		const groundstrokes = files.filter((n) => {
+			const label = load(n).label;
+			return label === "forehand" || label === "backhand";
+		});
+
+		it("has forehand and backhand traces to check", () => {
+			expect(groundstrokes.length).toBeGreaterThanOrEqual(12);
+		});
+
+		it("gets at least 90% of every emitted direction right", () => {
+			let right = 0;
+			let total = 0;
+			const worst: string[] = [];
+			for (const name of groundstrokes) {
+				const trace = load(name);
+				const kinds = replay(trace.samples).map((e) => e.swing.kind);
+				const hits = kinds.filter((k) => k === trace.label).length;
+				right += hits;
+				total += kinds.length;
+				if (hits < kinds.length) {
+					worst.push(`${name} ${hits}/${kinds.length}`);
+				}
+			}
+			expect(total).toBeGreaterThan(40);
+			expect(
+				right / total,
+				`misses: ${worst.join(", ")}`,
+			).toBeGreaterThanOrEqual(0.9);
+		});
+
+		// The trace that proved the old classifier was reading noise. Kept as
+		// its own case so a regression names itself instead of hiding inside
+		// an aggregate that is still above the floor.
+		it("gets forehand-06 — the trace the old classifier scored 0/10 on — entirely right", () => {
+			const trace = load("forehand-06.json");
+			const kinds = replay(trace.samples).map((e) => e.swing.kind);
+			expect(kinds.length).toBeGreaterThanOrEqual(8);
+			expect(kinds.every((k) => k === "forehand")).toBe(true);
+		});
 	});
 
 	// Documents the known cost of firing early (ADR 0009): a sustained

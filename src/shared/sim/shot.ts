@@ -5,9 +5,13 @@
  * There is no `aim` reading here on purpose
  * (`llm-knowledge/decisions/0008-timing-not-aim-for-shot-direction.md`): a
  * trustworthy compass zero needs a per-player calibration step the product
- * won't spend, so **direction comes from timing's sign alone** — early is
- * cross-court, late is down the line, and that is one lerp, not a geometry
- * solve against where the player is standing.
+ * won't spend.
+ *
+ * **Direction comes from which stroke you played.** A forehand pulls across
+ * the body one way, a backhand the other; timing decides how well you hit it,
+ * not where it goes. This replaced timing's sign on 2026-09-21 — see
+ * `llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md`, which
+ * supersedes 0008's direction rule and keeps the rest of it.
  *
  * `src/shared/**` is compiled under both a DOM-only and a Node-only tsconfig,
  * so this file names no DOM type and no Node global — see
@@ -82,9 +86,48 @@ export const SERVE_ANGLE_FAST = -0.07;
  * `heightDeficit` is always 0 for them. */
 export const HEIGHT_ANGLE_BOOST = 0.5;
 
-/** Sideways speed, m/s, at the very edge of the miss window. Timing error's
- * sign and magnitude scale linearly into this — the direction decision. */
+/**
+ * Where a cleanly struck groundstroke is aimed, metres from the centre line
+ * on the far side. Comfortably inside `SINGLES_HALF_WIDTH` (4.115) so a shot
+ * that arrives a little wide of its aim is still in.
+ *
+ * The shot is aimed at a **place**, not given a fixed sideways speed, and
+ * that is not a flourish. A fixed sideways speed works only while both
+ * players stand on the centre mark. Measured on 2026-09-21, once the players
+ * started running: a full-power forehand struck from x=+3 with a fixed 7 m/s
+ * lateral landed out at **every one of 20 powers**, because it was already at
+ * the sideline and was pushed further. Aiming instead of pushing puts the
+ * clean-landing rate at 150/200 across five contact positions and both
+ * strokes. `llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md`
+ * records why this overturns 0008's "no geometry solve" clause.
+ */
+export const CROSS_COURT_X = 2.6;
+
+/**
+ * Nominal seconds of flight, used only to turn "aim at that x" into a
+ * sideways speed. Deliberately a constant rather than solved from the
+ * outgoing speed and drag: the real flight is 0.8-1.3s across the power
+ * range, and sweeping this over that whole span moved the clean-landing rate
+ * by two shots in two hundred. Solving it exactly would buy nothing and
+ * couple the aim to the drag model.
+ */
+export const AIM_FLIGHT_TIME = 1.1;
+
+/** Ceiling on the sideways speed the aim may ask for, m/s. A ball struck from
+ * the far corner must not be flung across the court flat. */
 export const LATERAL_SPEED_MAX = 7;
+
+/**
+ * Sideways speed, m/s, added by a stroke timed at the very edge of the miss
+ * window, in the direction the timing erred. Zero inside `CLEAN_WINDOW`.
+ *
+ * This is what keeps a mishit honest now that timing no longer steers. Before
+ * 2026-09-21 a mistimed shot flew wide because timing *was* the direction; the
+ * property "a max-power shot deep in the miss window essentially never lands
+ * in" was resting on that, and would have been silently lost. Measured back
+ * to 0 of 8 landing in at this value; at 8 m/s one of them still lands.
+ */
+export const MISHIT_SPRAY_MAX = 10;
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp = (x: number, lo: number, hi: number) =>
@@ -126,9 +169,26 @@ export function resolveShot(
 
 	const forwardSpeed = speed * Math.cos(angle);
 	const verticalSpeed = speed * Math.sin(angle);
-	const lateralSpeed =
-		clamp(timingError / MISS_WINDOW, -1, 1) * LATERAL_SPEED_MAX;
 
 	const forward = side === "near" ? -1 : 1;
-	return { x: lateralSpeed, y: verticalSpeed, z: forward * forwardSpeed };
+	// A right-hander pulls the ball across their body: the near player faces
+	// -z so their right side is +x and their forehand sweeps toward -x, and
+	// the far player, facing the other way, mirrors it. Both cases are
+	// `forward`'s own sign, which is why this is one multiply and not a
+	// per-side table. A serve has no stroke side and goes straight.
+	const strokeSign =
+		swing.kind === "serve" ? 0 : swing.kind === "forehand" ? forward : -forward;
+	// Quality pulls the aim back toward the middle: a scruffy contact is not
+	// finding the corner, and aiming it there would only send it out.
+	const targetX = strokeSign * CROSS_COURT_X * quality;
+	const aim = clamp(
+		(targetX - contact.x) / AIM_FLIGHT_TIME,
+		-LATERAL_SPEED_MAX,
+		LATERAL_SPEED_MAX,
+	);
+	// Outside the clean window the racket face is not where the player
+	// thought, and the ball leaves in the direction the timing erred.
+	const spray = Math.sign(timingError) * MISHIT_SPRAY_MAX * (1 - quality);
+
+	return { x: aim + spray, y: verticalSpeed, z: forward * forwardSpeed };
 }

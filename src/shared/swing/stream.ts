@@ -19,7 +19,8 @@ import {
 	MIN_SWING_DURATION_MS,
 	rotMagnitude,
 	SWING_ROT_THRESHOLD_DEG_S,
-	swingFromPeak,
+	swingFrom,
+	TURN_AXIS,
 } from "./detector.ts";
 import { MAX_GAP_MS, type MotionSample } from "./trace.ts";
 
@@ -35,6 +36,26 @@ import { MAX_GAP_MS, type MotionSample } from "./trace.ts";
  * a local maximum of a swing still accelerating.
  */
 export const PEAK_DECAY_EMIT = 0.7;
+
+/**
+ * Extra milliseconds of the swing to watch after the decay trigger fires,
+ * before announcing it.
+ *
+ * The decay trigger says "the peak is behind us". It does not say the swing
+ * is over, and the difference decides forehand from backhand: at the trigger
+ * the racket is often still coming through, and the fastest turn of the whole
+ * swing has not happened yet. Measured across all 15 swing traces — the 9
+ * original 6s captures plus the 6 new 30s ones — the direction is right in
+ * 47 of 55 emissions at +0ms and **52 of 55 at +150ms**. On isolated swings
+ * cut out with real quiet either side, which is what gameplay actually looks
+ * like, it is 50 of 52. Past +150ms nothing further is gained.
+ *
+ * The cost is latency: median 133ms after the peak becomes 200ms, p90 334ms.
+ * That would be unaffordable — `MISS_WINDOW` is 280ms, so p90 would read as a
+ * whiff — except that `Swing.lag` now carries the delay and the host subtracts
+ * it. See `llm-knowledge/decisions/0013-detector-latency-is-compensated.md`.
+ */
+export const EMIT_HOLD_MS = 150;
 
 export interface SwingStream {
 	/**
@@ -55,6 +76,15 @@ export function createSwingStream(): SwingStream {
 	let lastHot: number | null = null;
 	let peak: MotionSample | null = null;
 	let peakMag = 0;
+	// The fastest turn seen so far, tracked separately from the loudest
+	// sample because they are routinely different samples and this is the one
+	// that decides which way the ball goes (`detector.ts`, `turnOf`).
+	let turn: MotionSample | null = null;
+	let turnMag = 0;
+	// Sample time at which a swing whose peak is already behind it will be
+	// announced. Set by the decay trigger, not acted on until it passes, so
+	// the run keeps feeding `peak` and `turn` in the meantime.
+	let holdUntil: number | null = null;
 	// Absolute sample time until which everything is ignored. This is the
 	// streaming equivalent of the batch detector's episode merge: one swing's
 	// backswing, strike and follow-through must announce themselves once.
@@ -65,11 +95,14 @@ export function createSwingStream(): SwingStream {
 		lastHot = null;
 		peak = null;
 		peakMag = 0;
+		turn = null;
+		turnMag = 0;
+		holdUntil = null;
 	};
 
 	const emit = (at: number): Swing | null => {
-		if (peak === null) return null;
-		const swing = swingFromPeak(peak);
+		if (peak === null || turn === null) return null;
+		const swing = { ...swingFrom(peak, turn), lag: at - peak.t };
 		mutedUntil = at + EPISODE_MERGE_GAP_MS;
 		clearRun();
 		return swing;
@@ -104,10 +137,21 @@ export function createSwingStream(): SwingStream {
 					peakMag = magnitude;
 					peak = sample;
 				}
+				const turning = Math.abs(sample.rot[TURN_AXIS] ?? 0);
+				if (turning > turnMag) {
+					turnMag = turning;
+					turn = sample;
+				}
+				// The hold set by an earlier decay trigger. Everything above
+				// still ran, so the swing announced here is the best view of
+				// it available — that is the entire point of waiting.
+				if (holdUntil !== null) {
+					return sample.t >= holdUntil ? emit(sample.t) : null;
+				}
 				// Duration measured to this sample, exactly as `findRuns` does.
 				const qualified = sample.t - runStart >= MIN_SWING_DURATION_MS;
 				if (qualified && magnitude < peakMag * PEAK_DECAY_EMIT) {
-					return emit(sample.t);
+					holdUntil = sample.t + EMIT_HOLD_MS;
 				}
 				return null;
 			}

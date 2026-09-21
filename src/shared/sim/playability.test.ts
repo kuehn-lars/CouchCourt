@@ -39,10 +39,15 @@ import type { Ball, Vec3 } from "./state.ts";
 const ENV: BallEnv = { gravityScale: 1, drag: DRAG_K };
 const DT = 1 / 120;
 
+// `lag: 0` throughout: these fixtures name their own timing error directly,
+// so the detector-latency compensation in `rally.ts` must not shift it. A
+// swing with no `lag` is assumed to have taken DEFAULT_SWING_LAG_MS, which
+// would silently turn every "well-timed" case here into a 200ms-early one.
 const swing = (kind: Swing["kind"], power: number): Swing => ({
 	kind,
 	power,
 	at: 0,
+	lag: 0,
 });
 
 /**

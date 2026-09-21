@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Swing } from "../protocol.ts";
-import { BALL_RADIUS } from "./court.ts";
+import { DEFAULT_SWING_LAG_MS, type Swing } from "../protocol.ts";
+import { BALL_RADIUS, BASELINE_Z } from "./court.ts";
+import { predictCrossingTime } from "./players.ts";
 import {
 	createMatch,
+	envFor,
 	type MatchState,
 	type RallyInput,
 	tick,
@@ -89,6 +91,95 @@ describe("input handling", () => {
 
 		expect(next.ball).toEqual(control.ball);
 		expect(next.toHit).toBe("near");
+	});
+});
+
+// The phone stopped guessing serves on 2026-09-21: hard forehands produce
+// the same wrist spike a serve does. The sim knows from `phase` instead —
+// llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md.
+describe("the sim decides what a serve is, not the phone", () => {
+	it("plays a swing labelled forehand as a serve when the point has not started", () => {
+		const s = createMatch("near");
+		expect(s.phase).toBe("waiting-serve");
+		const after = tick(
+			s,
+			[{ side: "near", swing: swing("forehand", 0.6), time: 0 }],
+			DT,
+		);
+
+		expect(after.phase).toBe("serve-flight");
+		// A serve is struck overhead and dead straight. A forehand played as
+		// a forehand would leave with a cross-court x and groundstroke speed.
+		expect(after.ball.v.x).toBe(0);
+		expect(Math.abs(after.ball.v.z)).toBeGreaterThan(20);
+	});
+
+	it("plays a swing labelled serve during a rally as a groundstroke", () => {
+		const s = state({
+			phase: "rally",
+			toHit: "near",
+			ball: still({ x: 0, y: 1, z: 10 }),
+		});
+		const after = tick(
+			s,
+			[{ side: "near", swing: swing("serve", 0.6), time: 0 }],
+			DT,
+		);
+
+		// It connected, and it went somewhere sideways — a serve would not.
+		expect(after.toHit).toBe("far");
+		expect(after.ball.v.x).not.toBe(0);
+	});
+});
+
+// The detector announces a swing EMIT_HOLD_MS+ after the peak, and says so.
+// Without this the whole game reads as late — see
+// llm-knowledge/decisions/0013-detector-latency-is-compensated.md.
+describe("detector latency", () => {
+	const incoming: Ball = {
+		p: { x: 0, y: 1.6, z: -2 },
+		v: { x: 0, y: 1.2, z: 9 },
+	};
+	const base = state({
+		phase: "rally",
+		toHit: "near",
+		ball: incoming,
+		time: 0,
+	});
+	const crossing = predictCrossingTime(incoming, envFor(base), BASELINE_Z);
+
+	/** The outgoing ball from a swing announced at `at` claiming `lag` ms.
+	 * `undefined` means the swing carries no `lag` at all, which is a
+	 * different message from one carrying zero — `exactOptionalPropertyTypes`
+	 * is on, so the property has to be genuinely absent. */
+	const hit = (at: number, lag: number | undefined): Ball["v"] => {
+		const base0 = swing("forehand", 0.8);
+		const s: Swing = lag === undefined ? base0 : { ...base0, lag };
+		return tick(base, [{ side: "near", swing: s, time: at }], DT).ball.v;
+	};
+
+	it("has a ball that actually reaches the striker", () => {
+		expect(crossing).toBeDefined();
+	});
+
+	it("judges a swing announced late, but reporting its lag, exactly as a prompt one", () => {
+		const ideal = crossing ?? 0;
+		expect(hit(ideal + 0.2, 200)).toEqual(hit(ideal, 0));
+	});
+
+	it("judges a swing that hides its lag as the late swing it appears to be", () => {
+		const ideal = crossing ?? 0;
+		expect(hit(ideal + 0.2, 0)).not.toEqual(hit(ideal, 0));
+	});
+
+	// An older controller sends no `lag`. Treating that as zero would punish
+	// it for a delay it is still incurring, so the fallback is the measured
+	// typical delay.
+	it("assumes the typical lag when a controller reports none", () => {
+		const ideal = crossing ?? 0;
+		expect(hit(ideal + DEFAULT_SWING_LAG_MS / 1000, undefined)).toEqual(
+			hit(ideal, 0),
+		);
 	});
 });
 

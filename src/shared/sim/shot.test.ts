@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Swing } from "../protocol.ts";
 import { type BallEnv, stepBall } from "./ball.ts";
 import { BASELINE_Z, SINGLES_HALF_WIDTH } from "./court.ts";
-import { MISS_WINDOW, resolveShot } from "./shot.ts";
+import { CLEAN_WINDOW, MISS_WINDOW, resolveShot } from "./shot.ts";
 import type { Vec3 } from "./state.ts";
 
 const ENV: BallEnv = { gravityScale: 1.3, drag: 0.0206 };
@@ -72,23 +72,145 @@ describe("resolveShot", () => {
 		expect(v).toBeUndefined();
 	});
 
-	it("early and late timing produce opposite lateral signs", () => {
+	// The direction mechanic, replacing timing's sign on 2026-09-21 — see
+	// llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md.
+	describe("direction comes from the swing, not from the timing", () => {
 		const start = contact(0, 1, BASELINE_Z);
-		const early = resolveShot(
-			swing("forehand", 0.8),
-			-0.2,
-			start,
-			"near",
-		) as Vec3;
-		const late = resolveShot(
-			swing("forehand", 0.8),
-			0.2,
-			start,
-			"near",
-		) as Vec3;
 
-		expect(early.x).not.toBe(0);
-		expect(Math.sign(early.x)).toBe(-Math.sign(late.x));
+		it("sends a forehand and a backhand opposite ways from identical timing", () => {
+			const fore = resolveShot(
+				swing("forehand", 0.8),
+				0,
+				start,
+				"near",
+			) as Vec3;
+			const back = resolveShot(
+				swing("backhand", 0.8),
+				0,
+				start,
+				"near",
+			) as Vec3;
+
+			expect(fore.x).not.toBe(0);
+			expect(Math.sign(fore.x)).toBe(-Math.sign(back.x));
+		});
+
+		// A right-hander pulls the ball across their body. The near player
+		// faces -z so their right side is +x, and a forehand there sweeps
+		// toward -x; the far player faces the other way, so it mirrors. This
+		// is the same convention bot.ts already uses to pick which stroke it
+		// is playing, and the two must not drift apart.
+		it("mirrors the same stroke for the far player", () => {
+			const near = resolveShot(
+				swing("forehand", 0.8),
+				0,
+				start,
+				"near",
+			) as Vec3;
+			const far = resolveShot(
+				swing("forehand", 0.8),
+				0,
+				contact(0, 1, -BASELINE_Z),
+				"far",
+			) as Vec3;
+
+			expect(Math.sign(near.x)).toBe(-Math.sign(far.x));
+		});
+
+		it("pulls a forehand toward -x for the near player", () => {
+			const fore = resolveShot(
+				swing("forehand", 0.8),
+				0,
+				start,
+				"near",
+			) as Vec3;
+			expect(fore.x).toBeLessThan(0);
+		});
+
+		it("does not let timing steer a cleanly struck ball: early and late go the same way", () => {
+			const early = resolveShot(
+				swing("forehand", 0.8),
+				-0.1,
+				start,
+				"near",
+			) as Vec3;
+			const late = resolveShot(
+				swing("forehand", 0.8),
+				0.1,
+				start,
+				"near",
+			) as Vec3;
+
+			expect(early.x).toBe(late.x);
+		});
+
+		// The property a fixed sideways speed could not hold. A player who has
+		// run to the corner must still be able to hit the court.
+		it("aims at the same place wherever it is struck from", () => {
+			for (const x of [-3.5, -2, 0, 2, 3.5]) {
+				const from = contact(x, 1, BASELINE_Z);
+				const v = resolveShot(swing("forehand", 0.8), 0, from, "near");
+				expect(v, `no shot from x=${x}`).toBeDefined();
+				const bounce = land(from, v as Vec3);
+				expect(bounce, `never landed from x=${x}`).toBeDefined();
+				expect(
+					Math.abs(bounce?.x ?? Number.POSITIVE_INFINITY),
+					`from x=${x} landed at x=${bounce?.x}`,
+				).toBeLessThanOrEqual(SINGLES_HALF_WIDTH);
+				// A near forehand belongs on the -x half, from anywhere.
+				expect(bounce?.x ?? 1, `from x=${x}`).toBeLessThan(0);
+			}
+		});
+
+		// Timing keeps doing what it is good at: it decides how well the ball
+		// was struck, and a bad enough contact sprays it away from where the
+		// stroke was aimed. This is what keeps mishits out of the court now
+		// that timing no longer steers a clean ball.
+		it("sprays a badly mistimed stroke the way the timing erred, not the way the stroke went", () => {
+			const clean = resolveShot(
+				swing("forehand", 0.8),
+				0,
+				start,
+				"near",
+			) as Vec3;
+			const late = resolveShot(
+				swing("forehand", 0.8),
+				0.26,
+				start,
+				"near",
+			) as Vec3;
+
+			expect(clean.x).toBeLessThan(0); // aimed across, toward -x
+			expect(late.x).toBeGreaterThan(0); // sprayed the other way entirely
+		});
+
+		it("does not spray a stroke timed inside the clean window", () => {
+			const middle = resolveShot(
+				swing("forehand", 0.8),
+				0,
+				start,
+				"near",
+			) as Vec3;
+			const edge = resolveShot(
+				swing("forehand", 0.8),
+				CLEAN_WINDOW,
+				start,
+				"near",
+			) as Vec3;
+
+			expect(edge.x).toBe(middle.x);
+		});
+
+		it("hits a serve straight, because there is no stroke side to read", () => {
+			const serve = resolveShot(
+				swing("serve", 0.7),
+				0,
+				contact(0, 2.6, BASELINE_Z),
+				"near",
+			) as Vec3;
+
+			expect(serve.x).toBe(0);
+		});
 	});
 
 	it("a mishit arcs higher than a clean hit, not just shorter", () => {

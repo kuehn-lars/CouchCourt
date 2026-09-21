@@ -111,6 +111,10 @@ export function createBot(side: Side, skill = 0.75): Bot {
 			power,
 			at: state.time,
 			spin: SPIN_CYCLE[shot % SPIN_CYCLE.length] ?? 0,
+			// The bot has no phone and no detector between it and the sim, so
+			// it reports no delay. Leaving this out would have the sim assume
+			// DEFAULT_SWING_LAG_MS and judge every bot shot 200ms early.
+			lag: 0,
 		};
 	};
 
@@ -127,6 +131,7 @@ export function createBot(side: Side, skill = 0.75): Bot {
 						power: SERVE_POWER,
 						at: state.time,
 						spin: 0,
+						lag: 0,
 					};
 				} else {
 					// Commit once, to the trajectory as it stands now. Not

@@ -29,7 +29,12 @@
  * `llm-knowledge/decisions/0002-host-authoritative-simulation.md`.
  */
 
-import type { Side, Swing } from "../protocol.ts";
+import {
+	DEFAULT_SWING_LAG_MS,
+	MAX_SWING_LAG_MS,
+	type Side,
+	type Swing,
+} from "../protocol.ts";
 import { type BallEnv, DRAG_K, stepBall } from "./ball.ts";
 import { BASELINE_Z, isInBounds, isInServiceBox } from "./court.ts";
 import {
@@ -166,6 +171,42 @@ function fault(state: MatchState): MatchState {
 	};
 }
 
+/**
+ * When the swing actually happened, in sim time: arrival minus the delay the
+ * phone's detector reports having taken to recognise it
+ * (`llm-knowledge/decisions/0013-detector-latency-is-compensated.md`). Both
+ * ends of that delay are read from the phone's own clock, so it is a duration
+ * and carries none of the cross-device skew
+ * `llm-knowledge/decisions/0007-host-arrival-time-for-swing-timing.md`
+ * refuses to trust.
+ *
+ * Clamped as well as defaulted: `RallyInput` is built from a parsed wire
+ * message in the host and from `bot.ts` in the same process, and only the
+ * first of those has been through `isControllerMessage`.
+ */
+function swingTime(input: RallyInput): number {
+	const reported = input.swing.lag ?? DEFAULT_SWING_LAG_MS;
+	const lag = Math.min(Math.max(reported, 0), MAX_SWING_LAG_MS);
+	return input.time - lag / 1000;
+}
+
+/**
+ * The stroke the sim will play, which is not always the one the phone named.
+ *
+ * A serve is decided here, from `phase`, and never by the detector: the phone
+ * used to guess it from a wrist spike and the 30s captures of 2026-09-21
+ * showed hard forehands producing the same spike. Going the other way, a
+ * controller that claims a serve mid-rally is played as a forehand rather
+ * than rejected — "guess in the player's favour", and the wire guard lets the
+ * value through.
+ */
+function strokeFor(state: MatchState, swing: Swing): Swing {
+	if (state.phase === "waiting-serve") {
+		return swing.kind === "serve" ? swing : { ...swing, kind: "serve" };
+	}
+	return swing.kind === "serve" ? { ...swing, kind: "forehand" } : swing;
+}
+
 /** `timingError` for a swing arriving now from `toHit`, against the ball's
  * *current* trajectory — recomputed every call, never cached, so a shot that
  * clips the net mid-flight is judged on where it actually ends up. Falls
@@ -179,20 +220,16 @@ function timingErrorFor(state: MatchState, input: RallyInput): number {
 		baselineZ(state.toHit),
 	);
 	if (predicted === undefined) return 0;
-	return input.time - (state.time + predicted);
+	return swingTime(input) - (state.time + predicted);
 }
 
 function applySwing(state: MatchState, input: RallyInput): MatchState {
 	if (state.score.setWinner || input.side !== state.toHit) return state;
 
+	const stroke = strokeFor(state, input.swing);
 	const timingError =
 		state.phase === "waiting-serve" ? 0 : timingErrorFor(state, input);
-	const outgoing = resolveShot(
-		input.swing,
-		timingError,
-		state.ball.p,
-		input.side,
-	);
+	const outgoing = resolveShot(stroke, timingError, state.ball.p, input.side);
 	if (!outgoing) return state; // whiff: the second-bounce rule settles it
 
 	return {
@@ -200,7 +237,7 @@ function applySwing(state: MatchState, input: RallyInput): MatchState {
 		ball: { p: state.ball.p, v: outgoing },
 		toHit: other(state.toHit),
 		bounces: 0,
-		spin: input.swing.spin ?? 0,
+		spin: stroke.spin ?? 0,
 		phase: state.phase === "waiting-serve" ? "serve-flight" : "rally",
 	};
 }
