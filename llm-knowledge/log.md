@@ -249,3 +249,78 @@ across a 20-minute wait dies, so poll with short-lived connections and attach
 to an existing tab instead of opening one.
 
 **Still not verified: a real phone, a real swing, a real frame rate.**
+
+## 2026-09-21 — The swing decides where the ball goes, and the players go and get it
+
+The report was blunt: a forehand and a backhand played identically, and the
+game should feel like Wii Tennis. Both halves turned out to be one problem —
+nothing downstream of the phone believed anything the phone said about the
+swing, and nothing on the court moved to meet the ball.
+
+**Six new 30-second captures were the first thing, and they broke the
+detector.** Nine 6s traces had said it was perfect; the new ones said 53%,
+with `forehand-06` at **0 out of 10**. Two separate faults:
+`SERVE_GAMMA_THRESHOLD_DEG_S` was measuring swing *speed* (hard forehands hit
+`|γ|` of 1063), and alpha was being read at the magnitude peak, which in a
+fast swing is often almost pure gamma. The signed alpha integral over a whole
+episode is 52/52 correct, but cannot be streamed; **alpha at the largest-|α|
+sample**, held 150ms past the decay trigger, gets 52/55 and 50/52 on
+gameplay-shaped swings with zero false positives. The phone stopped guessing
+serves entirely — the sim knows from `phase`.
+[[0012-swing-kind-is-the-shot-direction]],
+[[2026-09-21-swing-direction-classifier]].
+
+**Holding 150ms exposed a bug that predated it.** Detector latency was already
+133ms against a 120ms clean window and **nothing anywhere compensated for
+it** — every swing a person made was reading late. `Swing.lag` now carries
+the delay, measured inside the phone's own clock so 0007 still holds, and the
+host subtracts it. [[0013-detector-latency-is-compensated]].
+
+**Direction from the stroke, aimed at a place.** The first version was the
+"one lerp" 0008 called for and it broke three tests immediately; dropping the
+constant would have hidden the real problem, which only appears once players
+move — a fixed sideways push from `x = +3` lands out at all 20 powers.
+Aiming instead lands 150 of 200 across five contact positions and both
+strokes. `MISHIT_SPRAY_MAX` deliberately restores the "a bad mishit does not
+land in" property that had been resting on direction-from-timing.
+
+**Players run in x and z, and one predictor says where and when.**
+[[0014-players-run-to-the-ball]]. Volleys fall out of asking "can I get
+behind the bounce in time" rather than from a rule about when a volley is
+allowed. Three bugs on the way, all found by instrumenting a rally that had
+gone quiet: a predictor that did not know the ball had already bounced, a
+strike time computed from the player's speed instead of the ball's (~130ms
+late on every groundstroke), and a reachability test that a ball moving away
+faster than a player runs can never satisfy.
+
+**Four distinct swing animations**, driven by a new `MatchState.stroke`, and
+`detectEvents` pulled into its own `render/events.ts` so it could be tested —
+it had none, and it is now the branch deciding which animation plays.
+
+**Watching it run found four more bugs, and none of them were in the game.**
+The server *died* on the first attempt: `relay.ts` had no `error` listener on
+any socket, and Node throws an unhandled `'error'`, so one malformed frame
+takes down the host page, every controller and the relay together
+([[relay-survives-a-broken-client]]). The relay dropped `lag` on the wire, on
+the day the field was added, exactly as a comment in its own test file had
+warned. The relay was killing Vite's HMR socket, and the first fix for that —
+`path` — **did not work**, because `ws` answers 400 and destroys a
+non-matching upgrade rather than declining it; the browser kept saying so
+after a test said otherwise ([[one-port-one-websocket-path]]). And a
+screenshot showed a player with their legs off the bottom of the frame:
+the camera was framing the range players used to occupy
+([[2026-09-21-camera-frames-a-moving-player]]).
+
+Two tests had to be rewritten because they were measuring the wrong thing.
+`bot.test.ts`'s skill check counted score *changes*, which reads backwards
+once a hopeless bot loses 6-0 and stops. The first relay-path test asserted a
+second listener was *called* — which an EventEmitter does either way, so it
+passed under the mutant while throwing in the background.
+
+391 tests, typecheck, lint, build and vault green. The match was then watched
+through a full game in headless Chrome with no console errors.
+
+**Still not verified: a real phone, a real swing, a real frame rate.** And the
+direction accuracy is still measured only against multi-rep captures — six
+single swings at rally spacing remain the recording this project keeps asking
+for.

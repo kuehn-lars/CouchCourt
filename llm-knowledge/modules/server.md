@@ -1,6 +1,6 @@
 ---
 title: "Module: src/server — the relay"
-updated: 2026-09-20
+updated: 2026-09-21
 tags: [module, server, networking]
 status: current
 code:
@@ -107,6 +107,25 @@ server, winner? }`, host → relay → every phone. The relay stores none of it.
 - **The heartbeat is our code.** `ws` gives `ping`/`pong` primitives and no
   policy; without the interval a locked phone lingers in the lobby forever.
   Deleting `ws.terminate()` has been watched failing the liveness test.
+- **Every socket has an `error` listener, and so does the server.** Node
+  throws an unhandled `'error'` event, which for a `ws` socket means the
+  process exits — the host page, every controller and the relay together. A
+  malformed *frame* never reaches `parseControllerMessage`, so the guards
+  above do not cover this. One killed client took the whole server down on
+  2026-09-21: [[relay-survives-a-broken-client]].
+- **The relay listens on `RELAY_PATH`, via `noServer` and its own `upgrade`
+  handler — never `new WebSocketServer({ server })`.** It shares a port with
+  Vite's HMR socket, and `{ server }` answers every upgrade on that server.
+  Adding `path` does *not* fix it: `ws` replies 400 and destroys the socket
+  instead of declining. [[one-port-one-websocket-path]].
+- **`RELAY_PATH` lives in `src/shared/protocol.ts`.** The host page, the
+  controller and all three integration tests have to agree with it; a path is
+  part of the wire contract like any message shape.
+- **The relay rebuilds a forwarded `swing` field by field**, so a new field on
+  `Swing` is silently dropped unless it is added here too. There is a comment
+  in `relay.test.ts` warning about this, written before it was sprung — and it
+  was sprung anyway, on `lag`, the day the field was added
+  ([[0013-detector-latency-is-compensated]]). Add the field *and* its test.
 
 ## Why not Socket.IO
 

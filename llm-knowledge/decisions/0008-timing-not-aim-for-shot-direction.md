@@ -1,14 +1,27 @@
 ---
 title: Shot direction comes from swing timing, not phone aim
-updated: 2026-09-20
+updated: 2026-09-21
 tags: [decision, sim, input, core]
 status: current
+superseded-in-part-by: 0012-swing-kind-is-the-shot-direction
 code:
   - `src/shared/sim/shot.ts`
   - `src/shared/protocol.ts`
 ---
 
 # 0008 — Shot direction comes from swing timing, not phone aim
+
+> **Superseded in part, 2026-09-21.** Direction no longer comes from timing:
+> it comes from which stroke you played, and the shot aims at a place rather
+> than pushing sideways at a fixed speed. See
+> [[0012-swing-kind-is-the-shot-direction]] for what changed and why the
+> reasoning below stopped applying once players could leave their baselines.
+>
+> **The rest of this note still holds**, and it is not a small rest: the
+> refusal to read phone yaw, the calibration cost that rules it out, the `aim`
+> stream being deliberately dead, and the camera rule. Amended rather than
+> marked superseded, on the precedent of
+> [[0006-relay-session-policy]] — one clause changed, not the note.
 
 Settled with the user on 2026-09-19 before any simulation code was written,
 recorded in the simulation build plan's up-front decision table, and promoted
@@ -50,6 +63,15 @@ argument the project has already declined.
   it was considered and rejected while building `shot.ts`: the plan's "one
   lerp" was taken literally, because a geometry solve reintroduces exactly the
   precision the timing approach exists to avoid.
+
+  **This is the clause that was overturned.** It was right while both players
+  stood on the centre mark forever; once they ran, a fixed sideways push from
+  `x = +3` landed out at all 20 powers. The solve that replaced it is a
+  division by a constant flight time, and sweeping its two constants over
+  their plausible ranges moves the outcome by two shots in two hundred — so
+  it is not the precision this bullet was guarding against. See
+  [[0012-swing-kind-is-the-shot-direction]] and
+  [[0014-players-run-to-the-ball]].
 - **Leaving `contact` unused.** `resolveShot`'s signature asks for a contact
   point, and a parameter the body never reads is worse than no parameter. It
   is used for `contact.y` instead: a low contact needs more launch angle to
@@ -66,6 +88,8 @@ argument the project has already declined.
   a consumer. It is not — do not wire it into the sim on the assumption it was
   forgotten. Removing it is also not obviously right: a cheap upstream channel
   that already works is worth keeping while the controller is unbuilt.
+- **`resolveShot` now reads `contact.x` as well as `contact.y`**, which the
+  bullet above said it would not. See the amendment.
 - **A serve is always dead straight.** A serve is self-initiated, so there is
   no incoming ball to time against and its timing error is hardcoded to zero —
   which means full quality and zero lateral speed. No serve toss or rhythm
@@ -77,5 +101,6 @@ argument the project has already declined.
 
 ## See also
 
+[[0012-swing-kind-is-the-shot-direction]] (what replaced the direction rule) ·
 [[0007-host-arrival-time-for-swing-timing]] (the other half of how a swing is
 read) · [[modules/shared-sim]] · [[wire-protocol]] · [[modules/shared-protocol]]

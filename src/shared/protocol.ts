@@ -15,6 +15,21 @@
 /** Bumped on any breaking change. A controller with a different version is rejected. */
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * The URL path the relay listens on, and the only one it will answer an
+ * upgrade for.
+ *
+ * **Not cosmetic.** The relay shares a port and an origin with Vite, by
+ * design (`llm-knowledge/decisions/0010-vite-preview-as-production-server.md`),
+ * and Vite runs its own WebSocket server for HMR on that same port. A
+ * `WebSocketServer` with no `path` answers *every* upgrade on the server it
+ * is attached to, so both of them answered Vite's HMR handshake and the
+ * browser got two overlapping responses: `Invalid frame header`, HMR dead,
+ * and the host page reload-looping on "server connection lost". Watched
+ * happening on 2026-09-21.
+ */
+export const RELAY_PATH = "/relay";
+
 /** Largest `Swing.lag` the host will accept, milliseconds. A swing cannot
  * have taken longer than the detector's whole episode window to announce, and
  * anything larger is a broken or hostile controller. */

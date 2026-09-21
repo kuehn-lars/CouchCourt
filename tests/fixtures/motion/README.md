@@ -86,3 +86,23 @@ plausibly changes the sample rate.
 What these captures actually measured — the real rate, the stall behaviour, and
 why a peak-angular-velocity threshold is not enough on its own — is in
 `llm-knowledge/experiments/2026-09-19-ios-devicemotion-sampling.md`.
+
+## What these traces have already overturned, twice
+
+Adding captures has made the detector look **worse** both times, which is the
+point of adding them.
+
+The first nine (6 seconds each) said peak angular velocity cannot separate a
+soft backhand from a hand gesture — the ranges overlap
+(`llm-knowledge/experiments/2026-09-19-ios-devicemotion-sampling.md`).
+
+The six 30-second captures added on 2026-09-21 said the *classifier* was
+wrong too: 53% correct overall, with `forehand-06` at 0 out of 10. A serve
+threshold on `|gamma|` turned out to be measuring swing speed, and reading
+alpha at the magnitude peak turned out to be reading noise. See
+`llm-knowledge/experiments/2026-09-21-swing-direction-classifier.md`.
+
+**So treat any accuracy figure derived from this directory as an upper
+bound.** Every trace here is still a multi-rep capture, and the game only ever
+sees single swings with a pause either side. Six of those, recorded with
+rally-like spacing, are the next thing this set needs.

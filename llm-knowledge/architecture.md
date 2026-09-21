@@ -1,6 +1,6 @@
 ---
 title: How SwingCourt fits together
-updated: 2026-09-20
+updated: 2026-09-21
 tags: [map, architecture, core]
 status: current
 code:
@@ -54,7 +54,7 @@ This is the path that matters. Everything else in the codebase supports it.
    │  MotionSample[]
    ▼
  createSwingStream()     ①✅
-   │  Swing{kind,power,at}
+   │  Swing{kind,power,at,spin,lag}
    ▼
  ws.send {t:"swing"}     ②✅ ──▶  parseControllerMessage
                                  attach playerId from socket
@@ -72,11 +72,13 @@ This is the path that matters. Everything else in the codebase supports it.
                                           ▼
                                         tick(state, inputs, dt)
                                           │  applySwing
-                                          │    → timingErrorFor
-                                          │    → resolveShot  → ball.v
-                                          │  stepBall         → net?/bounce?
-                                          │  resolveStep      → point?
-                                          │  movePlayers
+                                          │    → strokeFor     (serve? from phase)
+                                          │    → swingTime     (minus swing.lag ⑤)
+                                          │    → predictStrike (where + when ⑥)
+                                          │    → resolveShot   → ball.v
+                                          │  stepBall          → net?/bounce?
+                                          │  resolveStep       → point?
+                                          │  movePlayers       → predictStrike again
                                           ▼
                                         MatchState (new object)
                                           │
@@ -88,13 +90,28 @@ This is the path that matters. Everything else in the codebase supports it.
  buzz  ◀──  {t:"feedback"}  ◀──  route to playerId  ◀──  send feedback ④
 ```
 
-① ② **Built 2026-09-20**, not yet seen running on a phone. The `Swing`
-also carries `spin`, read from the phone's `beta` rotation axis, which
-becomes the in-flight ball's `gravityScale` — the one place phone motion
-reaches the physics beyond power. [[2026-09-20-spin-from-wrist-roll]].
+① ② **Built 2026-09-20**, not yet seen running on a phone. What the phone
+decides is deliberately small: **which way the racket swept** (forehand or
+backhand — never a serve, the sim knows that from `phase`), how hard, the
+wrist roll for `spin`, and how long it took to notice. Everything else is the
+host's.
 ③ The swing is stamped with the **host's** sim clock, never the phone's
 `swing.at` — [[0007-host-arrival-time-for-swing-timing]].
 ④ `hit`/`miss` per swing, `point` to both phones on a score change.
+⑤ `swing.lag` is a duration measured inside the phone's own clock, so
+subtracting it does not reintroduce the skew ③ exists to avoid. Without it
+every swing reads late: the detector announces ~200ms after the peak and the
+clean window is 120ms. [[0013-detector-latency-is-compensated]].
+⑥ **`predictStrike` is the hinge of the whole diagram.** One function answers
+where a player meets the ball and when, and the swing's timing, both players'
+feet, the bot's plan and the avatars all read that same answer. Two functions
+answering it is how a player gets judged against a ball arriving ten metres
+behind them. [[0014-players-run-to-the-ball]].
+
+**Where the ball goes** is `swing.kind`, not the timing — the stroke you
+played, aimed at a place on the far side rather than pushed sideways at a
+fixed speed. Timing decides how well you hit it, and sprays it when you did
+not. [[0012-swing-kind-is-the-shot-direction]].
 
 ## What each hop is allowed to assume
 
@@ -231,10 +248,20 @@ screen, rematch, and back to the lobby — plus pause-on-disconnect and the
 controller's join flow, with no console errors on either page. The first time
 anything here has been watched rather than inferred.
 
+Watched again on 2026-09-21 after the direction, movement and animation work:
+lobby, countdown, a game played out with the scoreboard ticking through
+0 all / 15 / 30 / 40 / Game, players running to the ball, no console errors.
+Four bugs came out of that run and **none of them were in the game** — the
+relay dying on a malformed frame, the relay dropping a field on the wire, the
+relay killing Vite's HMR socket, and a camera framing a range players had
+outgrown.
+
 A real phone, a real swing and a real frame rate have not. Headless Chrome
 renders through SwiftShader and has no motion sensors, so it says nothing
 about 60fps on a MacBook GPU and nothing at all about feel, which is the bar
-`PRODUCT.md` sets.
+`PRODUCT.md` sets. Nor has the direction classifier been measured against a
+single swing recorded at rally spacing — every committed trace is a
+multi-rep capture. [[2026-09-21-swing-direction-classifier]].
 
 ## What is deliberately not here
 

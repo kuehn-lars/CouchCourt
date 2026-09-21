@@ -23,6 +23,8 @@ read it before changing a message.
 | Kind | Names |
 | --- | --- |
 | Version | `PROTOCOL_VERSION` — bump on any breaking change |
+| Transport | `RELAY_PATH` — the URL path the relay owns, shared with Vite's port |
+| Bounds | `MAX_SWING_LAG_MS`, `DEFAULT_SWING_LAG_MS` |
 | Identity | `PlayerId`, `Side` (`near`/`far`), `LobbyPlayer` |
 | Payloads | `Aim`, `Swing`, `SwingKind`, `FeedbackKind` |
 | Message unions | `ControllerMessage`, `ControllerBoundMessage`, `HostMessage`, `HostBoundMessage` |
@@ -91,6 +93,25 @@ oversight, so [[wire-protocol]] records the reasoning.
   that reloads mid-lobby cannot rebuild a roster from deltas it was not
   connected for. See [[modules/server]].
 
+## Changes of 2026-09-21
+
+- **`Swing.lag`** — optional, milliseconds between the swing's peak and the
+  moment the phone's detector announced it. The host subtracts it from arrival
+  time, because **nothing compensated for detector latency before** and every
+  swing was therefore reading late. Bounded by `MAX_SWING_LAG_MS`; absent
+  means `DEFAULT_SWING_LAG_MS`, not zero. Optional on the `spin` precedent, and
+  `PROTOCOL_VERSION` does not move. [[0013-detector-latency-is-compensated]].
+  **The relay dropped it** on the day it was added, exactly as the `spin`
+  warning above predicted.
+- **`SwingKind`'s `serve` became a value only the sim produces.** The phone no
+  longer guesses serves — the threshold it used turned out to be measuring
+  swing speed. The guard still accepts `serve` from a controller and the sim
+  overrides it. [[0012-swing-kind-is-the-shot-direction]].
+- **`RELAY_PATH`** — the relay's own URL path, here rather than in the server
+  because the host page, the controller and three integration tests all have
+  to agree with it. Sharing a port with Vite's HMR socket makes a path part of
+  the contract: [[one-port-one-websocket-path]].
+
 ## Fields with a trap in them
 
 - **`Swing.at` is the phone's own `performance.now()`.** It is valid for
@@ -105,6 +126,12 @@ oversight, so [[wire-protocol]] records the reasoning.
   the sim on the assumption that it was simply forgotten.
 - **`feedback` is not authoritative for anything.** It drives haptics on the
   phone. The host has already decided what happened.
+- **`Swing.lag` is a duration, not a timestamp, and that is the whole reason
+  it is allowed.** Both ends of it are read from the same phone's clock
+  milliseconds apart, so the skew that makes `Swing.at` useless across devices
+  cancels exactly. Do not "improve" it into an absolute time.
+- **`SwingKind` has three values and a phone sends two of them.** A controller
+  claiming `serve` mid-rally is played as a forehand rather than rejected.
 
 ## Deliberately absent
 
@@ -115,4 +142,6 @@ lost on real hardware, that is the moment to reconsider — not before.
 ## See also
 
 [[wire-protocol]] · [[architecture]] · [[modules/server]] ·
-[[0005-raw-websockets-over-socket-io]] · [[ios-safari-tab-suspension]]
+[[0005-raw-websockets-over-socket-io]] · [[ios-safari-tab-suspension]] ·
+[[0012-swing-kind-is-the-shot-direction]] ·
+[[0013-detector-latency-is-compensated]] · [[one-port-one-websocket-path]]

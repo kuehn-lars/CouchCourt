@@ -16,6 +16,7 @@ import {
 	type MatchInfo,
 	type PlayerId,
 	PROTOCOL_VERSION,
+	RELAY_PATH,
 	type Side,
 } from "../shared/protocol.ts";
 
@@ -107,7 +108,7 @@ export function createSession(handlers: {
 		}
 		handlers.onState(attempt === 0 ? "connecting" : "reconnecting");
 
-		const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+		const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${RELAY_PATH}`;
 		const ws = new WebSocket(url);
 		socket = ws;
 

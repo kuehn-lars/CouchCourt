@@ -1,6 +1,6 @@
 ---
 title: "Module: src/shared/swing — traces and swing detection"
-updated: 2026-09-20
+updated: 2026-09-21
 tags: [module, swing-detection, motion]
 status: current
 code:
@@ -30,9 +30,9 @@ the short version is that batch cannot be fast enough for a live game.
 | File | Holds |
 | --- | --- |
 | `src/shared/swing/trace.ts` | `MotionSample`, `MotionTrace`, `isTrace`, `toSample`, `formatTrace`, `measuredHz`, `longestGapMs`, `nextTraceName`, `MAX_GAP_MS` |
-| `src/shared/swing/detector.ts` | `detectSwings` (batch), `rotMagnitude`, `swingFromPeak`, and every tuned threshold |
-| `src/shared/swing/stream.ts` | `createSwingStream` (live), `PEAK_DECAY_EMIT` |
-| `tests/fixtures/motion/` | 20 committed captures, seven labels, plus their README |
+| `src/shared/swing/detector.ts` | `detectSwings` (batch), `rotMagnitude`, `swingFrom`, `TURN_AXIS`, and every tuned threshold |
+| `src/shared/swing/stream.ts` | `createSwingStream` (live), `PEAK_DECAY_EMIT`, `EMIT_HOLD_MS` |
+| `tests/fixtures/motion/` | 26 committed captures, seven labels, plus their README |
 
 ## Wiring — and the seam
 
@@ -40,7 +40,7 @@ the short version is that batch cannot be fast enough for a live game.
 record.ts (controller)    ──▶ trace.ts    toSample, measuredHz, longestGapMs
 trace-endpoint.ts         ──▶ trace.ts    isTrace, formatTrace, nextTraceName
 detector.ts                    trace.ts    MotionSample
-stream.ts                 ──▶ detector.ts  rotMagnitude, swingFromPeak,
+stream.ts                 ──▶ detector.ts  rotMagnitude, swingFrom, TURN_AXIS,
                                             SWING_ROT_THRESHOLD_DEG_S,
                                             MIN_SWING_DURATION_MS,
                                             EPISODE_MERGE_GAP_MS
@@ -54,7 +54,7 @@ detectSwings (batch)       ◀── NOTHING in production, still only its own t
 uses the streaming detector, never a rolling buffer into batch (measured
 1066ms too slow, see [[2026-09-20-streaming-swing-latency]]). But the
 classification/scaling logic `detectSwings` depends on — `rotMagnitude` and
-`swingFromPeak`, split out of a private `toSwing` specifically so both
+`swingFrom`, split out of a private `toSwing` specifically so both
 detectors share one definition — now runs in production every time the phone
 streams a swing. [[architecture]]'s seam 1 (no controller entry module) is
 closed; see [[modules/controller]] for what was built and what is still
@@ -79,13 +79,29 @@ What works is **duration at a moderate threshold**, then merging:
 2. Merge runs within `EPISODE_MERGE_GAP_MS` (800ms) into one episode — a real
    swing's rotation dips between backswing, forward swing and follow-through,
    fracturing it into several short runs.
-3. Classify the **merged episode's peak sample**: `|γ| ≥ 350°/s` → serve
-   (pronation snap); otherwise sign of `α` → forehand (+) or backhand (−).
-4. `power` = peak magnitude mapped linearly from 400–1400°/s onto 0.15–1.0.
+3. Classify from the episode's **largest turn** — the sample where `|α|` is
+   greatest, which is usually *not* the magnitude peak. Positive → forehand,
+   negative → backhand. That is the phone's whole judgement.
+4. `power` = peak magnitude mapped linearly from 400–1400°/s onto 0.15–1.0,
+   taken from the magnitude peak, which is a different sample again.
 
-Result on the fixtures: 0 misclassifications, 0 false positives, 0 misses
-across all 20 traces, 18 episodes. Every threshold sits on a measured plateau,
-not a knife-edge — the derivation is [[2026-09-19-swing-detector-tuning]].
+**The phone does not classify serves.** It did, from `|γ| ≥ 350°/s`, until six
+30-second captures showed hard forehands reaching `|γ|` of 1063. That was a
+fast-swing signature, not a serve signature, and no value separates the two.
+The sim assigns `serve` from `phase` instead
+([[0012-swing-kind-is-the-shot-direction]]).
+
+**Reading `α` at the magnitude peak was the other half of the same mistake.**
+In `forehand-06` the peak sample is almost pure `γ` — `(3, 241, 1012)` — so
+the decision rested on noise, and all ten of that trace's swings came out
+wrong. Numbers, the twelve statistics tried, and the grip-invariant approach
+that failed: [[2026-09-21-swing-direction-classifier]].
+
+Result on the fixtures: **0 false positives and 0 misses across all 26
+traces**, and direction right on 52 of 55 streamed emissions (50 of 52 on
+gameplay-shaped isolated swings). Every threshold sits on a measured plateau,
+not a knife-edge — the original derivation is
+[[2026-09-19-swing-detector-tuning]].
 
 The `power` floor of **0.15, not 0**, is a feel decision, not a measurement: a
 swing that cleared the duration gate was a real attempt and should never read
@@ -111,6 +127,17 @@ as nothing. `PRODUCT.md` asks to guess in the player's favour.
   fiction is worse than no detector.
 - **`nextTraceName` is max-plus-one, not count-plus-one**, so deleting a trace
   cannot cause a silent overwrite.
+- **Both detectors classify through `swingFrom`, and it takes TWO samples.**
+  `peak` (loudest — power, spin, `at`) and `turn` (largest `|α|` — forehand or
+  backhand). They are routinely different samples and confusing them is the
+  bug [[2026-09-21-swing-direction-classifier]] documents. The stream tracks
+  both incrementally; `detectSwings` picks both out of the episode.
+- **Only the stream can fill `Swing.lag`,** because only it has an emission
+  moment to measure the peak against. `detectSwings` leaves it absent, which
+  is why `stream.test.ts` compares the two with `lag` destructured off.
+- **More traces have made the detector look worse, twice now.** Nine 6s
+  captures said 100% and six 30s captures said 53%. Assume the current figure
+  is the optimistic one until single swings at rally spacing exist.
 
 ## Facts about the sensor worth not re-measuring
 
@@ -134,3 +161,7 @@ as nothing. `PRODUCT.md` asks to guess in the player's favour.
 [[architecture]] · [[modules/controller]] · [[0009-streaming-swing-detection]] ·
 [[2026-09-20-streaming-swing-latency]] · [[ios-motion-permission]] ·
 [[2026-09-19-ios-devicemotion-sampling]] · [[2026-09-19-swing-detector-tuning]]
+
+Also: [[0012-swing-kind-is-the-shot-direction]] ·
+[[0013-detector-latency-is-compensated]] ·
+[[2026-09-21-swing-direction-classifier]]

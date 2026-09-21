@@ -5,8 +5,9 @@
  * llm-knowledge/decisions/0005-raw-websockets-over-socket-io.md.
  */
 
-import type { Server as HttpServer } from "node:http";
+import type { Server as HttpServer, IncomingMessage } from "node:http";
 import type { Server as HttpsServer } from "node:https";
+import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
 import {
 	type ControllerBoundMessage,
@@ -14,6 +15,7 @@ import {
 	type PlayerId,
 	parseControllerMessage,
 	parseHostMessage,
+	RELAY_PATH,
 } from "../shared/protocol.ts";
 import { Lobby } from "./lobby.ts";
 
@@ -43,7 +45,37 @@ export function attachRelay(
 ): Relay {
 	const lobby = options.lobby ?? new Lobby();
 	const pingIntervalMs = options.pingIntervalMs ?? DEFAULT_PING_INTERVAL_MS;
-	const wss = new WebSocketServer({ server });
+	// `noServer` plus our own upgrade listener, and NOT `{ server }` — with
+	// or without `path`.
+	//
+	// Given `{ server }`, `ws` installs an upgrade listener that answers
+	// EVERY upgrade on that server. Adding `path` does not make it decline
+	// the others: `ws` calls `abortHandshake(socket, 400)` on them
+	// (`websocket-server.js`, `shouldHandle`), which destroys a socket that
+	// was never its business. This server is shared with Vite, whose HMR
+	// socket lives on `/`, so that 400 killed HMR and left the host page
+	// reload-looping — watched happening on 2026-09-21 AFTER `path` had been
+	// added, which is how the difference was found. See
+	// `llm-knowledge/platform/one-port-one-websocket-path.md`.
+	//
+	// Returning from the listener instead leaves the socket untouched for
+	// whoever else is listening.
+	const wss = new WebSocketServer({ noServer: true });
+
+	const onUpgrade = (
+		req: IncomingMessage,
+		socket: Duplex,
+		head: Buffer,
+	): void => {
+		// `req.url` is a path with an optional query, never absolute, so the
+		// base here is only to satisfy `URL` and is never used.
+		const { pathname } = new URL(req.url ?? "/", "http://relay.invalid");
+		if (pathname !== RELAY_PATH) return;
+		wss.handleUpgrade(req, socket, head, (ws) => {
+			wss.emit("connection", ws, req);
+		});
+	};
+	server.on("upgrade", onUpgrade);
 
 	// The host is a single connection, tracked here rather than in Lobby, so
 	// Lobby stays socket-free. connsByPlayer is the equivalent for controllers,
@@ -155,6 +187,7 @@ export function attachRelay(
 							power: msg.power,
 							at: msg.at,
 							...(msg.spin !== undefined ? { spin: msg.spin } : {}),
+							...(msg.lag !== undefined ? { lag: msg.lag } : {}),
 						},
 					});
 				}
@@ -188,6 +221,20 @@ export function attachRelay(
 		alive.set(ws, true);
 		ws.on("pong", () => alive.set(ws, true));
 
+		// Not optional, and not merely tidy. `ws` raises `error` on this
+		// socket for a malformed FRAME — a half-written close frame from a
+		// client that died mid-send is enough — and Node's rule for an
+		// unhandled 'error' event is to throw it, which ends the process.
+		// That is the whole server: the host page, every controller, the
+		// relay. Watched happening on 2026-09-21 with
+		// `Invalid WebSocket frame: invalid status code 51066`.
+		//
+		// `protocol.ts` insists everything off a socket is untrusted and
+		// guards the JSON. This is the layer underneath, where a guest on
+		// bad Wi-Fi could otherwise end the party. Drop the socket, keep
+		// the game: `close` follows and does the lobby bookkeeping.
+		ws.on("error", () => ws.terminate());
+
 		ws.on("message", (data: WebSocket.RawData) => {
 			const raw = data.toString();
 			const playerId = lobby.playerIdFor(ws);
@@ -211,6 +258,10 @@ export function attachRelay(
 		});
 	});
 
+	// Same rule one level up: an error on the server (a failed upgrade, a
+	// socket that dies during the handshake) is just as fatal unhandled.
+	wss.on("error", () => {});
+
 	const heartbeat = setInterval(() => {
 		for (const ws of wss.clients) {
 			if (alive.get(ws) === false) {
@@ -226,6 +277,10 @@ export function attachRelay(
 		wss,
 		close() {
 			clearInterval(heartbeat);
+			// Ours to remove: we added it, and a preview server outliving a
+			// relay would otherwise keep a dead handler on its upgrade path.
+			server.off("upgrade", onUpgrade);
+			for (const ws of wss.clients) ws.terminate();
 			wss.close();
 		},
 	};

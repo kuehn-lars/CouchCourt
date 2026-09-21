@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 import { BASELINE_Z, SINGLES_HALF_WIDTH } from "../../shared/sim/court.ts";
+import { NET_KEEP_OUT, RUN_BACK } from "../../shared/sim/players.ts";
 import {
 	CAMERA_MODES,
 	type CameraPose,
@@ -22,11 +23,20 @@ import {
  * screen. Lives here rather than in `camera.ts` because nothing but this
  * test needs it, and a production export that exists for a test is just a
  * test in the wrong file. */
-const playerAnchor = (side: "near" | "far", x: number): Vec3Mutable => ({
+const playerAnchor = (
+	side: "near" | "far",
+	x: number,
+	z = side === "near" ? BASELINE_Z : -BASELINE_Z,
+): Vec3Mutable => ({
 	x: Math.max(-SINGLES_HALF_WIDTH, Math.min(SINGLES_HALF_WIDTH, x)),
 	y: 0.9,
-	z: side === "near" ? BASELINE_Z : -BASELINE_Z,
+	z,
 });
+
+/** The avatar is about 1.8m of person standing on the court, and a camera
+ * that frames its chest and nothing else still cuts its legs off. */
+const PLAYER_FEET = 0.05;
+const PLAYER_HEAD = 1.8;
 
 /** 16:9, the shape of nearly every screen this will run on. */
 const ASPECT = 16 / 9;
@@ -105,6 +115,38 @@ describe("cameraPose", () => {
 			expect(isVisible(pose, playerAnchor(hitter, 0))).toBe(true);
 		}
 	});
+
+	// Players stopped living on their baselines on 2026-09-21
+	// (llm-knowledge/decisions/0014-players-run-to-the-ball.md): they run in
+	// for a short ball and back for a deep one, anywhere from NET_KEEP_OUT to
+	// BASELINE_Z + RUN_BACK. Watched in a screenshot: the near player, having
+	// run back for a deep ball, was cut off at the bottom of the frame with
+	// their legs off screen. Nothing was wrong with the camera — it was
+	// framing a range that no longer matched where players go.
+	it.each(BOTH_PLAYER_MODES)(
+		"frames a player whole, anywhere they can actually stand, in %s mode",
+		(mode) => {
+			const pose = cameraPose(mode, BALL_AT_NET);
+			for (const depth of [
+				NET_KEEP_OUT,
+				4,
+				8,
+				BASELINE_Z,
+				BASELINE_Z + RUN_BACK,
+			]) {
+				for (const side of ["near", "far"] as const) {
+					const z = side === "near" ? depth : -depth;
+					// Feet AND head. Checking chest height alone passes while
+					// the legs hang off the bottom of the screen, which is
+					// exactly what the screenshot showed.
+					for (const y of [PLAYER_FEET, PLAYER_HEAD]) {
+						const at = { ...playerAnchor(side, 0, z), y };
+						expect(isVisible(pose, at), `${side} at z=${z}, y=${y}`).toBe(true);
+					}
+				}
+			}
+		},
+	);
 
 	it("keeps the ball in frame all the way down the court in every mode", () => {
 		for (const mode of CAMERA_MODES) {

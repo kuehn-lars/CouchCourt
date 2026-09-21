@@ -1,6 +1,6 @@
 ---
 title: Index
-updated: 2026-09-20
+updated: 2026-09-21
 tags: [meta]
 status: current
 ---
@@ -53,6 +53,9 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0009-streaming-swing-detection]] | The phone emits a swing before it finishes. Why `detectSwings` cannot be streamed, and what firing early costs |
 | [[0010-vite-preview-as-production-server]] | `npm start` is `vite build && vite preview`. Why no hand-written Node entry point exists |
 | [[0011-qrcode-generator-dependency]] | The one new dependency, and why the join code is not hand-rolled |
+| [[0012-swing-kind-is-the-shot-direction]] | The stroke you play decides where the ball goes. Supersedes 0008's direction rule, and why the phone stopped guessing serves |
+| [[0013-detector-latency-is-compensated]] | The phone reports how late its detector was and the host subtracts it. Every swing had been reading late |
+| [[0014-players-run-to-the-ball]] | Players move in x and z, and one predictor says where they meet the ball and when |
 
 ## Platform
 
@@ -67,6 +70,8 @@ around. **These are the ones that cost an afternoon if you skip them.**
 | [[ios-safari-tab-suspension]] | The phone will drop its socket. By design, not as an edge case |
 | [[vitest-is-a-vite-serve]] | `apply: "serve"` is not a dev-only gate |
 | [[vite-https-is-http2]] | Every Vite server with TLS is an `Http2SecureServer`. The relay has always been on one |
+| [[one-port-one-websocket-path]] | Sharing a port with Vite means sharing its upgrade handler, and `ws` does not decline politely |
+| [[relay-survives-a-broken-client]] | One malformed frame from one phone ended the whole server. Every `ws` socket needs an `error` listener |
 
 ## Reference
 
@@ -95,6 +100,8 @@ the evidence that produced them.
 | [[2026-09-20-serve-that-lands]] | The serve landed at 7 powers in 21. Contact height and a power-lerped angle make it 21 of 21 |
 | [[2026-09-20-spin-from-wrist-roll]] | Where `Swing.spin` comes from, and why no committed fixture can confirm it |
 | [[2026-09-20-camera-framing]] | The far player rendered at 0.25x the near one. Why a frustum test could not catch it |
+| [[2026-09-21-swing-direction-classifier]] | What actually tells a forehand from a backhand, the twelve statistics tried, and the grip-invariant idea that does not pay |
+| [[2026-09-21-camera-frames-a-moving-player]] | The camera framed a court, not the players in it — and the guard passed while the legs hung off the screen |
 | [[2026-09-20-serve-reachability]] | **Superseded.** The original, wrong claim — kept so nobody re-derives it |
 
 ## Sessions
@@ -107,23 +114,28 @@ folders above and recorded in [[log]]. See `llm-knowledge/sessions/README.md`.
 
 Things that are true today and that a session should not be surprised by.
 
-- **Both seams are closed as of 2026-09-20.** The controller is built and
-  `npm start` (`vite build && vite preview`) serves the built pages with the
-  relay attached — [[0010-vite-preview-as-production-server]]. What remains
-  is hardware verification, not wiring.
-- **Seen in a browser, never on a phone.** 2026-09-20: the whole match loop
-  — lobby, countdown, a set played out to 6-0, the winner screen, rematch —
-  plus the controller's join flow, all in headless Chrome with no console
-  errors, and screenshots drove three rounds of fixes. But headless Chrome has no motion sensors and renders through
-  SwiftShader, so frame rate, the wake lock, reconnect-after-suspension, the
-  tuned shot constants and `Swing.spin`'s axis are all still unverified
-  against real hardware. See [[modules/controller]]'s "What is and is not
-  verified".
-- **The streaming detector's backswing-misfire finding is against
-  multi-rep fixtures only.** Every committed trace is a multi-swing capture;
-  the game only ever sees single swings. [[0009-streaming-swing-detection]]'s
-  "What would overturn this" names six single-swing traces, recorded with
-  rally-like spacing, as the next thing to check with a phone in hand.
+- **Seen running in a browser, never on a phone.** 2026-09-21: the whole
+  loop again — lobby, countdown, a game played out, the scoreboard ticking
+  through 0 all / 15 / 30 / 40 / Game — in headless Chrome with **no console
+  errors**, and it found four bugs no test had
+  ([[relay-survives-a-broken-client]], [[one-port-one-websocket-path]], a
+  dropped `lag` on the wire, [[2026-09-21-camera-frames-a-moving-player]]).
+  Still no motion sensors and still SwiftShader, so frame rate, the wake
+  lock, reconnect-after-suspension and `Swing.spin`'s axis remain unverified
+  against real hardware.
+- **The direction classifier's 94.5% is the pessimistic figure, and the
+  optimistic one is unmeasured.** Every committed trace is a multi-rep
+  capture; the 96.2% "isolated swing" number is cut out of those, so both the
+  ready position and the pause between swings are synthetic. Six genuine
+  single swings at rally spacing would settle it — the same recording
+  [[0009-streaming-swing-detection]] has been asking for since it was
+  written. See [[2026-09-21-swing-direction-classifier]].
+- **Adding traces has made the detector look worse twice.** Nine 6s captures
+  said 100%; six 30s captures said 53%. Treat any current accuracy figure as
+  an upper bound.
+- **`Swing.spin`'s rotation axis is still a design decision, not a
+  measurement** ([[2026-09-20-spin-from-wrist-roll]]). Unchanged by the
+  2026-09-21 work, which only touched the direction axis.
 - **Two perfect bots rally forever.** 273 hits and no point in 40,000 ticks
   ([[modules/shared-sim]]). Solo mode uses skill 0.7, which does lose points
   — but nothing stops a rally that never ends, and no rally-length cap

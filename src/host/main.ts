@@ -26,6 +26,7 @@ import {
 	type MatchPhase,
 	type PlayerId,
 	PROTOCOL_VERSION,
+	RELAY_PATH,
 	type Side,
 } from "../shared/protocol.ts";
 import { type Bot, createBot } from "../shared/sim/bot.ts";
@@ -52,7 +53,7 @@ const renderer = createRenderer(canvas, uiRoot);
 const audio = createAudio();
 
 const socket = new WebSocket(
-	`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`,
+	`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${RELAY_PATH}`,
 );
 
 function send(msg: HostMessage): void {

@@ -8,9 +8,9 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
-import { WebSocket } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import { attachRelay, type RelayOptions } from "../../src/server/relay.ts";
-import { PROTOCOL_VERSION } from "../../src/shared/protocol.ts";
+import { PROTOCOL_VERSION, RELAY_PATH } from "../../src/shared/protocol.ts";
 
 const TIMEOUT_MS = 2000;
 
@@ -79,6 +79,8 @@ function send(ws: WebSocket, msg: unknown): void {
 
 interface Ctx {
 	url: string;
+	/** The live relay, so a test can reach a real server-side socket. */
+	relay: ReturnType<typeof attachRelay>;
 }
 
 async function withRelay(
@@ -90,7 +92,7 @@ async function withRelay(
 	const { port } = httpServer.address() as AddressInfo;
 	const relay = attachRelay(httpServer, options);
 	try {
-		await run({ url: `ws://127.0.0.1:${port}` });
+		await run({ url: `ws://127.0.0.1:${port}${RELAY_PATH}`, relay });
 	} finally {
 		for (const ws of openSockets.splice(0)) ws.terminate();
 		relay.close();
@@ -304,6 +306,131 @@ describe("relay — swing forwarding", () => {
 				playerId: assigned.playerId,
 				swing: { kind: "forehand", power: 0.5, at: 42, spin: -0.6 },
 			});
+		}));
+
+	// And the warning above came true the day `lag` was added: the host
+	// back-dates a swing by it, so a relay that drops it silently undoes the
+	// whole of 0013 and every swing reads late again.
+	it("forwards a swing's lag to the host", () =>
+		withRelay({}, async ({ url }) => {
+			const host = await connect(url);
+			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+			await nextMessages(host, 1);
+
+			const phone = await connect(url);
+			send(phone, { t: "hello", v: PROTOCOL_VERSION });
+			const [assigned] = (await nextMessages(phone, 1)) as [
+				{ playerId: string },
+			];
+			await nextMessages(host, 1);
+
+			send(phone, {
+				t: "swing",
+				kind: "backhand",
+				power: 0.5,
+				at: 42,
+				lag: 180,
+			});
+			const [forwarded] = await nextMessages(host, 1);
+
+			expect(forwarded).toEqual({
+				t: "swing",
+				playerId: assigned.playerId,
+				swing: { kind: "backhand", power: 0.5, at: 42, lag: 180 },
+			});
+		}));
+});
+
+// Found by watching the game run, not by reading the code: an abruptly
+// killed client left a half-written frame, `ws` raised `Invalid WebSocket
+// frame: invalid status code 51066` on that socket, and because nothing was
+// listening for `error` Node's unhandled-'error' rule threw and took the
+// WHOLE server down — host page, every controller, the relay, the lot.
+//
+// `protocol.ts` makes a point of treating everything off a socket as
+// untrusted, and it does, at the JSON layer. The FRAME layer underneath it
+// was not guarded at all, and one guest on flaky Wi-Fi could end the party.
+// The relay shares a port and an origin with Vite, and Vite runs its own
+// WebSocket server there for HMR. A `WebSocketServer` with no `path` answers
+// EVERY upgrade on the server it is attached to, so both answered the HMR
+// handshake, the browser got two overlapping responses — `Invalid frame
+// header` — and the host page sat in a reload loop on "server connection
+// lost". Found by watching the game run; no test could see it, because every
+// test connected to the relay's own URL and got the relay.
+describe("relay — the port is shared, so the path is not", () => {
+	// The property that matters is not "a client on another path fails". `ws`
+	// will happily give you that by answering 400 and destroying the socket,
+	// which is precisely the bug: it kills Vite's HMR socket on its way past.
+	// The property is that somebody ELSE'S upgrade handler still gets called.
+	it("leaves another upgrade handler on the same server its own upgrades", async () => {
+		const httpServer = createServer();
+		await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+		const { port } = httpServer.address() as AddressInfo;
+		const relay = attachRelay(httpServer, {});
+
+		// Stands in for Vite's HMR server: a second listener on the same
+		// server, on its own path. It closes with a code nothing else uses,
+		// which is the only way to tell who actually completed the handshake
+		// — BOTH listeners are called either way, because that is what an
+		// EventEmitter does, so "was my listener called" proves nothing.
+		const OTHERS_CLOSE_CODE = 4001;
+		const other = new WebSocketServer({ noServer: true });
+		httpServer.on("upgrade", (req, socket, head) => {
+			if (!req.url?.startsWith("/hmr")) return;
+			other.handleUpgrade(req, socket, head, (ws) =>
+				ws.close(OTHERS_CLOSE_CODE),
+			);
+		});
+
+		try {
+			const ws = new WebSocket(`ws://127.0.0.1:${port}/hmr?token=abc`);
+			openSockets.push(ws);
+			const outcome = await new Promise<string>((resolve) => {
+				ws.once("close", (code) => resolve(`closed ${code}`));
+				ws.once("error", (e) => resolve(`killed: ${e.message}`));
+				setTimeout(() => resolve("never answered"), 2000);
+			});
+
+			expect(outcome).toBe(`closed ${OTHERS_CLOSE_CODE}`);
+		} finally {
+			for (const ws of openSockets.splice(0)) ws.terminate();
+			other.close();
+			relay.close();
+			await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+		}
+	});
+
+	it("still answers its own path", () =>
+		withRelay({}, async ({ url }) => {
+			const ws = await connect(url);
+			send(ws, { t: "hello", v: PROTOCOL_VERSION });
+			expect((await nextMessages(ws, 1))[0]).toMatchObject({ t: "assigned" });
+		}));
+});
+
+describe("relay — a broken client must not take the server with it", () => {
+	it("survives a socket error and keeps serving everyone else", () =>
+		withRelay({}, async ({ url, relay }) => {
+			const host = await connect(url);
+			send(host, { t: "host-hello", v: PROTOCOL_VERSION });
+			await nextMessages(host, 1);
+
+			const phone = await connect(url);
+			send(phone, { t: "hello", v: PROTOCOL_VERSION });
+			await nextMessages(phone, 1);
+			await nextMessages(host, 1);
+
+			// Exactly what Node does to an unhandled 'error': raise it on a
+			// live server socket and see whether the process is still here.
+			const victim = [...relay.wss.clients][0];
+			expect(victim).toBeDefined();
+			victim?.emit("error", new RangeError("Invalid WebSocket frame"));
+
+			// The other socket is untouched and the relay still relays.
+			const second = await connect(url);
+			send(second, { t: "hello", v: PROTOCOL_VERSION });
+			const [assigned] = await nextMessages(second, 1);
+			expect(assigned).toMatchObject({ t: "assigned" });
 		}));
 });
 
