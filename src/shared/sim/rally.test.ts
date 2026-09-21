@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SWING_LAG_MS, type Swing } from "../protocol.ts";
 import { BALL_RADIUS, BASELINE_Z } from "./court.ts";
-import { predictCrossingTime } from "./players.ts";
+import { MAX_LOOKAHEAD, predictStrike } from "./players.ts";
 import {
 	createMatch,
 	envFor,
@@ -118,11 +118,19 @@ describe("the sim decides what a serve is, not the phone", () => {
 		const s = state({
 			phase: "rally",
 			toHit: "near",
-			ball: still({ x: 0, y: 1, z: 10 }),
+			ball: { p: { x: 0, y: 1.6, z: -2 }, v: { x: 0, y: 1.2, z: 9 } },
+			time: 0,
 		});
+		const when = predictStrike(s.ball, envFor(s), "near", s.players.near).t;
 		const after = tick(
 			s,
-			[{ side: "near", swing: swing("serve", 0.6), time: 0 }],
+			[
+				{
+					side: "near",
+					swing: { ...swing("serve", 0.6), lag: 0 },
+					time: when,
+				},
+			],
 			DT,
 		);
 
@@ -146,7 +154,12 @@ describe("detector latency", () => {
 		ball: incoming,
 		time: 0,
 	});
-	const crossing = predictCrossingTime(incoming, envFor(base), BASELINE_Z);
+	const crossing = predictStrike(
+		incoming,
+		envFor(base),
+		"near",
+		base.players.near,
+	).t;
 
 	/** The outgoing ball from a swing announced at `at` claiming `lag` ms.
 	 * `undefined` means the swing carries no `lag` at all, which is a
@@ -159,16 +172,17 @@ describe("detector latency", () => {
 	};
 
 	it("has a ball that actually reaches the striker", () => {
-		expect(crossing).toBeDefined();
+		expect(crossing).toBeGreaterThan(0);
+		expect(crossing).toBeLessThan(MAX_LOOKAHEAD);
 	});
 
 	it("judges a swing announced late, but reporting its lag, exactly as a prompt one", () => {
-		const ideal = crossing ?? 0;
+		const ideal = crossing;
 		expect(hit(ideal + 0.2, 200)).toEqual(hit(ideal, 0));
 	});
 
 	it("judges a swing that hides its lag as the late swing it appears to be", () => {
-		const ideal = crossing ?? 0;
+		const ideal = crossing;
 		expect(hit(ideal + 0.2, 0)).not.toEqual(hit(ideal, 0));
 	});
 
@@ -176,10 +190,102 @@ describe("detector latency", () => {
 	// it for a delay it is still incurring, so the fallback is the measured
 	// typical delay.
 	it("assumes the typical lag when a controller reports none", () => {
-		const ideal = crossing ?? 0;
+		const ideal = crossing;
 		expect(hit(ideal + DEFAULT_SWING_LAG_MS / 1000, undefined)).toEqual(
 			hit(ideal, 0),
 		);
+	});
+});
+
+// The renderer animates a forehand differently from a backhand, a serve and
+// a volley, and `detectEvents` derives a hit from a `toHit` flip — by which
+// point the swing is long gone. So the stroke that produced the ball in
+// flight lives in state, exactly as `spin` does.
+describe("the stroke that produced the shot", () => {
+	it("is null before anyone has hit anything", () => {
+		expect(createMatch("near").stroke).toBeNull();
+	});
+
+	it("records the serve, and who played it", () => {
+		const after = tick(
+			createMatch("near"),
+			[{ side: "near", swing: swing("forehand", 0.6), time: 0 }],
+			DT,
+		);
+
+		expect(after.stroke).toEqual({
+			side: "near",
+			kind: "serve",
+			power: 0.6,
+			air: false,
+		});
+	});
+
+	it("records a groundstroke as the stroke the sim actually played", () => {
+		const s = state({
+			phase: "rally",
+			toHit: "near",
+			ball: { p: { x: 0, y: 1.6, z: -2 }, v: { x: 0, y: 1.2, z: 9 } },
+			time: 0,
+		});
+		const when = predictStrike(s.ball, envFor(s), "near", s.players.near).t;
+		const after = tick(
+			s,
+			[
+				{
+					side: "near",
+					swing: { ...swing("backhand", 0.4), lag: 0 },
+					time: when,
+				},
+			],
+			DT,
+		);
+
+		expect(after.stroke?.kind).toBe("backhand");
+		expect(after.stroke?.side).toBe("near");
+	});
+
+	it("marks a ball taken before it bounced as played out of the air", () => {
+		// Already bounced once, so there is no ground option left at all.
+		const s = state({
+			phase: "rally",
+			toHit: "near",
+			bounces: 1,
+			ball: { p: { x: 0, y: 1.1, z: 6 }, v: { x: 0, y: 1, z: 6 } },
+			players: {
+				near: { side: "near", x: 0, z: 7 },
+				far: { side: "far", x: 0, z: -BASELINE_Z },
+			},
+			time: 0,
+		});
+		const strike = predictStrike(
+			s.ball,
+			envFor(s),
+			"near",
+			s.players.near,
+			true,
+		);
+		expect(strike.air).toBe(true);
+
+		const after = tick(
+			s,
+			[
+				{
+					side: "near",
+					swing: { ...swing("forehand", 0.5), lag: 0 },
+					time: strike.t,
+				},
+			],
+			DT,
+		);
+
+		expect(after.stroke?.air).toBe(true);
+	});
+
+	it("keeps the stroke that is in flight, not the one being set up", () => {
+		// Point over and restarted: nothing is in flight, so nothing is shown.
+		const s = state({ phase: "point-over" });
+		expect(tick(s, [], DT).stroke).toBeNull();
 	});
 });
 

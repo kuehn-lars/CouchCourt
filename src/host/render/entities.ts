@@ -174,20 +174,103 @@ const ARM_RADIUS = 0.085;
 const ARM_LENGTH = 0.46;
 const SHADOW_RADIUS = 0.42;
 const RACKET_REST_ANGLE = -0.3;
-const SWING_PEAK_ANGLE = 1.9;
-const SWING_DURATION = 0.22;
+
+/**
+ * One animation per stroke, because one animation for all of them reads as a
+ * bug: a serve played as a waist-high sweep looks like the avatar missed.
+ *
+ * Angles are local to the racket pivot at the player's right shoulder, and
+ * the far player's whole group is already yawed by PI, so nothing here needs
+ * mirroring per side. `pitch` is rotation about x (up and over), `yaw` about
+ * y (across the body), `roll` about z (the wrist), and `twist` turns the
+ * shoulders with the shot.
+ */
+interface SwingAnim {
+	readonly duration: number;
+	readonly pitchFrom: number;
+	readonly pitchTo: number;
+	readonly yawFrom: number;
+	readonly yawTo: number;
+	readonly roll: number;
+	readonly twist: number;
+}
+
+export type StrokeAnim = "forehand" | "backhand" | "serve" | "volley";
+
+const SWING_ANIMS: Readonly<Record<StrokeAnim, SwingAnim>> = {
+	// Low to high, sweeping right to left across the body, shoulders opening.
+	forehand: {
+		duration: 0.26,
+		pitchFrom: 0.5,
+		pitchTo: -1.5,
+		yawFrom: -1.0,
+		yawTo: 1.4,
+		roll: -0.5,
+		twist: 0.45,
+	},
+	// The mirror of it, and shorter: a backhand is a more compact stroke.
+	backhand: {
+		duration: 0.23,
+		pitchFrom: 0.4,
+		pitchTo: -1.4,
+		yawFrom: 1.2,
+		yawTo: -1.3,
+		roll: 0.5,
+		twist: -0.5,
+	},
+	// Over the top, from behind the head, and the slowest of the four.
+	serve: {
+		duration: 0.36,
+		pitchFrom: -2.7,
+		pitchTo: 1.0,
+		yawFrom: 0.35,
+		yawTo: -0.2,
+		roll: -0.2,
+		twist: 0.25,
+	},
+	// A block, not a swing: almost no backswing and over in a blink.
+	volley: {
+		duration: 0.14,
+		pitchFrom: -0.8,
+		pitchTo: -0.15,
+		yawFrom: -0.35,
+		yawTo: 0.3,
+		roll: 0.1,
+		twist: 0.15,
+	},
+};
+
+/**
+ * Per-swing variation, cycled by swing index rather than drawn from an RNG —
+ * the same deterministic-variation trick `sim/bot.ts` uses, and for a weaker
+ * but real reason: two identical forehands in a row read as a looping GIF.
+ * Multiplies the animation's amplitude and duration.
+ */
+const SWING_VARIATION: readonly number[] = [1, 0.92, 1.08, 0.96, 1.04, 0.88];
 
 const SIDE_COLOR: Readonly<Record<Side, string>> = {
 	near: "#ff5d73",
 	far: "#ffd166",
 };
 
+/** A swing in progress. `undefined` on the rig means the player is at rest. */
+interface SwingPlay {
+	readonly anim: SwingAnim;
+	/** Scales every angle: a hard swing is a bigger one. */
+	readonly amp: number;
+	readonly duration: number;
+	elapsed: number;
+}
+
 interface PlayerRig {
 	readonly group: THREE.Group;
 	readonly racket: THREE.Object3D;
-	readonly baseZ: number;
-	/** Seconds elapsed since `swing()` was called, or `undefined` at rest. */
-	swingElapsed: number | undefined;
+	/** The group's resting yaw, which the far player's is PI. A swing twists
+	 * the shoulders away from it and back. */
+	readonly baseYaw: number;
+	play: SwingPlay | undefined;
+	/** Counts swings, to walk `SWING_VARIATION`. */
+	swings: number;
 }
 
 /**
@@ -196,9 +279,8 @@ interface PlayerRig {
  * — but a capsule with a ball on top reads as a skittle at this camera
  * distance, and legs are most of what makes it read as a person instead.
  */
-function buildPlayer(side: Side, baseZ: number): PlayerRig {
+function buildPlayer(side: Side): PlayerRig {
 	const group = new THREE.Group();
-	group.position.z = baseZ;
 	group.rotation.y = side === "near" ? 0 : Math.PI;
 
 	const shirt = new THREE.MeshStandardMaterial({
@@ -315,7 +397,13 @@ function buildPlayer(side: Side, baseZ: number): PlayerRig {
 	shadow.position.y = 0.006;
 	group.add(shadow);
 
-	return { group, racket: racketPivot, baseZ, swingElapsed: undefined };
+	return {
+		group,
+		racket: racketPivot,
+		baseYaw: group.rotation.y,
+		play: undefined,
+		swings: 0,
+	};
 }
 
 export interface PlayersVisual {
@@ -325,43 +413,68 @@ export interface PlayersVisual {
 		alpha: number,
 		dt: number,
 	): void;
-	/** Starts the swing animation on `side`. */
-	swing(side: Side): void;
+	/** Starts the animation for `stroke` on `side`. */
+	swing(side: Side, stroke: StrokeAnim, power: number): void;
 }
 
-export function createPlayersVisual(
-	scene: THREE.Scene,
-	baseZ: Readonly<Record<Side, number>>,
-): PlayersVisual {
+/** Eased 0 to 1: fast out of the backswing, settling into the follow-through. */
+const easeOut = (t: number): number => 1 - (1 - t) ** 3;
+
+export function createPlayersVisual(scene: THREE.Scene): PlayersVisual {
 	const rigs: Readonly<Record<Side, PlayerRig>> = {
-		near: buildPlayer("near", baseZ.near),
-		far: buildPlayer("far", baseZ.far),
+		near: buildPlayer("near"),
+		far: buildPlayer("far"),
 	};
 	scene.add(rigs.near.group, rigs.far.group);
+
+	const rest = (rig: PlayerRig): void => {
+		rig.racket.rotation.set(RACKET_REST_ANGLE, 0, 0);
+		rig.group.rotation.y = rig.baseYaw;
+	};
 
 	return {
 		update(previous, current, alpha, dt) {
 			for (const side of ["near", "far"] as const) {
 				const rig = rigs[side];
-				const x = lerp(previous[side].x, current[side].x, alpha);
-				rig.group.position.x = x;
+				// Both axes now: a player runs in for a short ball, and `z` is
+				// real sim state rather than a constant baseline.
+				rig.group.position.x = lerp(previous[side].x, current[side].x, alpha);
+				rig.group.position.z = lerp(previous[side].z, current[side].z, alpha);
 
-				if (rig.swingElapsed !== undefined) {
-					const elapsed = rig.swingElapsed + dt;
-					const t = elapsed / SWING_DURATION;
-					if (t >= 1) {
-						rig.swingElapsed = undefined;
-						rig.racket.rotation.x = RACKET_REST_ANGLE;
-					} else {
-						rig.swingElapsed = elapsed;
-						rig.racket.rotation.x =
-							RACKET_REST_ANGLE + SWING_PEAK_ANGLE * Math.sin(t * Math.PI);
-					}
+				const play = rig.play;
+				if (play === undefined) continue;
+
+				play.elapsed += dt;
+				const t = play.elapsed / play.duration;
+				if (t >= 1) {
+					rig.play = undefined;
+					rest(rig);
+					continue;
 				}
+
+				const { anim, amp } = play;
+				const sweep = easeOut(t);
+				const arc = Math.sin(t * Math.PI);
+				const pitch = anim.pitchFrom + (anim.pitchTo - anim.pitchFrom) * sweep;
+				rig.racket.rotation.x =
+					RACKET_REST_ANGLE + (pitch - RACKET_REST_ANGLE) * amp;
+				rig.racket.rotation.y =
+					(anim.yawFrom + (anim.yawTo - anim.yawFrom) * sweep) * amp;
+				rig.racket.rotation.z = anim.roll * arc * amp;
+				rig.group.rotation.y = rig.baseYaw + anim.twist * arc * amp;
 			}
 		},
-		swing(side) {
-			rigs[side].swingElapsed = 0;
+		swing(side, stroke, power) {
+			const rig = rigs[side];
+			const anim = SWING_ANIMS[stroke];
+			const vary = SWING_VARIATION[rig.swings % SWING_VARIATION.length] ?? 1;
+			rig.swings += 1;
+			rig.play = {
+				anim,
+				amp: (0.75 + 0.35 * Math.min(Math.max(power, 0), 1)) * vary,
+				duration: anim.duration * vary,
+				elapsed: 0,
+			};
 		},
 	};
 }

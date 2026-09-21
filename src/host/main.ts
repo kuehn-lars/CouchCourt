@@ -39,11 +39,8 @@ import {
 import { createAudio } from "./audio/index.ts";
 import { advance, FIXED_DT } from "./loop.ts";
 import { type CameraMode, nextMode } from "./render/camera.ts";
-import {
-	createRenderer,
-	detectEvents,
-	type RenderEvent,
-} from "./render/index.ts";
+import { detectEvents, type RenderEvent } from "./render/events.ts";
+import { createRenderer } from "./render/index.ts";
 import { createLobbyUI } from "./ui/lobby.ts";
 
 const canvas = document.getElementById("scene");

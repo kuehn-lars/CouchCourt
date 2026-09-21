@@ -22,8 +22,7 @@
  */
 
 import type { Side, Swing } from "../protocol.ts";
-import { BASELINE_Z } from "./court.ts";
-import { predictCrossingTime } from "./players.ts";
+import { predictStrike } from "./players.ts";
 import { envFor, type MatchState } from "./rally.ts";
 import { MISS_WINDOW } from "./shot.ts";
 
@@ -138,13 +137,17 @@ export function createBot(side: Side, skill = 0.75): Bot {
 					// re-planned every tick: a bot that keeps re-deciding is a
 					// bot that always has perfect information, which is exactly
 					// the thing `skill` is supposed to take away.
-					const crossing = predictCrossingTime(
+					// The same prediction the bot's own feet are following, so
+					// it commits to hitting the ball where it will be standing
+					// rather than at a baseline it may have left.
+					const strike = predictStrike(
 						state.ball,
 						envFor(state),
-						side === "near" ? BASELINE_Z : -BASELINE_Z,
+						side,
+						state.players[side],
+						state.bounces > 0,
 					);
-					if (crossing === undefined) return null;
-					plannedAt = state.time + crossing + plannedError();
+					plannedAt = state.time + strike.t + plannedError();
 					plannedSwing = groundstroke(state);
 				}
 			}

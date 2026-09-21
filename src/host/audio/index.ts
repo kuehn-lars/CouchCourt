@@ -17,7 +17,7 @@
  * before that is silent on purpose rather than broken.
  */
 
-import type { RenderEvent } from "../render/index.ts";
+import type { RenderEvent } from "../render/events.ts";
 
 /** A short noise buffer, reused by every percussive sound. Built once: a
  * second of noise is 44k floats and generating one per hit would allocate in

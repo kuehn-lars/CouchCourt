@@ -7,6 +7,9 @@ import {
 	PLAYER_SPEED,
 	predictCrossingTime,
 	predictCrossingX,
+	predictStrike,
+	STRIKE_HEIGHT_MAX,
+	STRIKE_HEIGHT_MIN,
 } from "./players.ts";
 import type { Ball, Player } from "./state.ts";
 
@@ -106,25 +109,126 @@ describe("predictCrossingTime", () => {
 	});
 });
 
+// One predictor answers both "where does this player stand" and "when do
+// they hit it", so the movement and the timing can never disagree about the
+// same ball — see llm-knowledge/modules/shared-sim.md.
+describe("predictStrike", () => {
+	const at = (side: "near" | "far", x: number, z: number): Player => ({
+		side,
+		x,
+		z,
+	});
+
+	it("stands behind where the ball will bounce, not on top of it", () => {
+		// Lobbed into the near half, bouncing around z = +6.
+		const incoming = ball([1, 3, -2], [0.4, 0.5, 9]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 0, 11));
+
+		expect(strike.air).toBe(false);
+		// Behind the bounce means further from the net: larger z for near.
+		expect(strike.z).toBeGreaterThan(2);
+		expect(strike.x).toBeGreaterThan(0.5);
+	});
+
+	it("says when the ball gets there, not only where", () => {
+		const incoming = ball([0, 2, -4], [0, 0.5, 9]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 0, 11));
+
+		expect(strike.t).toBeGreaterThan(0);
+		expect(strike.t).toBeLessThanOrEqual(MAX_LOOKAHEAD);
+	});
+
+	it("never sends a player over the net onto the other half", () => {
+		// A drop shot dying right at the net.
+		const incoming = ball([0, 1.2, -0.5], [0, -0.2, 3]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 0, 11));
+
+		expect(strike.z).toBeGreaterThan(0);
+	});
+
+	it("keeps the player on the court, not chasing a ball miles wide", () => {
+		const incoming = ball([0, 1.5, -2], [40, 0, 6]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 0, 11));
+
+		expect(Math.abs(strike.x)).toBeLessThanOrEqual(SINGLES_HALF_WIDTH + 2);
+	});
+
+	// The user's ask: a ball taken out of the air has to be predicted too.
+	// The trigger is not "is it a volley" but "can I get behind the bounce in
+	// time" — which is the decision a real player makes.
+	it("takes a ball out of the air when the bounce cannot be reached in time", () => {
+		// Struck hard and flat: it will bounce deep, near the baseline, while
+		// the player is caught up at the net after a drop shot.
+		const incoming = ball([0, 1.4, -6], [0, -0.1, 24]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 0, 1.5));
+
+		expect(strike.air).toBe(true);
+		expect(strike.z).toBeLessThan(10);
+	});
+
+	it("plays the same ball off the bounce when there is time to get back", () => {
+		const incoming = ball([0, 1.4, -6], [0, -0.1, 24]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 0, 11));
+
+		expect(strike.air).toBe(false);
+	});
+
+	it("only ever volleys a ball it could actually reach with a racket", () => {
+		const incoming = ball([0, 1.4, -6], [0, -0.1, 24]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 0, 1.5));
+
+		expect(strike.y).toBeGreaterThanOrEqual(STRIKE_HEIGHT_MIN);
+		expect(strike.y).toBeLessThanOrEqual(STRIKE_HEIGHT_MAX);
+	});
+
+	it("still answers for a ball that never comes, instead of leaving the player nowhere", () => {
+		// Headed away, into the far court: nothing to intercept at all.
+		const leaving = ball([0, 1.5, -2], [0, 1, -12]);
+		const strike = predictStrike(leaving, VACUUM, "near", at("near", 2, 11));
+
+		expect(Number.isFinite(strike.x)).toBe(true);
+		expect(Number.isFinite(strike.z)).toBe(true);
+		expect(strike.z).toBeGreaterThan(0);
+	});
+});
+
 describe("movePlayer", () => {
-	const player = (side: "near" | "far", x: number): Player => ({ side, x });
+	const player = (side: "near" | "far", x: number, z = BASELINE_Z): Player => ({
+		side,
+		x,
+		z,
+	});
 
 	it("never moves more than the speed cap in one tick", () => {
 		const dt = 1 / 120;
 		const start = player("near", 0);
-		const moved = movePlayer(start, 100, dt);
+		const moved = movePlayer(start, { x: 100, z: 100 }, dt);
 
-		expect(Math.abs(moved.x - start.x)).toBeLessThanOrEqual(
-			PLAYER_SPEED * dt + 1e-9,
-		);
+		expect(
+			Math.hypot(moved.x - start.x, moved.z - start.z),
+		).toBeLessThanOrEqual(PLAYER_SPEED * dt + 1e-9);
 	});
 
 	it("reaches the target without overshoot once inside the cap", () => {
 		const dt = 1 / 120;
 		const start = player("near", 0);
-		const target = (PLAYER_SPEED * dt) / 2;
+		const target = { x: (PLAYER_SPEED * dt) / 4, z: BASELINE_Z };
 		const moved = movePlayer(start, target, dt);
 
-		expect(moved.x).toBeCloseTo(target, 10);
+		expect(moved.x).toBeCloseTo(target.x, 10);
+		expect(moved.z).toBeCloseTo(target.z, 10);
+	});
+
+	// Running diagonally must not be faster than running straight, which is
+	// exactly what capping each axis on its own would allow.
+	it("does not move faster on the diagonal than along one axis", () => {
+		const dt = 1 / 120;
+		const start = player("near", 0, 11);
+		const straight = movePlayer(start, { x: 100, z: 11 }, dt);
+		const diagonal = movePlayer(start, { x: 100, z: -100 }, dt);
+
+		const straightStep = Math.hypot(straight.x - start.x, straight.z - start.z);
+		const diagonalStep = Math.hypot(diagonal.x - start.x, diagonal.z - start.z);
+		expect(diagonalStep).toBeCloseTo(straightStep, 10);
 	});
 });

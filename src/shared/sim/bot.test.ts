@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Swing } from "../protocol.ts";
 import { createBot, SERVE_DELAY } from "./bot.ts";
-import { BASELINE_Z } from "./court.ts";
-import { predictCrossingTime } from "./players.ts";
+
+import { predictStrike } from "./players.ts";
 import {
 	createMatch,
 	envFor,
@@ -84,12 +84,12 @@ describe("createBot", () => {
 	function duel(
 		farSkill: number,
 		ticks = 20_000,
-	): { hits: number; points: number } {
+	): { hits: number; won: number } {
 		const near = createBot("near", 1);
 		const far = createBot("far", farSkill);
 		let current = createMatch("near");
 		let hits = 0;
-		let points = 0;
+		let won = 0;
 		for (let i = 0; i < ticks && !current.score.setWinner; i++) {
 			const inputs: RallyInput[] = [];
 			const a = near.swing(current);
@@ -98,15 +98,25 @@ describe("createBot", () => {
 			if (b) inputs.push({ side: "far", swing: b, time: current.time });
 			const next = tick(current, inputs, DT);
 			if (next.toHit !== current.toHit) hits += 1;
-			if (next.score !== current.score) points += 1;
+			if (
+				next.score !== current.score &&
+				next.score.points.near <= current.score.points.near &&
+				next.score.games.near === current.score.games.near
+			) {
+				won += 1;
+			}
 			current = next;
 		}
-		return { hits, points };
+		return { hits, won };
 	}
 
-	it("concedes more points the lower its skill", () => {
-		// Against the same perfect opponent, in the same number of ticks.
-		expect(duel(0).points).toBeGreaterThan(duel(1).points);
+	// Measures points the far bot WINS, not how many points happen. The
+	// original counted every score change, which read backwards the moment
+	// the hopeless bot started losing sets outright: it lost 6-0 in 28 points
+	// and stopped, while the perfect bot was still at 6-6 after 55. A
+	// completed set is fewer score changes, not more.
+	it("wins more points the higher its skill", () => {
+		expect(duel(1).won).toBeGreaterThan(duel(0).won);
 	});
 
 	it("sustains a rally rather than trading one shot per point", () => {
@@ -119,7 +129,7 @@ describe("createBot", () => {
 
 	it("times its swing by skill: perfect meets the ball, hopeless does not", () => {
 		// The ideal contact moment is fixed the instant the serve is struck:
-		// `time + predictCrossingTime(...)`. What the bot does with it is the
+		// `time + predictStrike(...).t`. What the bot does with it is the
 		// whole of `skill`.
 		//
 		// This is the assertion that catches skill being disconnected from
@@ -132,13 +142,13 @@ describe("createBot", () => {
 				[{ side: "near", swing: GOOD_SERVE, time: 0 }],
 				DT,
 			);
-			const crossing = predictCrossingTime(
-				current.ball,
-				envFor(current),
-				-BASELINE_Z,
-			);
-			if (crossing === undefined) throw new Error("serve never arrives");
-			const ideal = current.time + crossing;
+			// The same prediction the bot plans against: where and when it
+			// will actually meet the ball, not a fixed baseline plane it may
+			// have left.
+			const ideal =
+				current.time +
+				predictStrike(current.ball, envFor(current), "far", current.players.far)
+					.t;
 
 			for (let i = 0; i < 900; i++) {
 				if (bot.swing(current) !== null) return current.time - ideal;

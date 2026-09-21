@@ -34,14 +34,11 @@ import {
 	MAX_SWING_LAG_MS,
 	type Side,
 	type Swing,
+	type SwingKind,
 } from "../protocol.ts";
 import { type BallEnv, DRAG_K, stepBall } from "./ball.ts";
 import { BASELINE_Z, isInBounds, isInServiceBox } from "./court.ts";
-import {
-	movePlayer,
-	predictCrossingTime,
-	predictCrossingX,
-} from "./players.ts";
+import { movePlayer, predictStrike } from "./players.ts";
 import { awardPoint, initialScore, other, type Score } from "./scoring.ts";
 import { resolveShot, SERVE_CONTACT_HEIGHT } from "./shot.ts";
 import type { Ball, Player } from "./state.ts";
@@ -68,6 +65,21 @@ export interface MatchState {
 	 * state because ball flight is stateless between ticks and the ball has
 	 * to keep curving after the swing that gave it the spin is long gone. */
 	readonly spin: number;
+	/**
+	 * The stroke that put the ball where it is, or `null` when nothing is in
+	 * flight. Here for the same reason `spin` is: the swing is gone by the
+	 * time anything downstream wants to know about it. The renderer derives a
+	 * hit from a `toHit` flip (`render/index.ts`, `detectEvents`) and needs
+	 * to know WHICH stroke to animate, and a serve or a volley does not look
+	 * anything like a forehand.
+	 */
+	readonly stroke: {
+		readonly side: Side;
+		readonly kind: SwingKind;
+		readonly power: number;
+		/** Taken before the ball bounced. */
+		readonly air: boolean;
+	} | null;
 	/** Elapsed sim time, seconds — the same clock `RallyInput.time` is stamped in. */
 	readonly time: number;
 }
@@ -121,12 +133,16 @@ export function createMatch(server: Side): MatchState {
 	return {
 		phase: "waiting-serve",
 		ball: heldServeBall(server),
-		players: { near: { side: "near", x: 0 }, far: { side: "far", x: 0 } },
+		players: {
+			near: { side: "near", x: 0, z: BASELINE_Z },
+			far: { side: "far", x: 0, z: -BASELINE_Z },
+		},
 		score: initialScore(server),
 		toHit: server,
 		bounces: 0,
 		serveNumber: 1,
 		spin: 0,
+		stroke: null,
 		time: 0,
 	};
 }
@@ -141,8 +157,12 @@ function startPoint(state: MatchState): MatchState {
 		bounces: 0,
 		serveNumber: 1,
 		spin: 0,
+		stroke: null,
 		ball: heldServeBall(server),
-		players: { near: { side: "near", x: 0 }, far: { side: "far", x: 0 } },
+		players: {
+			near: { side: "near", x: 0, z: BASELINE_Z },
+			far: { side: "far", x: 0, z: -BASELINE_Z },
+		},
 	};
 }
 
@@ -167,6 +187,7 @@ function fault(state: MatchState): MatchState {
 		serveNumber: 2,
 		bounces: 0,
 		spin: 0,
+		stroke: null,
 		ball: heldServeBall(server),
 	};
 }
@@ -207,28 +228,31 @@ function strokeFor(state: MatchState, swing: Swing): Swing {
 	return swing.kind === "serve" ? { ...swing, kind: "forehand" } : swing;
 }
 
-/** `timingError` for a swing arriving now from `toHit`, against the ball's
- * *current* trajectory — recomputed every call, never cached, so a shot that
- * clips the net mid-flight is judged on where it actually ends up. Falls
- * back to "perfectly timed" if no crossing is predicted at all: punishing a
- * case the sim can't reason about would cut against the product's own
- * "generous input" principle. */
-function timingErrorFor(state: MatchState, input: RallyInput): number {
-	const predicted = predictCrossingTime(
-		state.ball,
-		envFor(state),
-		baselineZ(state.toHit),
-	);
-	if (predicted === undefined) return 0;
-	return swingTime(input) - (state.time + predicted);
-}
-
 function applySwing(state: MatchState, input: RallyInput): MatchState {
 	if (state.score.setWinner || input.side !== state.toHit) return state;
 
 	const stroke = strokeFor(state, input.swing);
+
+	// Timed and placed against `predictStrike` — the same answer the player's
+	// feet are running toward. Before 2026-09-21 this was a fixed plane at
+	// the receiver's baseline, which was right while the players never left
+	// it: a player who has run in for a drop shot would otherwise be judged
+	// against a ball arriving ten metres behind them.
+	//
+	// A serve has no incoming ball to time against, so it is always clean.
+	const strike =
+		state.phase === "waiting-serve"
+			? undefined
+			: predictStrike(
+					state.ball,
+					envFor(state),
+					state.toHit,
+					state.players[state.toHit],
+					state.bounces > 0,
+				);
 	const timingError =
-		state.phase === "waiting-serve" ? 0 : timingErrorFor(state, input);
+		strike === undefined ? 0 : swingTime(input) - (state.time + strike.t);
+
 	const outgoing = resolveShot(stroke, timingError, state.ball.p, input.side);
 	if (!outgoing) return state; // whiff: the second-bounce rule settles it
 
@@ -238,6 +262,12 @@ function applySwing(state: MatchState, input: RallyInput): MatchState {
 		toHit: other(state.toHit),
 		bounces: 0,
 		spin: stroke.spin ?? 0,
+		stroke: {
+			side: input.side,
+			kind: stroke.kind,
+			power: stroke.power,
+			air: strike?.air ?? false,
+		},
 		phase: state.phase === "waiting-serve" ? "serve-flight" : "rally",
 	};
 }
@@ -280,23 +310,26 @@ function resolveStep(
 	return state;
 }
 
+/**
+ * Both players run toward where `predictStrike` says they would meet the ball
+ * — including the one who is not about to hit it, because recovering toward
+ * the next ball is most of what a tennis player is doing at any moment.
+ */
 function movePlayers(state: MatchState, dt: number): MatchState {
+	// The ball is being held for a serve: it is stationary in the server's
+	// hand, so a predictor walking its trajectory sees it drop straight to
+	// the server's own feet and walks BOTH players backwards to meet it.
+	// Nobody moves until it is struck.
+	if (state.phase === "waiting-serve") return state;
+
 	const env = envFor(state);
-	return {
-		...state,
-		players: {
-			near: movePlayer(
-				state.players.near,
-				predictCrossingX(state.ball, env, BASELINE_Z),
-				dt,
-			),
-			far: movePlayer(
-				state.players.far,
-				predictCrossingX(state.ball, env, -BASELINE_Z),
-				dt,
-			),
-		},
+	const bounced = state.bounces > 0;
+	const toward = (side: Side): Player => {
+		const player = state.players[side];
+		const strike = predictStrike(state.ball, env, side, player, bounced);
+		return movePlayer(player, strike, dt);
 	};
+	return { ...state, players: { near: toward("near"), far: toward("far") } };
 }
 
 export function tick(

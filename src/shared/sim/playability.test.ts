@@ -26,7 +26,7 @@ import { describe, expect, it } from "vitest";
 import type { Swing } from "../protocol.ts";
 import { type BallEnv, DRAG_K, stepBall } from "./ball.ts";
 import { BASELINE_Z, isInBounds } from "./court.ts";
-import { predictCrossingTime } from "./players.ts";
+import { predictStrike } from "./players.ts";
 import {
 	createMatch,
 	type MatchState,
@@ -64,9 +64,12 @@ function attemptReturn(
 		p: { x: 0, y: contactY, z: -BASELINE_Z + 0.5 },
 		v: { x: 0, y: -1, z: -6 },
 	};
-	const predicted = predictCrossingTime(ball, ENV, -BASELINE_Z) ?? 0;
+	const fresh = createMatch("near");
+	// "Well timed" means timed against what the sim itself will judge the
+	// swing by — `predictStrike`, the same answer the player's feet follow.
+	const predicted = predictStrike(ball, ENV, "far", fresh.players.far).t;
 	let s: MatchState = {
-		...createMatch("near"),
+		...fresh,
 		phase: "rally",
 		toHit: "far",
 		ball,
