@@ -27,7 +27,7 @@
  * so this file names no DOM type and no Node global.
  */
 
-import type { Swing } from "../protocol.ts";
+import type { Swing, SwingKind } from "../protocol.ts";
 import { rotMagnitude, swingFrom, TURN_AXIS } from "./detector.ts";
 import { MAX_GAP_MS, type MotionSample } from "./trace.ts";
 
@@ -53,6 +53,39 @@ export const MIN_RISE_MS = 40;
  * well — the swing after a backswing that never paused. */
 export const REFIRE_RATIO = 1.05;
 
+/** Time constant, ms, of the running estimate of gravity the stroke is read
+ * against. `accelerationIncludingGravity` is mostly the swing itself during a
+ * swing, so the estimate is frozen when a lobe starts: it says how the racket
+ * was held going *into* the swing. */
+export const GRAVITY_TAU_MS = 200;
+
+/**
+ * An overhand starts with the racket up; a groundstroke with it at the
+ * player's side. In the fixtures' grip the device's x axis (across the
+ * screen) is close to vertical for a groundstroke — normalised gravity x of
+ * −0.6 to −1.0 — and horizontal for an overhand, −0.2 to +0.4. Above this it
+ * is an overhead. Measured 2026-09-22: 8 of 8 serve swings, 3 of 67
+ * groundstroke peaks, flat from −0.4 to −0.25
+ * (`llm-knowledge/experiments/2026-09-22-stroke-classifier.md`).
+ */
+export const OVERHEAD_TILT = -0.3;
+
+/** How much of `gamma` counts toward the side of a groundstroke. Some hard
+ * forehands are almost pure wrist snap at the peak — `(3, 241, 1012)` — and
+ * their gamma is what says forehand. Flat from 0.3 to 0.5. */
+export const SIDE_GAMMA_WEIGHT = 0.4;
+
+/** What `peak` looks like, given the gravity the racket started from. */
+export function strokeOf(
+	peak: MotionSample,
+	gravity: readonly [number, number, number],
+): Exclude<SwingKind, "serve"> {
+	const g = rotMagnitude(gravity);
+	if (g > 0 && gravity[0] / g > OVERHEAD_TILT) return "overhead";
+	const side = (peak.rot[TURN_AXIS] ?? 0) + SIDE_GAMMA_WEIGHT * peak.rot[2];
+	return side > 0 ? "forehand" : "backhand";
+}
+
 export interface SwingStream {
 	/**
 	 * Feed one sample. Returns the swing that just became detectable, or
@@ -61,6 +94,9 @@ export interface SwingStream {
 	push(sample: MotionSample): Swing | null;
 	/** Rotation of the latest sample, deg/s — the controller draws it. */
 	readonly level: number;
+	/** What the swing in progress looks like so far, or `null` between
+	 * swings. For the controller's debug readout; the host never sees it. */
+	readonly current: SwingKind | null;
 }
 
 /** O(1) state: no sample buffer, so a phone shaken for a minute costs
@@ -70,38 +106,41 @@ export function createSwingStream(): SwingStream {
 	let lastT: number | null = null;
 	let peak: MotionSample | null = null;
 	let peakMag = 0;
-	// The fastest turn so far, which is what decides forehand or backhand
-	// (`detector.ts`, `classify`) — often a different sample from the peak.
-	let turn: MotionSample | null = null;
-	let turnMag = 0;
+	/** The loudest sample of the lobe so far, kept across announcements, for
+	 * `current`. */
+	let loudest: MotionSample | null = null;
 	/** Magnitude of the last peak this lobe announced, or 0. */
 	let fired = 0;
 	let level = 0;
+	let gravity: [number, number, number] | null = null;
+	/** `gravity` as it was when the lobe started. */
+	let held: [number, number, number] = [0, 0, 0];
 
 	const endLobe = (): void => {
 		lobeStart = null;
 		peak = null;
 		peakMag = 0;
-		turn = null;
-		turnMag = 0;
+		loudest = null;
 		fired = 0;
 	};
 
 	/** The pending peak, if it has qualified and the rotation has fallen far
 	 * enough off it to be sure it was the peak. */
 	const announce = (now: number, ended: boolean): Swing | null => {
-		if (peak === null || turn === null || lobeStart === null) return null;
+		if (peak === null || lobeStart === null) return null;
 		const needed = fired > 0 ? fired * REFIRE_RATIO : TRIGGER_DEG_S;
 		if (peakMag < needed) return null;
 		if (!ended && level > peakMag * PEAK_CONFIRM) return null;
 		if (fired === 0 && peak.t - lobeStart < MIN_RISE_MS) return null;
 
-		const swing = { ...swingFrom(peak, turn), lag: now - peak.t };
+		const swing = {
+			...swingFrom(peak, peak),
+			kind: strokeOf(peak, held),
+			lag: now - peak.t,
+		};
 		fired = peakMag;
 		peak = null;
 		peakMag = 0;
-		turn = null;
-		turnMag = 0;
 		return swing;
 	};
 
@@ -109,27 +148,39 @@ export function createSwingStream(): SwingStream {
 		get level() {
 			return level;
 		},
+		get current() {
+			return loudest === null ? null : strokeOf(loudest, held);
+		},
 		push(sample) {
 			const m = rotMagnitude(sample.rot);
 			level = m;
 			// A stalled sensor, not a continuous lobe: `sample.t` keeps
 			// running through a stall (MAX_GAP_MS is measured in trace.ts).
-			if (lastT !== null && sample.t - lastT > MAX_GAP_MS) endLobe();
+			const dt = lastT === null ? 0 : sample.t - lastT;
+			if (dt > MAX_GAP_MS) endLobe();
 			lastT = sample.t;
 
 			const ended = m < LOBE_FLOOR_DEG_S;
 			if (!ended) {
-				lobeStart ??= sample.t;
+				if (lobeStart === null) {
+					lobeStart = sample.t;
+					held = gravity ?? [...sample.acc];
+				}
 				if (m > peakMag) {
 					peakMag = m;
 					peak = sample;
 				}
-				const turning = Math.abs(sample.rot[TURN_AXIS] ?? 0);
-				if (turning > turnMag) {
-					turnMag = turning;
-					turn = sample;
-				}
+				if (loudest === null || m > rotMagnitude(loudest.rot)) loudest = sample;
 			}
+			const k = Math.min(1, dt / GRAVITY_TAU_MS);
+			gravity =
+				gravity === null
+					? [...sample.acc]
+					: [
+							gravity[0] + (sample.acc[0] - gravity[0]) * k,
+							gravity[1] + (sample.acc[1] - gravity[1]) * k,
+							gravity[2] + (sample.acc[2] - gravity[2]) * k,
+						];
 
 			// A lobe that ends straight off its peak — rotation falling from
 			// 1300 to under the floor in one sample — still announces it.

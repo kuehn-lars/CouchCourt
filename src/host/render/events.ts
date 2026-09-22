@@ -35,10 +35,10 @@ export type RenderEvent =
  * A heuristic on the ball state, not a sim event — cosmetic only. */
 export const BOUNCE_HEIGHT = 0.2;
 
-/** A serve is a serve; anything else taken before the ball bounced is a
- * volley, and is blocked rather than swung at. */
+/** A serve and a smash are the same overhead swing; anything else taken
+ * before the ball bounced is a volley, and is blocked rather than swung at. */
 export function strokeAnim(stroke: Pick<Stroke, "kind" | "air">): StrokeAnim {
-	if (stroke.kind === "serve") return "serve";
+	if (stroke.kind === "serve" || stroke.kind === "overhead") return "serve";
 	return stroke.air ? "volley" : stroke.kind;
 }
 

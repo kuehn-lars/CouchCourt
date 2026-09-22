@@ -13,7 +13,7 @@
  *
  * - **early, in the window** — held (`armed`) and struck at the contact
  *   point the instant the ball gets there. The avatar meets the ball; the
- *   timing still decides the direction.
+ *   timing still decides how well it is hit.
  * - **late, in the window** — the ball has already flown past, so it is
  *   rewound: struck from the contact point at the contact time and flown
  *   forward to now. This is what makes a phone's detection delay and the
@@ -70,6 +70,7 @@ import {
 import {
 	groundstroke,
 	serveShot,
+	smash,
 	TIMING_IDEAL,
 	TIMING_LATE,
 	timingOf,
@@ -91,8 +92,9 @@ export interface Contact {
 	readonly at: number;
 	/** Taken before it bounces. */
 	readonly air: boolean;
-	/** Decided from where the ball is, the first time the contact is
-	 * planned, and kept: the player is already turning for it. */
+	/** The stance: decided from where the ball is, the first time the
+	 * contact is planned, and kept — the player is already turning for it.
+	 * What they actually play is the swing's `kind` (`strokeOf`). */
 	readonly stroke: "forehand" | "backhand";
 }
 
@@ -337,6 +339,33 @@ function stepToss(state: MatchState, dt: number): MatchState {
 
 // ------------------------------------------------------------- swings
 
+/** The stroke a swing plays at a contact: what the phone read, except that a
+ * `serve` claim mid-rally — an old controller, or the bot — is played as the
+ * stroke the player set up for. `null` when it cannot be played at all: an
+ * overhead needs a ball out of the air. */
+function strokeOf(
+	swing: Swing,
+	c: { air: boolean; stroke: "forehand" | "backhand" },
+): Exclude<SwingKind, "serve"> | null {
+	if (swing.kind === "serve") return c.stroke;
+	if (swing.kind === "overhead" && !c.air) return null;
+	return swing.kind;
+}
+
+/** The ball off the racket for a rally stroke. */
+function shoot(
+	from: Vec3,
+	side: Side,
+	kind: Exclude<SwingKind, "serve">,
+	timing: number,
+	power: number,
+	env: BallEnv,
+): Vec3 {
+	return kind === "overhead"
+		? smash(from, side, timing, power, env)
+		: groundstroke(from, side, kind, timing, power, env);
+}
+
 function strike(
 	state: MatchState,
 	c: Contact,
@@ -344,19 +373,16 @@ function strike(
 	at: number,
 ): MatchState {
 	const player = state.players[c.side];
-	if (Math.hypot(player.x - c.ball.x, player.z - c.ball.z) > HIT_REACH) {
+	const kind = strokeOf(swing, c);
+	if (
+		kind === null ||
+		Math.hypot(player.x - c.ball.x, player.z - c.ball.z) > HIT_REACH
+	) {
 		return whiff(state, c.side);
 	}
 	const timing = timingOf(at - c.at) ?? 0;
 	const spin = swing.spin ?? 0;
-	const v = groundstroke(
-		c.ball,
-		c.side,
-		c.stroke,
-		timing,
-		swing.power,
-		envForSpin(spin),
-	);
+	const v = shoot(c.ball, c.side, kind, timing, swing.power, envForSpin(spin));
 	const struck: MatchState = {
 		...state,
 		phase: "rally",
@@ -366,7 +392,7 @@ function strike(
 		spin,
 		stroke: {
 			side: c.side,
-			kind: c.stroke,
+			kind,
 			power: swing.power,
 			air: c.air,
 			at: c.at,
@@ -449,6 +475,7 @@ function revise(
 	const env = envForSpin(spin);
 	let v: Vec3;
 	let timing = st.timing;
+	let kind = st.kind;
 	if (st.kind === "serve") {
 		v = serveShot(
 			st.from,
@@ -463,15 +490,21 @@ function revise(
 		// Outside the window it cannot be the swing that met the ball: it is
 		// a follow-through, however hard.
 		if (t === undefined) return state;
+		// The harder peak is the real swing, so its stroke is the one played.
+		const played = strokeOf(swing, {
+			air: st.air,
+			stroke: st.kind === "backhand" ? "backhand" : "forehand",
+		});
+		if (played === null) return state;
+		kind = played;
 		timing = t;
-		const stroke = st.kind === "backhand" ? "backhand" : "forehand";
-		v = groundstroke(st.from, side, stroke, timing, swing.power, env);
+		v = shoot(st.from, side, kind, timing, swing.power, env);
 	}
 	const redone: MatchState = {
 		...state,
 		ball: { p: st.from, v },
 		spin,
-		stroke: { ...st, power: swing.power, timing },
+		stroke: { ...st, kind, power: swing.power, timing },
 	};
 	return fastForward(redone, state.time - st.at);
 }
@@ -492,6 +525,12 @@ function applySwing(state: MatchState, input: RallyInput): MatchState {
 		// miss is ignored silently — it is usually the backswing of the
 		// swing that is about to connect.
 		return at > c.at && at - c.at < 0.6 ? whiff(state, input.side) : state;
+	}
+	if (strokeOf(input.swing, c) === null) {
+		// An overhead at a ball that has bounced: the racket goes over the
+		// top of it. Shown as a swing at air unless a real stroke is already
+		// waiting — then it is that stroke's backswing or follow-through.
+		return state.armed ? state : whiff(state, input.side);
 	}
 	if (state.time < c.at) {
 		const armed = state.armed;

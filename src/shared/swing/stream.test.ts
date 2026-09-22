@@ -62,6 +62,34 @@ function mainLobes(
 	return lobes;
 }
 
+/** The hardest peak of each swing in the traces labelled `labels` — what
+ * the host plays, since it takes the hardest peak in the timing window.
+ * Peaks under 700ms apart are one swing. */
+function mainSwings(
+	labels: readonly string[],
+	minPeak: number,
+): { label: string; kind: Swing["kind"] }[] {
+	const out: { label: string; kind: Swing["kind"] }[] = [];
+	for (const name of files) {
+		const trace = load(name);
+		if (!labels.includes(trace.label)) continue;
+		const magAt = new Map(trace.samples.map((s) => [s.t, rotMagnitude(s.rot)]));
+		const groups: Swing[][] = [];
+		for (const { swing } of replay(trace.samples)) {
+			const last = groups.at(-1);
+			const prev = last?.at(-1);
+			if (last && prev && swing.at - prev.at < 700) last.push(swing);
+			else groups.push([swing]);
+		}
+		for (const group of groups) {
+			const hardest = group.reduce((a, b) => (b.power > a.power ? b : a));
+			if ((magAt.get(hardest.at) ?? 0) < minPeak) continue;
+			out.push({ label: trace.label, kind: hardest.kind });
+		}
+	}
+	return out;
+}
+
 const at = (t: number, rot: number): MotionSample => ({
 	t,
 	acc: [0, 9.8, 0],
@@ -147,6 +175,68 @@ describe("createSwingStream", () => {
 				expect(e.swing.kind).not.toBe("serve");
 			}
 		}
+	});
+
+	// Since 2026-09-22 the stroke decides where the ball goes, so the kind
+	// the host plays — the hardest peak of each swing — has to be right.
+	// Measured, not hoped: see the stroke-decides-direction decision.
+	it("calls every overhand an overhead", () => {
+		const kinds = mainSwings(["serve"], 950).map((s) => s.kind);
+		expect(kinds.length).toBeGreaterThanOrEqual(8);
+		expect(kinds.filter((k) => k !== "overhead")).toEqual([]);
+	});
+
+	it("reads the side of a groundstroke nearly every time, and rarely calls it an overhead", () => {
+		const swings = mainSwings(["forehand", "backhand"], 635);
+		const right = swings.filter((s) => s.kind === s.label).length;
+		const overhead = swings.filter((s) => s.kind === "overhead").length;
+		expect(swings.length).toBeGreaterThanOrEqual(60);
+		expect(right / swings.length).toBeGreaterThanOrEqual(0.9);
+		expect(overhead / swings.length).toBeLessThanOrEqual(0.05);
+	});
+
+	it("reads a forehand, a backhand and an overhead from a clean lobe", () => {
+		const racketSide = (s: MotionSample): MotionSample => ({
+			...s,
+			acc: [-9.8, 0, 0],
+		});
+		const racketUp = (s: MotionSample): MotionSample => ({
+			...s,
+			acc: [0, 9.8, 0],
+		});
+		const neg = (s: MotionSample): MotionSample => ({
+			...s,
+			rot: [-s.rot[0], s.rot[1], s.rot[2]],
+		});
+		const quiet = (acc: MotionSample["acc"]) =>
+			Array.from({ length: 30 }, (_, i) => ({
+				t: i * 16,
+				acc,
+				rot: [0, 0, 0] as const,
+			}));
+		const kind = (samples: MotionSample[]) => replay(samples)[0]?.swing.kind;
+		const swingAt = lobe(500, 900);
+		expect(kind([...quiet([-9.8, 0, 0]), ...swingAt.map(racketSide)])).toBe(
+			"forehand",
+		);
+		expect(
+			kind([...quiet([-9.8, 0, 0]), ...swingAt.map(racketSide).map(neg)]),
+		).toBe("backhand");
+		expect(kind([...quiet([0, 9.8, 0]), ...swingAt.map(racketUp)])).toBe(
+			"overhead",
+		);
+	});
+
+	it("says what the swing in progress looks like, and nothing at rest", () => {
+		const stream = createSwingStream();
+		expect(stream.current).toBeNull();
+		for (let i = 0; i < 30; i++)
+			stream.push({ t: i * 16, acc: [-9.8, 0, 0], rot: [0, 0, 0] });
+		expect(stream.current).toBeNull();
+		stream.push({ t: 500, acc: [-9.8, 0, 0], rot: [500, 0, 0] });
+		expect(stream.current).toBe("forehand");
+		stream.push({ t: 516, acc: [-9.8, 0, 0], rot: [0, 0, 0] });
+		expect(stream.current).toBeNull();
 	});
 
 	it("fires once for one smooth swing", () => {

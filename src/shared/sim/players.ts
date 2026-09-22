@@ -71,6 +71,12 @@ export const NET_KEEP_OUT = 0.9;
  */
 export const STRIKE_REACH = 1.2;
 
+/** Slack is for getting there: a player already in reach needs none, and
+ * without that the plan would flip to a groundstroke while they stand under
+ * the ball waiting for it. */
+const canSmash = (run: number, t: number): boolean =>
+	run === 0 || run + SMASH_SLACK <= t;
+
 /** Where a player will meet the ball, and when. */
 export interface Strike {
 	readonly x: number;
@@ -119,6 +125,17 @@ function timeToReach(from: Player, x: number, z: number): number {
  * and dropped back to about the waist. */
 export const STRIKE_COMFORT = 1.5;
 
+/** Height, metres, a high ball is taken out of the air at, overhead: an arm
+ * and a racket above a standing player. Coming down through it before the
+ * bounce, within reach, is a chance to smash
+ * (`llm-knowledge/decisions/0016-stroke-decides-direction.md`). */
+export const SMASH_HEIGHT = 2.3;
+
+/** Seconds of slack a smash chance needs over the bare running time: the
+ * player reacts before running (`REACTION` in `rally.ts`) and has to be set
+ * under the ball, not arriving as it falls past. */
+export const SMASH_SLACK = 0.4;
+
 /**
  * Where the player on `side` will meet `ball`, and when — the one answer both
  * their feet and their timing are judged against.
@@ -160,6 +177,7 @@ export function predictStrike(
 	let bounced = alreadyBounced;
 	let ground: Strike | undefined;
 	let air: Strike | undefined;
+	let overhead: Strike | undefined;
 	let last: Strike | undefined;
 
 	for (let i = 0; i * PREDICTION_DT < MAX_LOOKAHEAD; i++) {
@@ -189,6 +207,16 @@ export function predictStrike(
 		}
 
 		if (
+			overhead === undefined &&
+			step.ball.v.y <= 0 &&
+			p.y <= SMASH_HEIGHT &&
+			p.y - step.ball.v.y * PREDICTION_DT > SMASH_HEIGHT &&
+			canSmash(timeToReach(from, here.x, here.z), t)
+		) {
+			overhead = { ...here, y: p.y, t, air: true, ball: p };
+		}
+
+		if (
 			air === undefined &&
 			p.y >= STRIKE_HEIGHT_MIN &&
 			p.y <= STRIKE_HEIGHT_MAX &&
@@ -198,6 +226,8 @@ export function predictStrike(
 		}
 	}
 
+	// A high ball they can get under is the best chance in the game.
+	if (overhead) return overhead;
 	// Off the bounce whenever the player can get there. That is the shot
 	// they want, and it is the one with weight behind it.
 	if (ground && timeToReach(from, ground.x, ground.z) <= ground.t)

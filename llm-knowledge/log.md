@@ -1,6 +1,6 @@
 ---
 title: Project log
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [meta]
 status: current
 ---
@@ -356,3 +356,36 @@ a net-lift step that made harder swings fly slower.
 382 tests, typecheck, lint, build green; watched in headless Chrome with a
 scripted phone, no console errors. **Not verified: a real phone, a real person,
 `TIMING_IDEAL`, the iOS 18 haptic trick.**
+
+## 2026-09-22 — The stroke decides where the ball goes; timing decides how well
+
+**The ask.** Forehand, backhand and overhand should decide the direction
+instead of the physics; the overhand only on a ball in the air; balls landing
+in the court rather than on the baseline; more depth, skill-based without
+being frustrating; and a corner readout on the phone of the move it reads, to
+debug the classifier. Permission to break ADRs.
+
+**What landed** ([[0016-stroke-decides-direction]], superseding decision 4 of
+[[0015-contact-model]]): forehand to screen-left, backhand to screen-right —
+screen space, so the far player's ball follows their own sweep — and an
+overhead is a smash down the middle that only connects out of the air. The
+predictor now offers high balls out of the air as smash chances. Timing is a
+trade: on time is paced and wide of the middle, early goes wider then out,
+late goes central, deeper, and long if hit hard. Clean balls land 5.5–8.8m
+past the net. The bot picks its stroke and its skill is a timing spread.
+The phone reads overhead from the racket position going into the swing and
+the side from `alpha + 0.4·gamma` at the peak.
+
+**Found on the way** ([[2026-09-22-stroke-classifier]]): the peak detector's
+side reading had quietly fallen to 54/60 when 0015 replaced the hold
+detector — nobody measured it because the sim ignored `kind`. Now 58/60, and
+8/8 overhands. **Balance** ([[2026-09-22-stroke-direction-balance]]): pace is
+a knife-edge under auto-movement when every shot lands in one place (27 m/s:
+all winners; 23 m/s: nobody beatable); the gradient came from timing moving
+width and pace together. Shipped: decent player wins 57% of points against the
+0.65 solo bot, a newcomer 43%; rallies 8–11 strokes.
+
+398 tests, typecheck, lint green; watched in headless Chrome — a scripted
+phone sending mixed strokes against the bot, and the controller's readout
+driven by synthetic `devicemotion` — no console errors. **Not verified: a real
+phone, a real person, recorded smashes (only serves back the overhead rule).**

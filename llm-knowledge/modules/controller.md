@@ -160,8 +160,18 @@ never scroll, rubber-band or pinch-zoom the page — `user-scalable=no`,
 The play screen is a side chip in the avatar's colour (`SIDE_COLOR`, matching
 `host/render/entities.ts`), a ring showing the last swing's power with a glow
 that follows live rotation, a feedback toast, and a two-line hint — the serve
-hint teaches the Wii toss ("swing once to toss, again to hit"). The ring keeps
-the strongest peak for 400ms, because one swing arrives as several peaks.
+hint teaches the Wii toss ("swing once to toss, again to hit"), the rally hint
+the stroke directions. The ring keeps the strongest peak for 400ms, because
+one swing arrives as several peaks.
+
+**A corner readout shows the move the phone reads** (added 2026-09-22 for
+debugging the classifier with a phone in hand): *Now* is `stream.current`,
+redrawn once a frame, the lobe in progress or a dash; *Last* is the stroke
+and power of the peak the ring shows — the same strongest-in-400ms rule, so
+it names the peak the host will most likely play. The arrows are screen
+directions ([[0016-stroke-decides-direction]]). It runs in the lobby too,
+where nothing is sent, so a player can try strokes before the match.
+Seen in headless Chrome with synthetic `devicemotion`; not on a phone.
 
 `createSession` gained two optional handlers, and `main.ts` renders them:
 

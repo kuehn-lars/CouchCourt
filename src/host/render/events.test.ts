@@ -37,7 +37,11 @@ describe("strokeAnim", () => {
 		expect(strokeAnim({ kind: "backhand", air: false })).toBe("backhand");
 	});
 
-	it("animates anything taken out of the air as a volley", () => {
+	it("animates a smash with the serve's overhead swing", () => {
+		expect(strokeAnim({ kind: "overhead", air: true })).toBe("serve");
+	});
+
+	it("animates anything else taken out of the air as a volley", () => {
 		expect(strokeAnim({ kind: "backhand", air: true })).toBe("volley");
 	});
 });

@@ -49,10 +49,11 @@ export type PlayerId = string;
 export type Side = "near" | "far";
 
 /**
- * **The sim no longer reads this for groundstrokes**: forehand or backhand is
- * chosen from where the ball is, and direction from timing
- * (`llm-knowledge/decisions/0015-contact-model.md`). The phone still sends its
- * best guess, so the wire and older controllers are unchanged.
+ * **The stroke the phone read decides where the ball goes**: forehand to
+ * screen-left, backhand to screen-right, `overhead` a smash that only
+ * connects out of the air
+ * (`llm-knowledge/decisions/0016-stroke-decides-direction.md`). `overhead`
+ * was added without a version bump: an older controller never sends it.
  *
  * `serve` is assigned by the **simulation**, from `phase === "waiting-serve"`,
  * and is never claimed by a phone. The phone used to guess it from a wrist
@@ -62,7 +63,7 @@ export type Side = "near" | "far";
  * `llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md`. A
  * controller that sends one anyway is not rejected; the sim overrides it.
  */
-export type SwingKind = "forehand" | "backhand" | "serve";
+export type SwingKind = "forehand" | "backhand" | "overhead" | "serve";
 
 /** What the host tells a phone happened, so it can buzz. */
 export type FeedbackKind = "hit" | "miss" | "point";
@@ -203,6 +204,7 @@ export function isControllerMessage(x: unknown): x is ControllerMessage {
 			return (
 				(x.kind === "forehand" ||
 					x.kind === "backhand" ||
+					x.kind === "overhead" ||
 					x.kind === "serve") &&
 				isFiniteNumber(x.power) &&
 				x.power >= 0 &&

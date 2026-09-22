@@ -85,6 +85,18 @@ Trap already sprung: a lobe that crashes from its peak straight under the
 floor in one sample used to end without announcing. The peak most likely to
 do that is the real swing's.
 
+**The stroke is read at the peak** (since [[0016-stroke-decides-direction]],
+when `kind` started deciding where the ball goes). `strokeOf(peak, gravity)`:
+overhead if a 200ms EMA of `accelerationIncludingGravity`, **frozen at the
+first sample of the lobe**, has normalised x above `OVERHEAD_TILT` (the
+racket went into the swing held up); otherwise the sign of
+`alpha + SIDE_GAMMA_WEIGHT · gamma` at the peak. The live detector no longer
+uses `swingFrom`'s `turn` sample for the side — only power, spin and `at`
+still come from `swingFrom`, so **the two detectors now disagree on `kind`
+by design**; the batch detector keeps the 2026-09-21 rule. `current` exposes
+the reading of the lobe in progress, for the controller's readout.
+Measurements: [[2026-09-22-stroke-classifier]].
+
 ## How the batch detector works
 
 Peak angular velocity **cannot** separate a swing from a hand gesture — the
@@ -120,7 +132,7 @@ that failed: [[2026-09-21-swing-direction-classifier]].
 
 Result for the batch detector on the fixtures: **0 false positives and 0
 misses across all 26 traces**. (The 52/55 direction figure was the old
-streaming detector's; the live detector's `kind` is no longer used by the sim.) Every threshold sits on a measured plateau,
+streaming detector's; the live detector reads `kind` its own way now — see above.) Every threshold sits on a measured plateau,
 not a knife-edge — the original derivation is
 [[2026-09-19-swing-detector-tuning]].
 
@@ -148,6 +160,9 @@ as nothing. `PRODUCT.md` asks to guess in the player's favour.
   fiction is worse than no detector.
 - **`nextTraceName` is max-plus-one, not count-plus-one**, so deleting a trace
   cannot cause a silent overwrite.
+- **The live detector's gravity estimate must be frozen at lobe start.**
+  During the swing `accelerationIncludingGravity` is mostly the swing, and
+  it is the racket's position *going in* that says overhead.
 - **Both detectors classify through `swingFrom`, and it takes TWO samples.**
   `peak` (loudest — power, spin, `at`) and `turn` (largest `|α|` — forehand or
   backhand). They are routinely different samples and confusing them is the

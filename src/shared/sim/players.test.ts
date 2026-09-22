@@ -6,6 +6,7 @@ import {
 	movePlayer,
 	PLAYER_SPEED,
 	predictStrike,
+	SMASH_HEIGHT,
 	STRIKE_COMFORT,
 	STRIKE_HEIGHT_MAX,
 	STRIKE_HEIGHT_MIN,
@@ -99,6 +100,24 @@ describe("predictStrike", () => {
 
 		expect(strike.air).toBe(true);
 		expect(strike.z).toBeLessThan(10);
+	});
+
+	// A high ball is a chance to smash: the player steps in and takes it out
+	// of the air, overhead, rather than letting it bounce up over their head.
+	it("takes a high ball out of the air overhead when it comes down within reach", () => {
+		const incoming = ball([0, 4, -1], [0, 1, 7]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 0, 6));
+
+		expect(strike.air).toBe(true);
+		expect(strike.ball.y).toBeGreaterThanOrEqual(SMASH_HEIGHT - 0.1);
+		expect(strike.ball.y).toBeLessThanOrEqual(SMASH_HEIGHT + 0.1);
+	});
+
+	it("lets the same high ball bounce when it comes down out of reach", () => {
+		const incoming = ball([0, 4, -1], [0, 1, 7]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 4, 11));
+
+		expect(strike.air).toBe(false);
 	});
 
 	it("plays the same ball off the bounce when there is time to get back", () => {

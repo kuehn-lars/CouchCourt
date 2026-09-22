@@ -13,6 +13,8 @@ code:
   - `src/host/render/entities.ts`
 ---
 
+**Decision 4 is superseded by [[0016-stroke-decides-direction]] (2026-09-22):** the stroke the phone reads decides direction and timing decides quality. Everything else here stands.
+
 # 0015 — The contact model
 
 Settled on 2026-09-22 after the user reported that **only the serve ever

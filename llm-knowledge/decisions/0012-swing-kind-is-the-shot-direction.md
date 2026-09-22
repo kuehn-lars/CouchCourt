@@ -9,7 +9,7 @@ code:
   - `src/shared/swing/detector.ts`
 ---
 
-**Superseded by [[0015-contact-model]] (2026-09-22).** Direction is timing again, the Wii way, and forehand/backhand is chosen from where the ball is. The phone's `kind` is sent and ignored.
+**Superseded by [[0015-contact-model]] (2026-09-22).** Direction is timing again, the Wii way, and forehand/backhand is chosen from where the ball is. The phone's `kind` is sent and ignored. **Its idea is back as [[0016-stroke-decides-direction]]**, in screen space and with timing as a trade.
 
 # 0012 — The stroke you play is the direction the ball goes
 

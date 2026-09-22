@@ -54,7 +54,7 @@ This is the path that matters. Everything else in the codebase supports it.
    │  MotionSample[]
    ▼
  createSwingStream()     ①  every rotation PEAK, ~50ms after it
-   │  Swing{power,at,spin,lag}   (kind sent, ignored)
+   │  Swing{kind,power,at,spin,lag}   kind: forehand/backhand/overhead
    ▼
  ws.send {t:"swing"}     ②  ──▶  parseControllerMessage
    (only while playing)          attach playerId from socket
@@ -91,7 +91,8 @@ This is the path that matters. Everything else in the codebase supports it.
 ```
 
 ① **Rebuilt 2026-09-22**: announces each rotation lobe at its peak, and lets
-the host pick which peak was the swing. Unverified on a phone.
+the host pick which peak was the swing. Reads the stroke at the peak,
+including overhead ([[2026-09-22-stroke-classifier]]). Unverified on a phone.
 ② Swings are only sent while the match is `playing`.
 ③ The swing is stamped with the **host's** sim clock, never the phone's
 `swing.at` — [[0007-host-arrival-time-for-swing-timing]].
@@ -105,10 +106,14 @@ swing is judged against that one frozen meeting — which may be in the past.
 Re-predicting at arrival instead is what made every return whiff until
 2026-09-22. [[0015-contact-model]].
 
-**Where the ball goes** is timing, the Wii rule: early pulls it across the
-body, late pushes it the other way, the edge of the window sprays it out.
-Forehand or backhand is chosen from where the ball is. Every launch is solved
-through `stepBall` to land where it was aimed. [[0015-contact-model]].
+**Where the ball goes** is the stroke the phone read: forehand to screen-left,
+backhand to screen-right (screen space, because both players face the same
+screen), overhead a smash down the middle — and an overhead only connects
+with a ball taken out of the air. Timing is how well: on time is paced and
+wide of the middle, early goes wider and out, late goes central and long.
+Forehand or backhand *stance* is still set from where the ball is. Every
+launch is solved through `stepBall` to land where it was aimed.
+[[0016-stroke-decides-direction]], [[0015-contact-model]].
 
 ## What each hop is allowed to assume
 

@@ -7,7 +7,12 @@
  * are pure and live elsewhere — `shared/swing/stream.ts` and `backoffMs`.
  */
 
-import type { FeedbackKind, MatchInfo, Side } from "../shared/protocol.ts";
+import type {
+	FeedbackKind,
+	MatchInfo,
+	Side,
+	SwingKind,
+} from "../shared/protocol.ts";
 import { createSwingStream } from "../shared/swing/stream.ts";
 import { toSample } from "../shared/swing/trace.ts";
 import { requestMotionPermission } from "./motion.ts";
@@ -32,6 +37,8 @@ const hintEl = requireElement("hint", HTMLElement);
 const ringEl = requireElement("ring", HTMLElement);
 const powerEl = requireElement("power", HTMLElement);
 const toastEl = requireElement("toast", HTMLElement);
+const moveNowEl = requireElement("move-now", HTMLElement);
+const moveLastEl = requireElement("move-last", HTMLElement);
 const hapticEl = requireElement("haptic-label", HTMLLabelElement);
 
 const STATUS_TEXT: Record<SessionState, string> = {
@@ -85,8 +92,8 @@ function renderMatch(): void {
 				);
 			} else {
 				hint(
-					"Swing as the ball reaches you",
-					"Early pulls it across the court, late sends it down the line.",
+					"Forehand \u2190 \u00b7 Backhand \u2192 \u00b7 Overhead on a high ball",
+					"Swing as it reaches you. Early angles it wider; late and hard sails long.",
 				);
 			}
 			return;
@@ -136,18 +143,29 @@ function flash(kind: FeedbackKind): void {
 	toastTimer = window.setTimeout(() => toastEl.classList.remove("show"), 900);
 }
 
+/** What each stroke does, as the corner readout names it. The arrows are
+ * where the ball goes on the screen (`sim/shot.ts`, `SCREEN_LEFT`). */
+const MOVE_NAME: Record<SwingKind, string> = {
+	forehand: "Forehand \u2190",
+	backhand: "Backhand \u2192",
+	overhead: "Overhead \u2191",
+	serve: "Serve",
+};
+
 let shownPower = 0;
 let shownAt = 0;
 
-/** The ring: the last swing's power as an arc and a number. One swing is
- * several peaks (backswing, swing, follow-through), so a weaker peak right
- * after a stronger one is the same swing and does not replace it. */
-function showSwing(power: number): void {
+/** The ring: the last swing's power as an arc and a number, and the corner
+ * readout's "last" move. One swing is several peaks (backswing, swing,
+ * follow-through), so a weaker peak right after a stronger one is the same
+ * swing and does not replace it — which is also the one the host plays. */
+function showSwing(power: number, kind: SwingKind): void {
 	const now = performance.now();
 	if (now - shownAt < 400 && power <= shownPower) return;
 	shownPower = power;
 	shownAt = now;
 	const pct = Math.round(power * 100);
+	moveLastEl.textContent = `${MOVE_NAME[kind]} \u00b7 ${pct}`;
 	ringEl.style.setProperty("--power", String(power));
 	powerEl.textContent = String(pct);
 	ringEl.classList.remove("pop");
@@ -159,12 +177,22 @@ function showSwing(power: number): void {
 const LEVEL_FULL = 1100;
 let levelShown = 0;
 
+let nowShown: SwingKind | null = null;
+
 /** Live rotation as a glow, eased and drawn once a frame rather than at the
  * sensor's 60Hz straight into style. */
 function drawLevel(): void {
 	const target = Math.min(1, stream.level / LEVEL_FULL);
 	levelShown += (target - levelShown) * (target > levelShown ? 0.6 : 0.15);
 	ringEl.style.setProperty("--level", levelShown.toFixed(3));
+	// The move in progress, for debugging the classifier with a phone in
+	// hand: which way does the phone think this swing is going?
+	const now = stream.current;
+	if (now !== nowShown) {
+		nowShown = now;
+		moveNowEl.textContent = now === null ? "\u2014" : MOVE_NAME[now];
+		moveNowEl.classList.toggle("live", now !== null);
+	}
 	requestAnimationFrame(drawLevel);
 }
 
@@ -189,7 +217,7 @@ function onMotion(event: DeviceMotionEvent): void {
 	if (sample === null) return;
 	const swing = stream.push(sample);
 	if (swing === null) return;
-	showSwing(swing.power);
+	showSwing(swing.power, swing.kind);
 	// Only while a point can be played: a gesture in the lobby is not a shot.
 	if (match?.phase === "playing") session?.send({ t: "swing", ...swing });
 }

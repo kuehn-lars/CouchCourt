@@ -61,7 +61,9 @@ the first player to announce themselves ready serves. In solo, that player is
 by definition the human. No coin toss (nobody can see one) and no toggle
 (nobody is standing at the host screen).
 
-**Solo mode** builds a `createBot(otherSide, 0.7)` and calls it once per
+**Solo mode** builds a `createBot(otherSide, 0.65)` — a decent player wins
+~57% of points against it, a newcomer ~43%
+([[2026-09-22-stroke-direction-balance]]) — and calls it once per
 tick. Its swing is pushed onto the same `pending` queue a phone's swing lands
 in, so there is exactly one path into the simulation — see
 [[modules/shared-sim]].
@@ -142,7 +144,7 @@ precedent `spin` set. `strokeAnim` maps it:
 
 | `stroke` | animation |
 | --- | --- |
-| `kind === "serve"` | `serve` — over the top from behind the head, the slowest of the four |
+| `kind === "serve"` or `"overhead"` | `serve` — over the top from behind the head, the slowest of the four. A smash reuses it |
 | `air` | `volley` — a block, almost no backswing, over in a blink |
 | otherwise | `forehand` / `backhand` — mirrored sweeps across the body |
 

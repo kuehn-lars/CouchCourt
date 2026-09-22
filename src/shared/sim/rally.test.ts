@@ -14,8 +14,13 @@ import type { Ball } from "./state.ts";
 
 const DT = 1 / 120;
 
-const swing = (power: number, lag = 0, spin = 0): Swing => ({
-	kind: "forehand",
+const swing = (
+	power: number,
+	lag = 0,
+	spin = 0,
+	kind: Swing["kind"] = "forehand",
+): Swing => ({
+	kind,
 	power,
 	at: 0,
 	lag,
@@ -220,7 +225,9 @@ describe("the return — the swing path that broke", () => {
 		const at = until(s, (x) => x.time >= c.at + TIMING_IDEAL);
 		const weak = tick(at, [input("near", at, swing(0.3))], DT);
 		expect(weak.toHit).toBe("far");
-		const later = until(weak, (x) => x.time >= at.time + 0.1);
+		// Not much later: lateness costs pace now, and 100ms late is a
+		// slower ball than a weak one dead on time.
+		const later = until(weak, (x) => x.time >= at.time + 0.05);
 		const strong = tick(later, [input("near", later, swing(0.9))], DT);
 		expect(strong.stroke?.power).toBe(0.9);
 		expect(strong.toHit).toBe("far");
@@ -255,7 +262,9 @@ describe("the return — the swing path that broke", () => {
 	});
 });
 
-describe("forehand or backhand is where the ball is, not what the phone said", () => {
+// The player is still set up by where the ball is — they turn for it
+// before they swing — but what they swing is what the ball does.
+describe("the stance is where the ball is", () => {
 	const incoming = (x: number): MatchState =>
 		tick(
 			state({
@@ -267,12 +276,82 @@ describe("forehand or backhand is where the ball is, not what the phone said", (
 			DT,
 		);
 
-	it("plays a ball on the near player's right (+x) as a forehand", () => {
+	it("sets up for a ball on the near player's right (+x) as a forehand", () => {
 		expect(incoming(2.5).contact?.stroke).toBe("forehand");
 	});
 
-	it("plays a ball on their left as a backhand", () => {
+	it("sets up for a ball on their left as a backhand", () => {
 		expect(incoming(-2.5).contact?.stroke).toBe("backhand");
+	});
+});
+
+describe("the stroke you play is where the ball goes", () => {
+	/** Swings `kind` on time at the contact `s` is waiting on, and flies the
+	 * shot to its bounce. */
+	function play(s: MatchState, kind: Swing["kind"]) {
+		const c = s.contact;
+		if (!c) throw new Error("no contact");
+		const on = until(s, (x) => x.time >= c.at + TIMING_IDEAL);
+		const hit = tick(on, [input("near", on, swing(0.7, 0, 0, kind))], DT);
+		return { on, hit };
+	}
+	const bounce = (s: MatchState) =>
+		until(s, (x) => x.bounces === 1 || x.phase === "point-over").ball.p;
+
+	it("sends a backhand to the hitter's right, whichever side the ball came to", () => {
+		for (const kind of ["forehand", "backhand"] as const) {
+			const { hit } = play(awaitingReturn(), kind);
+			expect(hit.toHit).toBe("far");
+			expect(hit.stroke?.kind).toBe(kind);
+			// The near player faces -z: their right is +x.
+			const x = bounce(hit).x;
+			if (kind === "backhand") expect(x).toBeGreaterThan(0.5);
+			else expect(x).toBeLessThan(-0.5);
+		}
+	});
+
+	it("gets nothing from an overhead at a ball that has already bounced", () => {
+		const { on, hit } = play(awaitingReturn(), "overhead");
+		expect(hit.toHit).toBe("near");
+		expect(hit.whiffs.near).toBe(on.whiffs.near + 1);
+	});
+
+	/** A high ball dropping in front of the near player, as a smash chance. */
+	function highBall(): MatchState {
+		return until(
+			tick(
+				state({
+					phase: "rally",
+					toHit: "near",
+					ball: { p: { x: 0, y: 4, z: -1 }, v: { x: 0, y: 1, z: 7 } },
+					players: {
+						near: { side: "near", x: 0, z: 6 },
+						far: { side: "far", x: 0, z: -BASELINE_Z },
+					},
+				}),
+				[],
+				DT,
+			),
+			(x) => x.contact !== null,
+		);
+	}
+
+	it("smashes a high ball taken out of the air", () => {
+		const s = highBall();
+		expect(s.contact?.air).toBe(true);
+		const { hit } = play(s, "overhead");
+		expect(hit.toHit).toBe("far");
+		expect(hit.stroke?.kind).toBe("overhead");
+		const v = hit.ball.v;
+		expect(Math.hypot(v.x, v.y, v.z)).toBeGreaterThan(20);
+	});
+
+	it("volleys the same high ball with a groundstroke, more slowly", () => {
+		const { hit } = play(highBall(), "backhand");
+		expect(hit.toHit).toBe("far");
+		expect(hit.stroke?.kind).toBe("backhand");
+		const v = hit.ball.v;
+		expect(Math.hypot(v.x, v.y, v.z)).toBeLessThan(20);
 	});
 });
 

@@ -56,7 +56,8 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0012-swing-kind-is-the-shot-direction]] | **Superseded by 0015.** The stroke you played decided where the ball went |
 | [[0013-detector-latency-is-compensated]] | The phone reports how late its detector was and the host subtracts it. Every swing had been reading late |
 | [[0014-players-run-to-the-ball]] | Players move in x and z, and one predictor says where they meet the ball and when. Amended by 0015 |
-| [[0015-contact-model]] | **Why returns whiffed, and the fix.** One frozen contact per ball; early swings wait, late ones rewind; hardest peak wins; timing is direction (Wii rule); launches solved to land; toss-then-hit serve; peak detector on the phone |
+| [[0015-contact-model]] | **Why returns whiffed, and the fix.** One frozen contact per ball; early swings wait, late ones rewind; hardest peak wins; launches solved to land; toss-then-hit serve; peak detector on the phone. Its "timing is direction" rule is superseded by 0016 |
+| [[0016-stroke-decides-direction]] | **Where the ball goes.** Forehand screen-left, backhand screen-right, overhead a smash only out of the air; timing is a trade (early wide, late long); bot skill is a timing spread |
 
 ## Platform
 
@@ -103,6 +104,8 @@ the evidence that produced them.
 | [[2026-09-20-camera-framing]] | The far player rendered at 0.25x the near one. Why a frustum test could not catch it |
 | [[2026-09-21-swing-direction-classifier]] | What actually tells a forehand from a backhand, the twelve statistics tried, and the grip-invariant idea that does not pay |
 | [[2026-09-22-contact-model-feel]] | The whiff reproduced (−650ms), peak-detector latency (50ms median), and balancing against a simulated human: what made points end |
+| [[2026-09-22-stroke-classifier]] | Overhead from the racket position going into the swing (8/8); side from alpha + 0.4·gamma at the peak (58/60, up from a silent 54/60); what failed |
+| [[2026-09-22-stroke-direction-balance]] | Why pace was a knife-edge, the timing trade, bot skill as spread, and the shipped win rates |
 | [[2026-09-21-camera-frames-a-moving-player]] | The camera framed a court, not the players in it — and the guard passed while the legs hung off the screen |
 | [[2026-09-20-serve-reachability]] | **Superseded.** The original, wrong claim — kept so nobody re-derives it |
 
@@ -116,6 +119,10 @@ folders above and recorded in [[log]]. See `llm-knowledge/sessions/README.md`.
 
 Things that are true today and that a session should not be surprised by.
 
+- **Stroke classification is measured on multi-rep captures only**, and the
+  overhead rule rests on eight serve swings — no recorded smash exists. The
+  controller's corner readout is there to check it per swing with a phone in
+  hand ([[2026-09-22-stroke-classifier]]).
 - **The 2026-09-22 feel rewrite is tuned against a simulated human.** The
   balance constants and `TIMING_IDEAL` (network + display latency) need a real
   phone and a real person; the iOS 18 switch-haptic trick is untried. See

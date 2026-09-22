@@ -5,38 +5,39 @@
  * swing takes, judged by exactly the same contact model. A bot that reached
  * into the ball would be a second way for the ball to move.
  *
- * It plays the way the timing rule invites: it looks at where its opponent
- * is standing, picks the side of the court they are not on, and times its
- * swing early or late to send the ball there. Skill is how far its timing
- * wanders from that plan — a little and the ball lands off-target, a lot and
- * it goes wide or is missed altogether.
+ * It plays the way the stroke rule invites: it looks at where its opponent
+ * is standing and plays the stroke that sends the ball to the other side — a
+ * forehand to screen-left, a backhand to screen-right — and smashes a high ball
+ * out of the air. Skill is how often it mistimes a shot into an error, and
+ * how far its timing wanders on the rest: a little and the ball drifts off
+ * the line toward the middle.
  *
  * `src/shared/**` is compiled under both a DOM-only and a Node-only tsconfig,
  * so this file names no DOM type and no Node global — see
  * `llm-knowledge/decisions/0002-host-authoritative-simulation.md`.
  */
 
-import type { Side, Swing } from "../protocol.ts";
+import type { Side, Swing, SwingKind } from "../protocol.ts";
+import { SMASH_HEIGHT } from "./players.ts";
 import type { MatchState } from "./rally.ts";
 import { TOSS_APEX } from "./serve.ts";
-import { TIMING_EARLY, TIMING_IDEAL, TIMING_LATE } from "./shot.ts";
+import { SCREEN_LEFT, TIMING_IDEAL } from "./shot.ts";
 
 /** Seconds the bot waits before tossing. A bot that serves the instant the
  * point starts reads as a glitch, not as an opponent. */
 export const SERVE_DELAY = 1.2;
-
-/** How far from the middle a perfect bot aims, as timing `u`. */
-const AIM_U = 0.5;
 
 /** Groundstroke power at skill 0 and at skill 1. */
 const POWER_MIN = 0.5;
 const POWER_MAX = 0.95;
 const SERVE_POWER = 0.65;
 
-/** Chance a shot is a mistake at skill 0, and how far a placed shot's
- * timing wanders at skill 0, in `u` units. */
-const ERROR_RATE = 0.35;
-const NOISE_SCALE = 0.35;
+/** Spread of the bot's timing, seconds, at skill 0 and skill 1 — the same
+ * thing that separates a novice from a decent player. Its mistakes are
+ * whatever that spread does under the shot rules, exactly as a person's are:
+ * early goes wide, late and hard goes long. */
+const SIGMA_WORST = 0.15;
+const SIGMA_BEST = 0.02;
 
 /**
  * Timing noise in [-1, 1] for the bot's `n`th shot: a hash, not an RNG, so a
@@ -53,6 +54,7 @@ const POWER_JITTER: readonly number[] = [0, 0.08, -0.06, 0.05, -0.1, 0.03];
 
 const clamp = (x: number, lo: number, hi: number) =>
 	Math.max(lo, Math.min(hi, x));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export interface Bot {
 	/**
@@ -75,11 +77,12 @@ export function createBot(side: Side, skill = 0.75): Bot {
 	/** The plan already swung for: one swing per plan. */
 	let swungFor: string | null = null;
 	let power = 0;
+	let kind: SwingKind = "forehand";
 	let shot = 0;
 	let waitingSince: number | null = null;
 
 	const swingNow = (state: MatchState): Swing => ({
-		kind: "forehand",
+		kind,
 		power,
 		at: state.time,
 		spin: SPIN_CYCLE[shot % SPIN_CYCLE.length] ?? 0,
@@ -87,31 +90,25 @@ export function createBot(side: Side, skill = 0.75): Bot {
 		lag: 0,
 	});
 
-	/** Timing error, seconds, that sends the ball to the open side. */
-	const errorFor = (state: MatchState): number => {
+	/** The stroke that sends the ball to the side the opponent is not on,
+	 * or a smash when the ball is up there to be hit. */
+	const strokeFor = (state: MatchState): SwingKind => {
 		const c = state.contact;
-		if (!c) return TIMING_IDEAL;
+		if (c?.air && c.ball.y >= SMASH_HEIGHT - 0.2) return "overhead";
 		const opponent = state.players[side === "near" ? "far" : "near"];
-		const right = side === "near" ? 1 : -1;
 		// World side to aim for: away from the opponent, alternating when
 		// they are dead centre.
 		const away =
 			Math.abs(opponent.x) > 0.4 ? -Math.sign(opponent.x) : shot % 2 ? 1 : -1;
-		// An early forehand goes to the hitter's left, so the sign of `u` is
-		// the aim's hitter-side sign, flipped for a backhand.
-		const want = away * right * (c.stroke === "forehand" ? 1 : -1);
-		// Mistakes are a rate, not a smear: most shots are placed, and some
-		// are sprayed out wide, as a player's are. A smear made a weak bot
-		// spray half its shots and a strong one never miss at all.
-		const roll = (noise(shot, salt) + 1) / 2;
-		const errRate = ERROR_RATE * (1 - strength);
-		const u =
-			roll < errRate
-				? Math.sign(noise(shot, salt + 7) || 1) *
-					(0.72 + 0.2 * (roll / errRate))
-				: want * AIM_U * (0.5 + 0.5 * strength) +
-					noise(shot, salt + 13) * (1 - strength) * NOISE_SCALE;
-		return TIMING_IDEAL + (u < 0 ? u * TIMING_EARLY : u * TIMING_LATE);
+		return away === SCREEN_LEFT ? "forehand" : "backhand";
+	};
+
+	/** Timing error, seconds: roughly normal (the sum of three hashes),
+	 * bounded at three spreads. */
+	const errorFor = (): number => {
+		const g =
+			noise(shot, salt) + noise(shot, salt + 7) + noise(shot, salt + 13);
+		return TIMING_IDEAL + g * lerp(SIGMA_WORST, SIGMA_BEST, strength);
 	};
 
 	return {
@@ -148,7 +145,12 @@ export function createBot(side: Side, skill = 0.75): Bot {
 					// Commit to an error once, as a player does. The contact
 					// itself is tracked as it firms up — the ball is in plain
 					// sight — but how well it is hit is decided now.
-					plannedError = errorFor(state);
+					plannedError = errorFor();
+				}
+				// The stroke is chosen as late as it is swung: a high ball
+				// that is only now known to be taken overhead gets a smash.
+				if (state.time >= state.contact.at + plannedError) {
+					kind = strokeFor(state);
 				}
 				at = state.contact.at + plannedError;
 			}

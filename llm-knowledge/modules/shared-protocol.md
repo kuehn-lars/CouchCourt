@@ -1,6 +1,6 @@
 ---
 title: "Module: src/shared/protocol.ts — the wire contract"
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [module, protocol, networking]
 status: current
 code:
@@ -107,6 +107,11 @@ oversight, so [[wire-protocol]] records the reasoning.
   longer guesses serves — the threshold it used turned out to be measuring
   swing speed. The guard still accepts `serve` from a controller and the sim
   overrides it. [[0012-swing-kind-is-the-shot-direction]].
+- **`SwingKind` gained `overhead`** (2026-09-22) — the phone's reading of an
+  overhand motion, and a stroke the sim plays as a smash out of the air. An
+  additive value: an older controller never sends it, so `PROTOCOL_VERSION`
+  did not move. It is distinct from `serve`, which is still the sim's.
+  [[0016-stroke-decides-direction]].
 - **`RELAY_PATH`** — the relay's own URL path, here rather than in the server
   because the host page, the controller and three integration tests all have
   to agree with it. Sharing a port with Vite's HMR socket makes a path part of

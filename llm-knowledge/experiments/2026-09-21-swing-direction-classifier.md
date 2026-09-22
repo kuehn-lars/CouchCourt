@@ -9,7 +9,7 @@ code:
   - `tests/fixtures/motion/`
 ---
 
-**Historical as of [[0015-contact-model]].** The phone still classifies `kind` this way, but the sim ignores it: stroke side now comes from where the ball is.
+**Historical.** The live detector no longer classifies this way: since [[0016-stroke-decides-direction]] it reads `alpha + 0.4·gamma` at the peak and adds overhead — see [[2026-09-22-stroke-classifier]], which also found the peak detector had quietly fallen to 54/60. The batch detector still uses the rule below.
 
 # 2026-09-21 — What actually tells a forehand from a backhand
 

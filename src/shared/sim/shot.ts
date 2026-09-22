@@ -10,11 +10,18 @@
  * landed 3-17m long, which is why rallies barely existed
  * (`llm-knowledge/decisions/0015-contact-model.md`).
  *
- * **Direction is timing, as in Wii Tennis.** An early swing pulls the ball
- * across the body, a late one pushes it the other way; the stroke side comes
- * from where the ball is, not from the phone. Power is depth and pace. Only a
- * swing at the ragged edge of the timing window is sent out wide — the risk
- * of going for the line.
+ * **The stroke is the direction.** A forehand sweeps the racket to the
+ * left and the ball goes with it — screen-left, from either end, because both
+ * players face the screen; a backhand goes right; an
+ * overhead (`smash`) goes straight and hard. Timing is how it is hit, and it
+ * is a trade: dead on time is a paced ball with room inside the line; early
+ * takes it wider — more angle, until it is out; late holds it in the middle
+ * and pushes it deeper — long, if it was hit hard. A mistimed ball also
+ * floats, and a late one pops up
+ * (`llm-knowledge/decisions/0016-stroke-decides-direction.md`).
+ *
+ * Power is depth and pace: a clean ball lands in the court rather than on
+ * the baseline, and a harder one goes deeper and faster.
  *
  * `src/shared/**` is compiled under both a DOM-only and a Node-only tsconfig,
  * so this file names no DOM type and no Node global — see
@@ -46,27 +53,47 @@ export const TIMING_LATE = 0.2;
  */
 export const TIMING_IDEAL = 0.04;
 
-/** `|u|` beyond which a shot is aimed past the sideline. */
-export const SAFE_TIMING = 0.5;
+/** `|u|` inside which every clean groundstroke lands in — the band a player
+ * can swing in without losing the point to their own timing. */
+export const SAFE_TIMING = 0.38;
 
-/** Hitter's-right offset, metres, of the aim at `|u| = SAFE_TIMING`, and at
- * the very edge of the window. The first is ~0.8m inside the singles line;
- * the second is ~0.9m outside it. */
-export const AIM_WIDE = 3.3;
+/** Hitter's-side offset of the aim, metres: dead on time, at the early edge
+ * of the window, and at the late edge. The singles line is at 4.115: on time
+ * is ~1.3m inside it, early crosses it past `SAFE_TIMING`. */
+export const AIM_GOOD = 3.2;
 export const AIM_OUT = 5.5;
+export const AIM_CENTER = 0.6;
 
-/** Landing depth past the net, metres, for the softest and hardest swing.
- * The baseline is at 11.89. */
-export const DEPTH_SOFT = 7;
-export const DEPTH_HARD = 10;
+/** Landing depth past the net, metres, for the softest and hardest clean
+ * swing. The service line is at 6.4 and the baseline at 11.89: a clean ball
+ * lands in the court, not on the baseline. */
+export const DEPTH_SOFT = 5.5;
+export const DEPTH_HARD = 8.8;
+
+/** Extra depth, metres, at the late edge of the window, for the softest and
+ * the hardest swing: a soft late ball stays in, a hard one sails long. */
+export const LONG_SOFT = 1.5;
+export const LONG_HARD = 8;
 
 /** Launch angle a groundstroke starts its search from, radians: a soft swing
- * is a loopy rally ball, a hard one is flat. Raised only if the net needs it. */
-export const ANGLE_SOFT = 0.2;
-export const ANGLE_HARD = 0.03;
+ * is a loopy rally ball, a hard one is a drive. Raised only if the net needs
+ * it. The shorter the landing, the more arc a ball needs to get there at a
+ * sane pace — flat and short is a 33 m/s ball nobody can reach. */
+export const ANGLE_SOFT = 0.45;
+export const ANGLE_HARD = 0.04;
+
+/** Extra launch angle, radians, per unit of timing error, and extra again
+ * for lateness. A mistimed ball floats; a late one pops up. */
+export const MISTIME_LIFT = 0.2;
+export const LATE_POP = 0.25;
 
 /** Height a groundstroke must clear the band by, metres. */
 export const NET_MARGIN = 0.12;
+
+/** Smash pace range, m/s, and how deep it lands past the net, metres. */
+export const SMASH_SPEED_MIN = 22;
+export const SMASH_SPEED_MAX = 34;
+export const SMASH_DEPTH = 6.5;
 
 /** Serve pace range, m/s, and how much of it a badly timed toss keeps. */
 export const SERVE_SPEED_MIN = 17;
@@ -94,6 +121,15 @@ export function timingOf(error: number): number | undefined {
 	if (x < -TIMING_EARLY || x > TIMING_LATE) return undefined;
 	return x < 0 ? x / TIMING_EARLY : x / TIMING_LATE;
 }
+
+/**
+ * World `x` sign of the left of the screen. The camera sits behind the near
+ * baseline, and **both players stand facing the same screen**, so a forehand
+ * — the racket sweeping to the player's left — goes to screen-left from
+ * either end. Reading it as the far avatar's own left would send a far
+ * player's ball the opposite way to their swing.
+ */
+export const SCREEN_LEFT = -1;
 
 /** Which way `side` hits: -1 toward -z (the near player), +1 toward +z. */
 export const forwardOf = (side: Side): number => (side === "near" ? -1 : 1);
@@ -162,19 +198,21 @@ function toward(from: Vec3, target: { x: number; z: number }) {
 	return { dir: { x: dx / d, z: dz / d }, distance: d };
 }
 
-/** Hitter's-right offset, metres, of a shot timed `u`. */
-function aimOffset(u: number): number {
-	const a = Math.abs(u);
-	const wide =
-		a <= SAFE_TIMING
-			? (a / SAFE_TIMING) * AIM_WIDE
-			: lerp(AIM_WIDE, AIM_OUT, (a - SAFE_TIMING) / (1 - SAFE_TIMING));
-	return Math.sign(u) * wide;
+/** How far `u` is past the safe band on each side, 0..1. */
+function overshoot(u: number): { early: number; late: number } {
+	const past = (x: number) =>
+		clamp((x - SAFE_TIMING) / (1 - SAFE_TIMING), 0, 1);
+	return { early: past(-u), late: past(u) };
 }
 
+/** 1 dead on time, falling to 0 at the edge of the safe band. */
+const quality = (u: number): number =>
+	clamp(1 - Math.abs(u) / SAFE_TIMING, 0, 1);
+
 /**
- * A groundstroke or volley struck at `from` by `side`, timed `u` (see
- * `timingOf`), at `power` 0..1, flying in `env` (the spin of this shot).
+ * A groundstroke or volley struck at `from` by `side` with `stroke`, timed
+ * `u` (see `timingOf`), at `power` 0..1, flying in `env` (the spin of this
+ * shot).
  */
 export function groundstroke(
 	from: Vec3,
@@ -185,12 +223,16 @@ export function groundstroke(
 	env: BallEnv,
 ): Vec3 {
 	const p = clamp(power, 0, 1);
-	// Early pulls across the body: a forehand to the hitter's left, a
-	// backhand to their right. Late does the opposite.
-	const lateral = (stroke === "forehand" ? 1 : -1) * aimOffset(u);
+	const t = clamp(u, -1, 1);
+	const early = Math.max(0, -t);
+	const late = Math.max(0, t);
+	const wide =
+		AIM_GOOD + early * (AIM_OUT - AIM_GOOD) - late * (AIM_GOOD - AIM_CENTER);
 	const target = {
-		x: rightOf(side) * lateral,
-		z: forwardOf(side) * lerp(DEPTH_SOFT, DEPTH_HARD, p),
+		x: (stroke === "forehand" ? SCREEN_LEFT : -SCREEN_LEFT) * wide,
+		z:
+			forwardOf(side) *
+			(lerp(DEPTH_SOFT, DEPTH_HARD, p) + late * lerp(LONG_SOFT, LONG_HARD, p)),
 	};
 	const { dir, distance } = toward(from, target);
 
@@ -207,7 +249,10 @@ export function groundstroke(
 		return { v, clears: fly(from, v, env).clearance >= NET_MARGIN };
 	};
 
-	const start = lerp(ANGLE_SOFT, ANGLE_HARD, p);
+	const start =
+		lerp(ANGLE_SOFT, ANGLE_HARD, p) +
+		Math.abs(t) * MISTIME_LIFT +
+		late * LATE_POP;
 	const direct = launch(start);
 	if (direct.clears) return direct.v;
 	// A low ball struck flat finds the net: lift it by the least that clears,
@@ -221,6 +266,57 @@ export function groundstroke(
 		else lo = mid;
 	}
 	return launch(hi).v;
+}
+
+/** The angle that lands a ball struck at `speed` on the target, shedding
+ * pace until it clears the band by `margin` — a ball hit down from overhead
+ * can only land short by skimming it. */
+function driven(
+	from: Vec3,
+	target: { x: number; z: number },
+	speed: number,
+	margin: number,
+	env: BallEnv,
+): Vec3 {
+	const { dir, distance } = toward(from, target);
+	let pace = speed;
+	let v = velocity(dir, pace, 0);
+	for (let i = 0; i < 16; i++) {
+		const angle = solve(
+			-0.8,
+			0.6,
+			distance,
+			(a) => fly(from, velocity(dir, pace, a), env).distance,
+		);
+		v = velocity(dir, pace, angle);
+		if (fly(from, v, env).clearance >= margin) return v;
+		pace *= 0.93;
+	}
+	return v;
+}
+
+/**
+ * An overhead taken out of the air at `from`: straight down the middle,
+ * hard. Timing sets the pace, and past `SAFE_TIMING` sprays it sideways —
+ * the error, not a direction anyone chooses.
+ */
+export function smash(
+	from: Vec3,
+	side: Side,
+	u: number,
+	power: number,
+	env: BallEnv,
+): Vec3 {
+	const p = clamp(power, 0, 1);
+	const over = overshoot(u);
+	const spray = (over.late - over.early) * AIM_OUT;
+	const target = {
+		x: rightOf(side) * spray,
+		z: forwardOf(side) * SMASH_DEPTH,
+	};
+	const speed =
+		lerp(SMASH_SPEED_MIN, SMASH_SPEED_MAX, p) * lerp(0.8, 1, quality(u));
+	return driven(from, target, speed, NET_MARGIN, env);
 }
 
 /**
@@ -240,24 +336,8 @@ export function serveShot(
 		x: targetX,
 		z: forwardOf(side) * lerp(SERVE_DEPTH_SOFT, SERVE_DEPTH_HARD, p),
 	};
-	const { dir, distance } = toward(from, target);
-
-	let speed =
+	const speed =
 		lerp(SERVE_SPEED_MIN, SERVE_SPEED_MAX, p) *
 		lerp(SERVE_MISTIMED, 1, clamp(quality, 0, 1));
-	let v = velocity(dir, speed, 0);
-	for (let i = 0; i < 16; i++) {
-		const angle = solve(
-			-0.5,
-			0.5,
-			distance,
-			(a) => fly(from, velocity(dir, speed, a), env).distance,
-		);
-		v = velocity(dir, speed, angle);
-		// Hit down from overhead, a fast serve can only land short by skimming
-		// the band. Take pace off until it clears.
-		if (fly(from, v, env).clearance >= 0.05) return v;
-		speed *= 0.93;
-	}
-	return v;
+	return driven(from, target, speed, 0.05, env);
 }

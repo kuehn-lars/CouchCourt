@@ -137,9 +137,10 @@ const lobbyUI = createLobbyUI(uiRoot, {
 
 		if (solo) {
 			botSide = other(first.side);
-			// 0.7 rallies for about nine shots against a competent player, and
-			// loses points — see llm-knowledge/modules/shared-sim.md.
-			bot = createBot(botSide, 0.7);
+			// Loses nearly 6 points in 10 to a decent player and wins nearly 6
+			// in 10 from a newcomer, with rallies of eight to ten shots —
+			// see llm-knowledge/experiments/2026-09-22-stroke-direction-balance.md.
+			bot = createBot(botSide, 0.65);
 		} else {
 			if (ready.length < 2) return;
 			botSide = null;

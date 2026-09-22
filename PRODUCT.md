@@ -143,11 +143,13 @@ phone actually uses, the relay with slot assignment, resume and liveness, the
 full simulation (ball physics, shot feel, automatic movement in both axes,
 volleys, scoring, a deterministic replayable rally machine), a solo opponent,
 the Three.js renderer with three camera modes and a distinct animation per
-stroke, a lobby with a join QR code, and synthesised sound. 391 tests.
+stroke, a lobby with a join QR code, and synthesised sound. 398 tests.
 
-**The swing decides the shot.** A forehand and a backhand send the ball
-opposite ways, aimed at a place on the far side rather than pushed sideways;
-timing decides how cleanly you hit it and sprays the ball when you did not.
+**The swing decides the shot.** A forehand sends the ball to the left of the
+screen, a backhand to the right, and an overhead smashes a high ball taken out
+of the air. Timing decides how well: on time is a paced, angled ball; early
+goes wider and eventually out, late goes deeper and eventually long. The
+phone shows which stroke it read, in a corner of the controller.
 Players run to where the ball will be — in and back as well as side to side —
 and take it out of the air when they cannot get behind the bounce in time.
 

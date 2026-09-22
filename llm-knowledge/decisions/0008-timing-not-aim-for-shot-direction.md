@@ -9,7 +9,7 @@ code:
   - `src/shared/protocol.ts`
 ---
 
-**Timing is the direction again as of [[0015-contact-model]] (2026-09-22)** — early pulls, late pushes, with stroke side from ball position. The refusal to read the `aim` stream still stands.
+**Direction is the stroke as of [[0016-stroke-decides-direction]] (2026-09-22)**, after a day of being timing again under [[0015-contact-model]]. The refusal to read the `aim` stream still stands.
 
 # 0008 — Shot direction comes from swing timing, not phone aim
 

@@ -351,6 +351,39 @@
 				color: var(--muted);
 				font-size: 0.85rem;
 			}
+			/* Corner readout of the move the phone reads: debugging the
+			   classifier with a phone in hand. */
+			.moves {
+				position: absolute;
+				top: 0;
+				left: 0;
+				display: grid;
+				grid-template-columns: auto auto;
+				gap: 2px 8px;
+				padding: 8px 10px;
+				border-radius: 12px;
+				background: rgba(0, 0, 0, 0.28);
+				border: 1px solid var(--line);
+				font-size: 0.78rem;
+				line-height: 1.3;
+				font-variant-numeric: tabular-nums;
+				z-index: 1;
+			}
+			.moves dt {
+				color: var(--muted);
+				text-transform: uppercase;
+				letter-spacing: 0.1em;
+				font-size: 0.68rem;
+				align-self: center;
+			}
+			.moves dd {
+				margin: 0;
+				font-weight: 700;
+				white-space: nowrap;
+			}
+			.moves .live {
+				color: var(--accent);
+			}
 			/* The iOS 18 haptic trick needs a real switch in the page. */
 			.haptic {
 				position: fixed;
@@ -392,6 +425,12 @@
 					<span id="status" class="pill" role="status">Connecting…</span>
 				</header>
 				<div class="stage">
+					<dl class="moves" aria-label="Moves the phone reads">
+						<dt>Now</dt>
+						<dd id="move-now">—</dd>
+						<dt>Last</dt>
+						<dd id="move-last">—</dd>
+					</dl>
 					<div id="ring" class="ring" aria-hidden="true">
 						<div class="face">
 							<span id="power" class="power">–</span>
