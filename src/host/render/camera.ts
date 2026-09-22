@@ -73,9 +73,20 @@ export interface CameraInput {
  * height with empty sky above and below it. At 19° the near baseline sits at
  * 0.89 of the way to the bottom edge, the far baseline at 0.21 above centre,
  * and a 7m lob still clears the top with room. Measured, not eyeballed.
+ *
+ * `BROADCAST_BACK` went from 26 to 28 on 2026-09-21, for a reason that did
+ * not exist when it was 26: players stopped standing on their baselines
+ * ([[0014-players-run-to-the-ball]]) and can now be `RUN_BACK` behind them.
+ * At 26 the near baseline was already 0.89 of the way to the bottom edge, so
+ * a player who had run back for a deep ball had their legs off the screen —
+ * seen in a screenshot, not derived. Swept height × distance × lens against
+ * the frustum for every position a player can now occupy, feet and head,
+ * across the camera's full lateral drift: 26 fails at every height and lens,
+ * 28 is the nearest that holds, and it nudges the both-players-in-scale
+ * ratio from 0.55 to 0.564 rather than costing anything.
  */
 const BROADCAST_HEIGHT = 11;
-const BROADCAST_BACK = 26;
+const BROADCAST_BACK = 28;
 const BROADCAST_FOV = 19;
 const BROADCAST_TARGET_Z = 0;
 const BROADCAST_TARGET_Y = 1.2;

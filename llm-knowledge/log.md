@@ -1,6 +1,6 @@
 ---
 title: Project log
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [meta]
 status: current
 ---
@@ -249,3 +249,143 @@ across a 20-minute wait dies, so poll with short-lived connections and attach
 to an existing tab instead of opening one.
 
 **Still not verified: a real phone, a real swing, a real frame rate.**
+
+## 2026-09-21 — The swing decides where the ball goes, and the players go and get it
+
+The report was blunt: a forehand and a backhand played identically, and the
+game should feel like Wii Tennis. Both halves turned out to be one problem —
+nothing downstream of the phone believed anything the phone said about the
+swing, and nothing on the court moved to meet the ball.
+
+**Six new 30-second captures were the first thing, and they broke the
+detector.** Nine 6s traces had said it was perfect; the new ones said 53%,
+with `forehand-06` at **0 out of 10**. Two separate faults:
+`SERVE_GAMMA_THRESHOLD_DEG_S` was measuring swing *speed* (hard forehands hit
+`|γ|` of 1063), and alpha was being read at the magnitude peak, which in a
+fast swing is often almost pure gamma. The signed alpha integral over a whole
+episode is 52/52 correct, but cannot be streamed; **alpha at the largest-|α|
+sample**, held 150ms past the decay trigger, gets 52/55 and 50/52 on
+gameplay-shaped swings with zero false positives. The phone stopped guessing
+serves entirely — the sim knows from `phase`.
+[[0012-swing-kind-is-the-shot-direction]],
+[[2026-09-21-swing-direction-classifier]].
+
+**Holding 150ms exposed a bug that predated it.** Detector latency was already
+133ms against a 120ms clean window and **nothing anywhere compensated for
+it** — every swing a person made was reading late. `Swing.lag` now carries
+the delay, measured inside the phone's own clock so 0007 still holds, and the
+host subtracts it. [[0013-detector-latency-is-compensated]].
+
+**Direction from the stroke, aimed at a place.** The first version was the
+"one lerp" 0008 called for and it broke three tests immediately; dropping the
+constant would have hidden the real problem, which only appears once players
+move — a fixed sideways push from `x = +3` lands out at all 20 powers.
+Aiming instead lands 150 of 200 across five contact positions and both
+strokes. `MISHIT_SPRAY_MAX` deliberately restores the "a bad mishit does not
+land in" property that had been resting on direction-from-timing.
+
+**Players run in x and z, and one predictor says where and when.**
+[[0014-players-run-to-the-ball]]. Volleys fall out of asking "can I get
+behind the bounce in time" rather than from a rule about when a volley is
+allowed. Three bugs on the way, all found by instrumenting a rally that had
+gone quiet: a predictor that did not know the ball had already bounced, a
+strike time computed from the player's speed instead of the ball's (~130ms
+late on every groundstroke), and a reachability test that a ball moving away
+faster than a player runs can never satisfy.
+
+**Four distinct swing animations**, driven by a new `MatchState.stroke`, and
+`detectEvents` pulled into its own `render/events.ts` so it could be tested —
+it had none, and it is now the branch deciding which animation plays.
+
+**Watching it run found four more bugs, and none of them were in the game.**
+The server *died* on the first attempt: `relay.ts` had no `error` listener on
+any socket, and Node throws an unhandled `'error'`, so one malformed frame
+takes down the host page, every controller and the relay together
+([[relay-survives-a-broken-client]]). The relay dropped `lag` on the wire, on
+the day the field was added, exactly as a comment in its own test file had
+warned. The relay was killing Vite's HMR socket, and the first fix for that —
+`path` — **did not work**, because `ws` answers 400 and destroys a
+non-matching upgrade rather than declining it; the browser kept saying so
+after a test said otherwise ([[one-port-one-websocket-path]]). And a
+screenshot showed a player with their legs off the bottom of the frame:
+the camera was framing the range players used to occupy
+([[2026-09-21-camera-frames-a-moving-player]]).
+
+Two tests had to be rewritten because they were measuring the wrong thing.
+`bot.test.ts`'s skill check counted score *changes*, which reads backwards
+once a hopeless bot loses 6-0 and stops. The first relay-path test asserted a
+second listener was *called* — which an EventEmitter does either way, so it
+passed under the mutant while throwing in the background.
+
+391 tests, typecheck, lint, build and vault green. The match was then watched
+through a full game in headless Chrome with no console errors.
+
+**Still not verified: a real phone, a real swing, a real frame rate.** And the
+direction accuracy is still measured only against multi-rep captures — six
+single swings at rally spacing remain the recording this project keeps asking
+for.
+
+## 2026-09-22 — The contact model: returns connect, and it plays like Wii Tennis
+
+**Why every return whiffed.** The user reported that only the serve ever
+connected. Driving the real sim showed it: `applySwing` re-predicted the strike
+*when the swing arrived*, and a swing announced ~200ms after its peak arrived
+after the ball had passed, so the predictor invented a strike further on and a
+perfectly timed swing read as **650ms early**. Latency compensation was right
+and useless — the thing it was compared with had moved. The serve has no
+timing, so it always worked.
+
+**Rebuilt around one frozen contact per ball** ([[0015-contact-model]],
+superseding [[0012-swing-kind-is-the-shot-direction]] and
+[[0009-streaming-swing-detection]]): early swings are held and struck at the
+contact, late ones are rewound, the hardest peak in the window wins. Direction
+is timing (the Wii rule) and forehand/backhand comes from where the ball is.
+Launches are solved through `stepBall` to land where aimed. The serve is
+toss-then-hit. The phone announces each rotation peak ~50ms after it instead
+of ~200ms. The renderer coils the racket before contact, runs the legs, swings
+at air on a whiff, and draws a rewound ball off the racket. The controller page
+was redesigned around a live swing meter.
+
+**Balanced against a simulated human**, which found that nothing could ever be
+beaten on the run (1.1-1.3s flights, 1.8m reach) and humans never missed
+([[2026-09-22-contact-model-feel]]). Shipped: a σ=60ms player beats the 0.7
+bot 25-14 in points, a σ=100ms one loses 16-29. The balancing also caught
+`revise` judging a late swing by its arrival instead of when it happened, and
+a net-lift step that made harder swings fly slower.
+
+382 tests, typecheck, lint, build green; watched in headless Chrome with a
+scripted phone, no console errors. **Not verified: a real phone, a real person,
+`TIMING_IDEAL`, the iOS 18 haptic trick.**
+
+## 2026-09-22 — The stroke decides where the ball goes; timing decides how well
+
+**The ask.** Forehand, backhand and overhand should decide the direction
+instead of the physics; the overhand only on a ball in the air; balls landing
+in the court rather than on the baseline; more depth, skill-based without
+being frustrating; and a corner readout on the phone of the move it reads, to
+debug the classifier. Permission to break ADRs.
+
+**What landed** ([[0016-stroke-decides-direction]], superseding decision 4 of
+[[0015-contact-model]]): forehand to screen-left, backhand to screen-right —
+screen space, so the far player's ball follows their own sweep — and an
+overhead is a smash down the middle that only connects out of the air. The
+predictor now offers high balls out of the air as smash chances. Timing is a
+trade: on time is paced and wide of the middle, early goes wider then out,
+late goes central, deeper, and long if hit hard. Clean balls land 5.5–8.8m
+past the net. The bot picks its stroke and its skill is a timing spread.
+The phone reads overhead from the racket position going into the swing and
+the side from `alpha + 0.4·gamma` at the peak.
+
+**Found on the way** ([[2026-09-22-stroke-classifier]]): the peak detector's
+side reading had quietly fallen to 54/60 when 0015 replaced the hold
+detector — nobody measured it because the sim ignored `kind`. Now 58/60, and
+8/8 overhands. **Balance** ([[2026-09-22-stroke-direction-balance]]): pace is
+a knife-edge under auto-movement when every shot lands in one place (27 m/s:
+all winners; 23 m/s: nobody beatable); the gradient came from timing moving
+width and pace together. Shipped: decent player wins 57% of points against the
+0.65 solo bot, a newcomer 43%; rallies 8–11 strokes.
+
+398 tests, typecheck, lint green; watched in headless Chrome — a scripted
+phone sending mixed strokes against the bot, and the controller's readout
+driven by synthetic `devicemotion` — no console errors. **Not verified: a real
+phone, a real person, recorded smashes (only serves back the overhead rule).**

@@ -1,6 +1,6 @@
 ---
 title: "Module: src/host — the Mac display"
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [module, host, rendering]
 status: current
 code:
@@ -24,12 +24,13 @@ currently wired end to end.
 | --- | --- | --- |
 | `src/host/main.ts` | match state machine, rAF loop, socket wiring, the two state references, feedback | no — DOM and socket I/O |
 | `src/host/loop.ts` | `advance(accumulator, frameDt)` — the fixed-timestep accumulator | yes, `src/host/loop.test.ts` |
-| `src/host/render/index.ts` | `createRenderer`, `detectEvents` | no |
+| `src/host/render/index.ts` | `createRenderer` — wires scene, court, entities, effects, UI | no |
+| `src/host/render/events.ts` | `detectEvents`, `strokeAnim` — the one pure file in the renderer | **yes**, `src/host/render/events.test.ts` |
 | `src/host/render/camera.ts` | `cameraPose(mode, ball)` — pose and FOV per mode, as plain numbers | **yes**, `src/host/render/camera.test.ts` |
 | `src/host/render/scene.ts` | Renderer, lights, gradient background, fog; eases toward `cameraPose` | no |
 | `src/host/render/court.ts` | Static ground, lines, sagging net, posts | no |
 | `src/host/render/stadium.ts` | Ground disc, tiered bowl, instanced crowd, floodlights | no |
-| `src/host/render/entities.ts` | Ball + blob shadow + trail; the two player rigs | no |
+| `src/host/render/entities.ts` | Ball + blob shadow + trail; the two player rigs and their four swing animations | no |
 | `src/host/render/effects.ts` | Particle pool and shockwave rings | no |
 | `src/host/render/ui.ts` | DOM score overlay in the top corners, and the umpire's call | `callFor` only, `src/host/render/ui.test.ts` |
 | `src/host/ui/lobby.ts` | Join QR, roster, start/solo/rematch, countdown, winner | no |
@@ -60,7 +61,9 @@ the first player to announce themselves ready serves. In solo, that player is
 by definition the human. No coin toss (nobody can see one) and no toggle
 (nobody is standing at the host screen).
 
-**Solo mode** builds a `createBot(otherSide, 0.7)` and calls it once per
+**Solo mode** builds a `createBot(otherSide, 0.65)` — a decent player wins
+~57% of points against it, a newcomer ~43%
+([[2026-09-22-stroke-direction-balance]]) — and calls it once per
 tick. Its swing is pushed onto the same `pending` queue a phone's swing lands
 in, so there is exactly one path into the simulation — see
 [[modules/shared-sim]].
@@ -72,20 +75,22 @@ frame(now)
   frameDt = now - lastTime
   advance(accumulator, frameDt) → { ticks, accumulator, alpha }
   repeat ticks times:
-      input = pending.shift()          ← at most ONE swing per tick
+      inputs = pending.splice(0)       ← every swing that has arrived
       previous = current
-      current  = tick(previous, input ? [input] : [], FIXED_DT)
+      current  = tick(previous, inputs, FIXED_DT)
       frameEvents += detectEvents(previous, current)
-      send feedback hit|miss for that swing; point if score changed
+      "hit" to whoever struck a NEW stroke (stroke.at changed)
+      on a score change: "point" to lastPoint, "miss" to the other side
   renderer.render(previous, current, alpha, frameDt, frameEvents)
   clear frameEvents
 ```
 
-**One input per tick, drained oldest first**, rather than dumping a frame's
-whole queue into its first tick. That keeps a 1:1 tick-to-swing relationship
-so a `hit`/`miss` message can be attributed to the exact swing that caused it,
-at a cost of up to one tick (~8ms) when two swings land in the same frame —
-imperceptible, and doubles are out of scope.
+**Feedback is read off the state, not off the input** (since 2026-09-22). It
+used to be one input per tick so a `hit`/`miss` could be pinned on the swing
+that caused it — but under [[0015-contact-model]] an early swing is held until
+the ball arrives, and one real swing arrives as several peaks, so the tick a
+swing lands on says nothing about whether it connected. A revised stroke keeps
+its `at` and does not buzz twice.
 
 **Events are accumulated across every tick in a frame**, not read off the last
 one, or an event is lost whenever two ticks land in one rAF frame.
@@ -114,12 +119,57 @@ tick states**, mirroring the derivation `main.ts` already uses:
 
 | Event | Derived from |
 | --- | --- |
-| `hit` | `before.toHit !== current.toHit` |
+| `hit` | `current.stroke !== before.stroke`. Positioned at `stroke.from`, the contact point; `revised` when `stroke.at` is unchanged |
+| `whiff` | `whiffs[side]` went up — the avatar swings at air |
+| `toss` | `toss` went from `null` to set |
 | `point` | `before.score !== current.score` (reference inequality) |
 | `bounce` | `v.y` sign flip with `p.y < BOUNCE_HEIGHT` — a **heuristic**, visual only |
 
 The bounce heuristic can produce a false positive and that costs nothing,
 because it only ever drives a particle burst.
+
+`detectEvents` moved out of `index.ts` into its own `events.ts` on
+2026-09-21, and the reason is the rule in `CLAUDE.md` §3: it had no test,
+because it lived in a file full of THREE and canvas. It is the one pure thing
+in the renderer, and it now decides **which swing animation plays** — not a
+branch worth leaving unchecked. Nine tests; the volley branch watched failing
+under mutation.
+
+### Which animation, and where the stroke comes from
+
+A `toHit` flip tells you *that* somebody hit it. It cannot tell you *what they
+played* — the swing is long gone by then. So `MatchState.stroke` carries it
+(side, kind, power, and whether it was taken out of the air), on exactly the
+precedent `spin` set. `strokeAnim` maps it:
+
+| `stroke` | animation |
+| --- | --- |
+| `kind === "serve"` or `"overhead"` | `serve` — over the top from behind the head, the slowest of the four. A smash reuses it |
+| `air` | `volley` — a block, almost no backswing, over in a blink |
+| otherwise | `forehand` / `backhand` — mirrored sweeps across the body |
+
+`SWING_VARIATION` then scales each one's amplitude and duration by a cycled
+factor, the same deterministic-variation trick `sim/bot.ts` uses. Two
+identical forehands in a row read as a looping GIF.
+
+The far player's group is already yawed by π, so the animations are authored
+once in the player's own frame and never mirrored per side.
+
+### Readying, running, and the rewound ball (2026-09-22)
+
+- **The racket coils before the ball arrives.** `PlayersCue.ready` carries the
+  contact's side, stroke and seconds to go; from 0.65s out the arm eases into
+  that stroke's start pose, fully coiled by 0.2s. The swing animation starts
+  from exactly that pose, so readying and hitting join up. During the toss the
+  server's racket is up behind the head.
+- **Legs hang from hip pivots and swing with distance covered**, not time, so
+  the feet never skate whatever speed the sim moves them.
+- **A rewound ball is drawn from the racket.** A late swing is resolved in the
+  past, so the ball the sim returns is already down the court. On a `hit`
+  event `ball.update` starts the drawn ball at `stroke.from` and closes on the
+  sim ball with a 60ms time constant; a revised hit does the same without a
+  second swing, crack or buzz. A jump over 3m with no hit is a new point and
+  snaps (and clears the trail).
 
 ## Renderer rules — the ceiling on how this is built
 
@@ -172,21 +222,43 @@ invisible from this camera. "Feel beats fidelity."
 - The trail's ring buffer uses a local mutable `{x,y,z}`, not `Vec3`, because
   `Vec3` is all-`readonly` by design. It is not a sim type and never crosses
   back into `src/shared`.
+- **The camera frames where players can *stand*, not where the court is.**
+  They run from `NET_KEEP_OUT` to `BASELINE_Z + RUN_BACK` now, so a camera
+  tuned to the baselines cuts them off — and a frustum test that checks chest
+  height passes while the legs hang off the screen.
+  [[2026-09-21-camera-frames-a-moving-player]].
+- **The renderer reads `player.z`.** It used to place each rig at a constant
+  baseline and interpolate `x` only.
 
-## Not verified on real hardware
+## What has and has not been watched
 
-No session has yet run `npm run dev`, opened the host page and watched a rally.
-The module graph is confirmed to resolve and the build is green, but "does it
-look good, does it hold 60fps, are there console errors" is **unchecked**, and
-so are phase 9's tuned constants ([[2026-09-20-shot-envelope]]). This is the
-top of the manual to-do list.
+**Watched, twice, in headless Chrome** (2026-09-20 and again 2026-09-21): the
+lobby, the join QR, the countdown, a match played out with the scoreboard
+ticking 0 all / 15 / 30 / 40 / Game, players running to the ball, and no
+console errors on either page. Screenshots are what found the skewing
+broadcast camera, the 0.25x far player, and the player framed with their legs
+off the bottom of the screen.
 
-Also unresolved by anything: **nothing decides who serves first.** `main.ts`
-starts the match with `createMatch("near")` because no lobby UI exists
-(`src/host/ui/` is a `.gitkeep`) and the wire protocol has no message for it.
+**Not watched:** anything on real hardware. Headless Chrome has no motion
+sensors and renders through SwiftShader, so frame rate, the wake lock, and
+reconnect-after-suspension are all still unverified.
+
+**Harness traps, both costly:**
+
+- Chrome 153 no longer falls back to SwiftShader implicitly.
+  `--use-gl=swiftshader` alone yields no WebGL context at all, `createScene`
+  throws, and the host page dies — which looks exactly like a renderer bug
+  and is not. Use `--enable-unsafe-swiftshader --use-angle=swiftshader`.
+- `Page.captureScreenshot` times out at 1280x800 under SwiftShader ("GPU
+  stall due to ReadPixels"). 800x520 is fine.
+- Kill Chrome between runs. Controller tabs left open reconnect forever by
+  design and silently re-take both lobby slots — recorded on 2026-09-20 and
+  still true.
 
 ## See also
 
 [[architecture]] · [[modules/shared-sim]] · [[0003-threejs-renderer]] ·
 [[0002-host-authoritative-simulation]] · [[ios-safari-tab-suspension]] ·
-[[coordinate-frame]]
+[[coordinate-frame]] · [[2026-09-20-camera-framing]] ·
+[[2026-09-21-camera-frames-a-moving-player]] ·
+[[0014-players-run-to-the-ball]]

@@ -1,16 +1,14 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { Swing } from "../protocol.ts";
-import { detectSwings } from "./detector.ts";
-import { createSwingStream } from "./stream.ts";
+import { MAX_SWING_LAG_MS, type Swing } from "../protocol.ts";
+import { rotMagnitude } from "./detector.ts";
+import { createSwingStream, LOBE_FLOOR_DEG_S } from "./stream.ts";
 import {
 	isTrace,
 	MAX_GAP_MS,
 	type MotionSample,
 	type MotionTrace,
 } from "./trace.ts";
-
-const NEGATIVE = ["idle", "walking", "pocket", "gesture"];
 
 const dir = new URL("../../../tests/fixtures/motion/", import.meta.url);
 const files = readdirSync(dir).filter((name) => name.endsWith(".json"));
@@ -35,114 +33,262 @@ function replay(samples: readonly MotionSample[]): {
 	return out;
 }
 
+const SWINGS = ["forehand", "backhand", "serve"];
+const swingTraces = files.filter((n) => SWINGS.includes(load(n).label));
+
+/** Every lobe in `samples` loud enough to be the main part of a swing —
+ * what a player would call "the swing". A lobe already under way when the
+ * capture started is skipped: its wind-up is not in the data. */
+function mainLobes(
+	samples: readonly MotionSample[],
+	floor: number,
+): { start: number; end: number; peak: number }[] {
+	const lobes: { start: number; end: number; peak: number }[] = [];
+	let start: number | null = null;
+	let peak = 0;
+	for (const s of samples) {
+		const m = rotMagnitude(s.rot);
+		if (m >= LOBE_FLOOR_DEG_S) {
+			start ??= s.t;
+			peak = Math.max(peak, m);
+			continue;
+		}
+		if (start !== null && peak >= floor && start > (samples[0]?.t ?? 0)) {
+			lobes.push({ start, end: s.t, peak });
+		}
+		start = null;
+		peak = 0;
+	}
+	return lobes;
+}
+
+/** The hardest peak of each swing in the traces labelled `labels` — what
+ * the host plays, since it takes the hardest peak in the timing window.
+ * Peaks under 700ms apart are one swing. */
+function mainSwings(
+	labels: readonly string[],
+	minPeak: number,
+): { label: string; kind: Swing["kind"] }[] {
+	const out: { label: string; kind: Swing["kind"] }[] = [];
+	for (const name of files) {
+		const trace = load(name);
+		if (!labels.includes(trace.label)) continue;
+		const magAt = new Map(trace.samples.map((s) => [s.t, rotMagnitude(s.rot)]));
+		const groups: Swing[][] = [];
+		for (const { swing } of replay(trace.samples)) {
+			const last = groups.at(-1);
+			const prev = last?.at(-1);
+			if (last && prev && swing.at - prev.at < 700) last.push(swing);
+			else groups.push([swing]);
+		}
+		for (const group of groups) {
+			const hardest = group.reduce((a, b) => (b.power > a.power ? b : a));
+			if ((magAt.get(hardest.at) ?? 0) < minPeak) continue;
+			out.push({ label: trace.label, kind: hardest.kind });
+		}
+	}
+	return out;
+}
+
+const at = (t: number, rot: number): MotionSample => ({
+	t,
+	acc: [0, 9.8, 0],
+	rot: [rot, 0, 0],
+});
+
+/** A smooth lobe: up to `peak` and back down, 60Hz, starting at `t0`. */
+function lobe(t0: number, peak: number, samples = 24): MotionSample[] {
+	return Array.from({ length: samples }, (_, i) =>
+		at(t0 + (i * 1000) / 60, peak * Math.sin((Math.PI * (i + 0.5)) / samples)),
+	);
+}
+
 describe("createSwingStream", () => {
-	// Guards against the whole suite below passing vacuously.
-	it("has fixtures to replay", () => {
-		expect(files.length).toBeGreaterThan(0);
+	it("has swing fixtures to replay", () => {
+		expect(swingTraces.length).toBeGreaterThanOrEqual(15);
 	});
 
-	// THE bar from PRODUCT.md: "setting the phone down mid-conversation never
-	// reads as a shot." Measured to hold for every policy tried; if this goes
-	// red the detector is worse than useless at a party.
-	const negatives = files.filter((n) => NEGATIVE.includes(load(n).label));
-	it.each(negatives)("%s never fires", (name) => {
-		expect(replay(load(name).samples).map((e) => e.swing)).toEqual([]);
+	// PRODUCT.md: "setting the phone down mid-conversation never reads as a
+	// shot." A phone lying still or in a pocket never gets near a swing.
+	const resting = files.filter((n) =>
+		["idle", "pocket"].includes(load(n).label),
+	);
+	it.each(resting)("%s never fires", (name) => {
+		expect(replay(load(name).samples)).toEqual([]);
 	});
 
-	const positives = files.filter((n) => !NEGATIVE.includes(load(n).label));
-	it.each(positives)("%s fires at least once", (name) => {
+	it.each(swingTraces)("%s fires", (name) => {
 		expect(replay(load(name).samples).length).toBeGreaterThan(0);
 	});
 
-	// The reason stream.ts exists rather than a rolling buffer into
-	// detectSwings. See experiments/2026-09-20-streaming-swing-latency.md —
-	// the batch equivalent sits at a median of 1066ms.
-	it("emits within 250ms of the peak at p90", () => {
-		const latencies: number[] = [];
-		for (const name of positives) {
+	// The point of the rewrite: announce the swing at its peak. The old
+	// detector held 150ms past a decay trigger and reported a median lag of
+	// 200ms, p90 334ms.
+	it("announces a swing a sample or two after its peak", () => {
+		const lags: number[] = [];
+		for (const name of swingTraces) {
+			for (const e of replay(load(name).samples))
+				lags.push(e.emitAt - e.swing.at);
+		}
+		lags.sort((x, y) => x - y);
+		expect(lags.length).toBeGreaterThan(80);
+		expect(lags[Math.floor(lags.length / 2)]).toBeLessThanOrEqual(55);
+		expect(lags[Math.floor(lags.length * 0.9)]).toBeLessThanOrEqual(100);
+	});
+
+	it("reports every real swing at (nearly) its full speed", () => {
+		let total = 0;
+		const missed: string[] = [];
+		for (const name of swingTraces) {
+			const samples = load(name).samples;
+			const magAt = new Map(samples.map((s) => [s.t, rotMagnitude(s.rot)]));
+			const emitted = replay(samples).map((e) => magAt.get(e.swing.at) ?? 0);
+			const ats = replay(samples).map((e) => e.swing.at);
+			for (const lobe of mainLobes(samples, 600)) {
+				total++;
+				const best = Math.max(
+					0,
+					...ats.map((t, i) =>
+						t >= lobe.start && t < lobe.end ? (emitted[i] ?? 0) : 0,
+					),
+				);
+				if (best < lobe.peak * 0.95) missed.push(`${name}@${lobe.start}`);
+			}
+		}
+		expect(total).toBeGreaterThan(70);
+		expect(missed).toEqual([]);
+	});
+
+	it("reports `lag` as exactly the delay between the peak and the emission", () => {
+		for (const name of swingTraces) {
 			for (const e of replay(load(name).samples)) {
-				latencies.push(e.emitAt - e.swing.at);
+				expect(e.swing.lag).toBeCloseTo(e.emitAt - e.swing.at, 6);
+				expect(e.swing.lag).toBeGreaterThanOrEqual(0);
+				expect(e.swing.lag).toBeLessThanOrEqual(MAX_SWING_LAG_MS);
 			}
 		}
-		latencies.sort((a, b) => a - b);
-		const p90 = latencies[Math.floor(latencies.length * 0.9)];
-		expect(p90).toBeDefined();
-		expect(p90).toBeLessThanOrEqual(250);
 	});
 
-	// Both detectors must agree about what a swing IS, even where they
-	// disagree about when to announce it.
-	it("produces a swing identical to the batch detector on a clean single run", () => {
-		const samples: MotionSample[] = [];
-		for (let i = 0; i < 40; i++) {
-			// Ramp up then down so there is one unambiguous peak and the decay
-			// condition can fire.
-			const v = i < 20 ? 400 + i * 30 : 400 + (39 - i) * 30;
-			samples.push({ t: (i * 1000) / 60, acc: [0, 9.8, 0], rot: [v, 0, 0] });
-		}
-		// Let the run end so both detectors see the same episode.
-		samples.push({ t: 41000 / 60, acc: [0, 9.8, 0], rot: [0, 0, 0] });
-
-		const streamed = replay(samples);
-		const [batch] = detectSwings(samples);
-		expect(streamed[0]?.swing).toEqual(batch);
-	});
-
-	// Documents the known cost of firing early (ADR 0009): a sustained
-	// opposite-direction backswing is indistinguishable from a weak opposite
-	// swing without seeing the future. This asserts current behaviour, NOT
-	// that the behaviour is correct.
-	it("fires on a long backswing, which is the known cost of emitting early", () => {
-		const samples: MotionSample[] = [];
-		let t = 0;
-		const push = (rot: [number, number, number], count: number) => {
-			for (let i = 0; i < count; i++) {
-				samples.push({ t, acc: [0, 9.8, 0], rot });
-				t += 1000 / 60;
+	it("never claims a serve — the sim decides that from the phase", () => {
+		for (const name of swingTraces) {
+			for (const e of replay(load(name).samples)) {
+				expect(e.swing.kind).not.toBe("serve");
 			}
-		};
-		push([-500, 0, 0], 25); // backswing: 416ms, clears the duration gate
-		push([-100, 0, 0], 2); // decay below 70% of peak -> emits here
-		push([900, 0, 0], 25); // the real forward swing
-		push([0, 0, 0], 2);
-
-		const streamed = replay(samples);
-		expect(streamed[0]?.swing.kind).toBe("backhand"); // the backswing
-		expect(streamed[0]?.swing.power).toBeLessThan(0.3);
+		}
 	});
 
-	// iOS devicemotion delivery stalls (backgrounding, suspension) but
-	// `performance.now()` keeps advancing, so `sample.t` carries the full gap.
-	// Without a reset, a hot sample right before the stall and another right
-	// after look like one continuous run: `sample.t - runStart` trivially
-	// clears MIN_SWING_DURATION_MS on the very first post-gap sample, and if
-	// its magnitude has dipped under the stale peak's decay threshold, a
-	// phantom swing is emitted from data spanning almost no real motion.
-	it("resets the run across a sampling gap larger than MAX_GAP_MS, instead of treating it as one continuous swing", () => {
-		const stream = createSwingStream();
+	// Since 2026-09-22 the stroke decides where the ball goes, so the kind
+	// the host plays — the hardest peak of each swing — has to be right.
+	// Measured, not hoped: see the stroke-decides-direction decision.
+	it("calls every overhand an overhead", () => {
+		const kinds = mainSwings(["serve"], 950).map((s) => s.kind);
+		expect(kinds.length).toBeGreaterThanOrEqual(8);
+		expect(kinds.filter((k) => k !== "overhead")).toEqual([]);
+	});
 
-		// A short hot run that has NOT qualified yet on its own — far short of
-		// MIN_SWING_DURATION_MS (300ms).
-		expect(
-			stream.push({ t: 0, acc: [0, 9.8, 0], rot: [500, 0, 0] }),
-		).toBeNull();
-		expect(
-			stream.push({ t: 50, acc: [0, 9.8, 0], rot: [600, 0, 0] }),
-		).toBeNull();
+	it("reads the side of a groundstroke nearly every time, and rarely calls it an overhead", () => {
+		const swings = mainSwings(["forehand", "backhand"], 635);
+		const right = swings.filter((s) => s.kind === s.label).length;
+		const overhead = swings.filter((s) => s.kind === "overhead").length;
+		expect(swings.length).toBeGreaterThanOrEqual(60);
+		expect(right / swings.length).toBeGreaterThanOrEqual(0.9);
+		expect(overhead / swings.length).toBeLessThanOrEqual(0.05);
+	});
 
-		// The sensor stalls for longer than MAX_GAP_MS, then resumes hot.
-		// `gapStart - lastHot` (300ms) exceeds MAX_GAP_MS (250ms), so this must
-		// start a new run rather than continue the old one.
-		const gapStart = 50 + MAX_GAP_MS + 50;
-		const swing = stream.push({
-			t: gapStart,
-			acc: [0, 9.8, 0],
-			rot: [400, 0, 0],
+	it("reads a forehand, a backhand and an overhead from a clean lobe", () => {
+		const racketSide = (s: MotionSample): MotionSample => ({
+			...s,
+			acc: [-9.8, 0, 0],
 		});
+		const racketUp = (s: MotionSample): MotionSample => ({
+			...s,
+			acc: [0, 9.8, 0],
+		});
+		const neg = (s: MotionSample): MotionSample => ({
+			...s,
+			rot: [-s.rot[0], s.rot[1], s.rot[2]],
+		});
+		const quiet = (acc: MotionSample["acc"]) =>
+			Array.from({ length: 30 }, (_, i) => ({
+				t: i * 16,
+				acc,
+				rot: [0, 0, 0] as const,
+			}));
+		const kind = (samples: MotionSample[]) => replay(samples)[0]?.swing.kind;
+		const swingAt = lobe(500, 900);
+		expect(kind([...quiet([-9.8, 0, 0]), ...swingAt.map(racketSide)])).toBe(
+			"forehand",
+		);
+		expect(
+			kind([...quiet([-9.8, 0, 0]), ...swingAt.map(racketSide).map(neg)]),
+		).toBe("backhand");
+		expect(kind([...quiet([0, 9.8, 0]), ...swingAt.map(racketUp)])).toBe(
+			"overhead",
+		);
+	});
 
-		// Without the fix: runStart stays 0, so gapStart - runStart (350ms)
-		// clears MIN_SWING_DURATION_MS, and 400 < peakMag(600) * PEAK_DECAY_EMIT
-		// (420) — a phantom swing fires here, built from the stale t=50 peak.
-		expect(swing).toBeNull();
+	it("says what the swing in progress looks like, and nothing at rest", () => {
+		const stream = createSwingStream();
+		expect(stream.current).toBeNull();
+		for (let i = 0; i < 30; i++)
+			stream.push({ t: i * 16, acc: [-9.8, 0, 0], rot: [0, 0, 0] });
+		expect(stream.current).toBeNull();
+		stream.push({ t: 500, acc: [-9.8, 0, 0], rot: [500, 0, 0] });
+		expect(stream.current).toBe("forehand");
+		stream.push({ t: 516, acc: [-9.8, 0, 0], rot: [0, 0, 0] });
+		expect(stream.current).toBeNull();
+	});
+
+	it("fires once for one smooth swing", () => {
+		expect(replay(lobe(0, 900))).toHaveLength(1);
+	});
+
+	it("ignores a lobe that never gets fast enough to be a swing", () => {
+		expect(replay(lobe(0, 380))).toEqual([]);
+	});
+
+	it("announces a swing whose rotation stops dead straight off the peak", () => {
+		const abrupt = [
+			at(0, 250),
+			at(17, 500),
+			at(33, 800),
+			at(50, 1200),
+			at(67, 50),
+		];
+		const out = replay(abrupt);
+		expect(out).toHaveLength(1);
+		expect(out[0]?.swing.at).toBe(50);
+	});
+
+	it("ignores a knock: a spike with no wind-up", () => {
+		const knock = [at(0, 0), at(16, 0), at(33, 1200), at(50, 100), at(66, 0)];
+		expect(replay(knock)).toEqual([]);
+	});
+
+	// Backswing and swing without the rotation ever dropping in between.
+	// The host plays the harder of the two, so the phone must report both.
+	it("reports a harder second peak in the same lobe", () => {
+		const samples = [
+			...lobe(0, 500, 20),
+			...lobe(20 * (1000 / 60), 1100, 20).map((s) => ({
+				...s,
+				rot: [Math.max(s.rot[0], LOBE_FLOOR_DEG_S + 10), 0, 0] as const,
+			})),
+			at(41 * (1000 / 60), 0),
+		];
+		const powers = replay(samples).map((e) => e.swing.power);
+		expect(powers).toHaveLength(2);
+		expect(powers[1]).toBeGreaterThan(powers[0] ?? 1);
+	});
+
+	// iOS devicemotion stalls when backgrounded but `performance.now()` keeps
+	// running, so a hot sample either side of a stall must not read as one
+	// continuous lobe.
+	it("starts a new lobe across a sampling gap larger than MAX_GAP_MS", () => {
+		const stream = createSwingStream();
+		expect(stream.push(at(0, 300))).toBeNull();
+		expect(stream.push(at(16, 900))).toBeNull();
+		// Stalled, then resumes lower: that is NOT the old lobe's decay.
+		expect(stream.push(at(16 + MAX_GAP_MS + 50, 500))).toBeNull();
 	});
 });

@@ -1,6 +1,6 @@
 ---
 title: "Module: src/controller — the iPhone racket"
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [module, controller, ios]
 status: current
 code:
@@ -62,9 +62,10 @@ enable tap → requestMotionPermission()          motion.ts
                          │
                          ▼
                     stream.push(sample)           shared/swing/stream.ts
-                         │ Swing | null
+                         │ Swing | null        (stream.level → the live glow)
                          ▼
-                    session.send({t:"swing", ...swing})
+                    showSwing(power)             the ring: last swing's power
+                    session.send({t:"swing"})    ONLY while match.phase === "playing"
 ```
 
 `{t:"ready"}` is sent from inside `onSide`, not right after `createSession`
@@ -95,8 +96,11 @@ The streaming swing detector `createSwingStream` lives in
 `src/shared/swing/stream.ts` and is documented in [[modules/shared-swing]] —
 it is pure logic with no DOM dependency, tuned entirely against the recorded
 fixtures, and this module only calls it. See that page and
-[[0009-streaming-swing-detection]] for how it works and why it emits before a
-swing finishes.
+[[0015-contact-model]] for why it now announces every rotation peak and leaves
+the choosing to the host.
+
+**The phone only sends swings while the match is `playing`.** The peak
+detector fires on gestures too; in the lobby a gesture is not a shot.
 
 ## What actually works today: the recorder
 
@@ -151,7 +155,23 @@ One page-level constraint encoded in both HTML files: a racket swing must
 never scroll, rubber-band or pinch-zoom the page — `user-scalable=no`,
 `touch-action: none`, `overscroll-behavior: none`, `viewport-fit=cover`.
 
-## The match screen, added 2026-09-20
+## The match screen, added 2026-09-20, redesigned 2026-09-22
+
+The play screen is a side chip in the avatar's colour (`SIDE_COLOR`, matching
+`host/render/entities.ts`), a ring showing the last swing's power with a glow
+that follows live rotation, a feedback toast, and a two-line hint — the serve
+hint teaches the Wii toss ("swing once to toss, again to hit"), the rally hint
+the stroke directions. The ring keeps the strongest peak for 400ms, because
+one swing arrives as several peaks.
+
+**A corner readout shows the move the phone reads** (added 2026-09-22 for
+debugging the classifier with a phone in hand): *Now* is `stream.current`,
+redrawn once a frame, the lobe in progress or a dash; *Last* is the stroke
+and power of the peak the ring shows — the same strongest-in-400ms rule, so
+it names the peak the host will most likely play. The arrows are screen
+directions ([[0016-stroke-decides-direction]]). It runs in the lobby too,
+where nothing is sent, so a player can try strokes before the match.
+Seen in headless Chrome with synthetic `devicemotion`; not on a phone.
 
 `createSession` gained two optional handlers, and `main.ts` renders them:
 
@@ -160,11 +180,14 @@ never scroll, rubber-band or pinch-zoom the page — `user-scalable=no`,
   swing!", "Match over". It **decides nothing** from this
   ([[0002-host-authoritative-simulation]]); it is presentation of a relayed
   fact.
-- `onFeedback(kind)` — `hit` / `miss` / `point`, as a full-screen colour
-  flash. The flash is not a fallback: **iOS Safari has no
-  `navigator.vibrate`** at all, it is a Chrome/Android API, so on the target
-  device the screen is the only feedback channel there is. `vibrate` is still
-  called where it exists, because that costs one line.
+- `onFeedback(kind)` — `hit` (you struck the ball), `point` (you won the
+  point) or `miss` (you lost it), as a full-screen colour wash and a toast.
+  Since 2026-09-22 the host derives these from state, not from whether the
+  tick a swing arrived on flipped `toHit` — under the contact model an early
+  swing is held, so that tick says nothing. The flash is not a fallback:
+  **iOS Safari has no `navigator.vibrate`**. It also clicks a hidden
+  `<input switch>` label, which on iOS 18+ is reported to play a system haptic
+  tick — **unverified on a phone**; if it does nothing, nothing is lost.
 
 ## What is and is not verified
 
@@ -214,6 +237,6 @@ releases, so record provenance with any new traces.
 
 ## See also
 
-[[architecture]] · [[modules/shared-swing]] · [[0009-streaming-swing-detection]] ·
+[[architecture]] · [[modules/shared-swing]] · [[0015-contact-model]] · [[0009-streaming-swing-detection]] ·
 [[ios-motion-permission]] · [[ios-safari-tab-suspension]] ·
 [[0004-lan-https-via-local-ip-co]] · [[2026-09-19-ios-devicemotion-sampling]]

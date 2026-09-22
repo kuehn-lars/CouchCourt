@@ -39,11 +39,18 @@ export const MIN_SWING_DURATION_MS = 300;
 export const EPISODE_MERGE_GAP_MS = 800;
 
 /**
- * deg/s, `|gamma|` (rotationRate z-axis) at a swing's peak sample. A serve's
- * pronation/wrist-snap reaches 400-770 here; groundstrokes stay under 300 at
- * the same moment. Set at the midpoint of that gap.
+ * The axis of `rotationRate` that carries which way the racket swept — the
+ * one thing the phone is asked to decide.
+ *
+ * **The phone does not classify serves.** It used to, from a `|gamma| >= 350`
+ * pronation spike, and the six 30s captures added on 2026-09-21 destroyed
+ * that rule: hard forehands reach `|gamma|` of 1063, 1012 and 921 at their
+ * peak. The spike is a fast-swing signature, not a serve signature. The sim
+ * knows when a serve is a serve — `phase === "waiting-serve"` — so the guess
+ * was deleted rather than retuned. See
+ * `llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md`.
  */
-export const SERVE_GAMMA_THRESHOLD_DEG_S = 350;
+export const TURN_AXIS = 0;
 
 /** Peak rotation magnitude `power` is linearly mapped from. Measured range
  * across every correctly-classified swing in the fixtures: 392.1-1401.4. */
@@ -153,12 +160,33 @@ function peakOf(run: Run): MotionSample {
 	);
 }
 
-/** Serve's pronation spike beats groundstroke direction; otherwise the sign
- * of alpha (rotationRate x-axis) tells forehand from backhand. */
-function classify(peak: MotionSample): SwingKind {
-	const [alpha, , gamma] = peak.rot;
-	if (Math.abs(gamma) >= SERVE_GAMMA_THRESHOLD_DEG_S) return "serve";
-	return alpha > 0 ? "forehand" : "backhand";
+/** The sample within `run` where `TURN_AXIS` is largest in absolute value —
+ * the moment the swing most definitely went one way. Separate from `peakOf`
+ * because in a fast swing the two are routinely different samples, and which
+ * one you read decides whether the shot goes left or right. */
+function turnOf(run: Run): MotionSample {
+	return run.reduce((best, sample) =>
+		Math.abs(sample.rot[TURN_AXIS] ?? 0) > Math.abs(best.rot[TURN_AXIS] ?? 0)
+			? sample
+			: best,
+	);
+}
+
+/**
+ * Forehand or backhand, from the sign of alpha at `turn` — the sample where
+ * the racket turned fastest, which is not the same sample as the magnitude
+ * peak and must not be confused with it.
+ *
+ * Reading alpha at the *magnitude* peak is what this used to do, and it is
+ * wrong for a reason no synthetic test would have shown: in `forehand-06`
+ * the peak sample is almost pure gamma — `(3, 241, 1012)`, `(202, 105,
+ * 1063)` — so the decision rested on a number that was noise, and all ten
+ * of that trace's swings came out wrong. Alpha at the max-|alpha| sample
+ * gets all ten right. Measured in
+ * `llm-knowledge/experiments/2026-09-21-swing-direction-classifier.md`.
+ */
+function classify(turn: MotionSample): SwingKind {
+	return (turn.rot[TURN_AXIS] ?? 0) > 0 ? "forehand" : "backhand";
 }
 
 /** Signed wrist roll at the peak, -1 (slice) to +1 (topspin). */
@@ -179,15 +207,17 @@ function powerOf(peakMagnitude: number): number {
 }
 
 /**
- * A `Swing` from the single sample at an episode's peak. Split out of
- * `toSwing` so the streaming detector in `stream.ts`, which tracks its peak
- * incrementally and never holds an episode, classifies and scales power
- * through exactly this code. Two detectors, one definition of what a swing is
- * — see `llm-knowledge/decisions/0009-streaming-swing-detection.md`.
+ * A `Swing` from an episode's two defining samples: `peak`, the loudest
+ * moment, which sets power, spin and `at`; and `turn`, the fastest turn,
+ * which sets forehand or backhand. Split out of `toSwing` so the streaming
+ * detector in `stream.ts`, which tracks both incrementally and never holds an
+ * episode, decides through exactly this code. Two detectors, one definition
+ * of what a swing is — see
+ * `llm-knowledge/decisions/0009-streaming-swing-detection.md`.
  */
-export function swingFromPeak(peak: MotionSample): Swing {
+export function swingFrom(peak: MotionSample, turn: MotionSample): Swing {
 	return {
-		kind: classify(peak),
+		kind: classify(turn),
 		power: powerOf(rotMagnitude(peak.rot)),
 		at: peak.t,
 		spin: spinOf(peak),
@@ -195,7 +225,7 @@ export function swingFromPeak(peak: MotionSample): Swing {
 }
 
 function toSwing(episode: Run): Swing {
-	return swingFromPeak(peakOf(episode));
+	return swingFrom(peakOf(episode), turnOf(episode));
 }
 
 export function detectSwings(samples: readonly MotionSample[]): Swing[] {

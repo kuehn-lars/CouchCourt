@@ -138,37 +138,45 @@ page per subsystem mapping it to the files responsible for it.
 
 `npm start` builds and serves both pages over LAN HTTPS with the WebSocket
 relay attached, so a guest can scan the code on the host screen and be
-swinging. Built and tested: the swing detector (tuned against 20 committed
-traces), the streaming detector the phone actually uses, the relay with slot
-assignment, resume and liveness, the full simulation (ball physics, shot
-feel, automatic movement, scoring, a deterministic replayable rally machine),
-a solo opponent, the Three.js renderer with three camera modes, a lobby with
-a join QR code, and synthesised sound. 300 tests.
+swinging. Built and tested: the swing detector, the streaming detector the
+phone actually uses, the relay with slot assignment, resume and liveness, the
+full simulation (ball physics, shot feel, automatic movement in both axes,
+volleys, scoring, a deterministic replayable rally machine), a solo opponent,
+the Three.js renderer with three camera modes and a distinct animation per
+stroke, a lobby with a join QR code, and synthesised sound. 398 tests.
 
-**Seen running, in headless Chrome only** (2026-09-20): the whole loop —
-lobby, countdown, a solo match played through to a completed set, the winner
-screen and a rematch back to the lobby — plus the controller's join flow
-through its permission gate, with no console errors on either page. That is
-the first time any of this had been watched rather than inferred, and it
-produced three bugs no test would have found.
+**The swing decides the shot.** A forehand sends the ball to the left of the
+screen, a backhand to the right, and an overhead smashes a high ball taken out
+of the air. Timing decides how well: on time is a paced, angled ball; early
+goes wider and eventually out, late goes deeper and eventually long. The
+phone shows which stroke it read, in a corner of the controller.
+Players run to where the ball will be — in and back as well as side to side —
+and take it out of the air when they cannot get behind the bounce in time.
+
+**Seen running, in headless Chrome only** (2026-09-20, again 2026-09-21): the
+lobby, the countdown, a match played out with the scoreboard ticking through
+0 all / 15 / 30 / 40 / Game, the winner screen and a rematch, plus the
+controller's join flow through its permission gate, with no console errors on
+either page. Watching it, rather than testing it, is what has found almost
+every serious bug in this project — seven so far, across two sessions, none
+of which any test caught.
 
 **Not verified: a real phone, a real swing, a real frame rate.** Headless
 Chrome has no motion sensors and renders in software, so how the game *feels*
 — the bar this document actually sets — is still unmeasured. So is whether
 `Swing.spin`'s rotation axis tracks the wrist the way it assumes
-(`llm-knowledge/experiments/2026-09-20-spin-from-wrist-roll.md` is explicit
-that no committed fixture can confirm it).
+(`llm-knowledge/experiments/2026-09-20-spin-from-wrist-roll.md`).
+
+**And the direction classifier's accuracy is an upper bound.** 26 motion
+traces are committed in `tests/fixtures/motion/` — forehands, backhands and
+serves, plus the negatives that matter more: a phone on a table, in a pocket,
+someone walking, someone talking with their hands. Every one of them is a
+multi-rep capture, and the game only ever sees single swings. Adding traces
+has made the detector look worse twice now; assume it will again. Six single
+swings recorded at rally spacing are the most valuable thing anyone could add
+to this repository.
 
 **Both iOS gates of those first thirty seconds are proven** on an iPhone 14
 Pro running iOS 26.6.1: the LAN HTTPS path, and `requestPermission()` for the
 motion sensors. The riskiest part of the onboarding was cleared before any
 tennis was written, which is the order this project argues for.
-
-20 motion traces are committed in `tests/fixtures/motion/` — forehands,
-backhands and serves, plus the negatives that matter more: a phone on a table,
-in a pocket, someone walking, someone talking with their hands. Swing detection
-is now a test loop rather than a trip to the living room.
-
-The first thing those traces say is a warning: peak angular velocity alone does
-**not** separate a soft backhand from a hand gesture. The ranges overlap. See
-`llm-knowledge/experiments/2026-09-19-ios-devicemotion-sampling.md`.

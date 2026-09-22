@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { attachRelay } from "../../src/server/relay.ts";
-import { PROTOCOL_VERSION } from "../../src/shared/protocol.ts";
+import { PROTOCOL_VERSION, RELAY_PATH } from "../../src/shared/protocol.ts";
 
 const fixture = (name: string) =>
 	readFileSync(
@@ -41,7 +41,7 @@ it("relays over the http2+allowHTTP1 server Vite builds for https", async () => 
 
 	// Self-signed fixture, so no chain to verify — this test is about the
 	// upgrade surviving http2, not about trust.
-	const ws = new WebSocket(`wss://127.0.0.1:${port}`, {
+	const ws = new WebSocket(`wss://127.0.0.1:${port}${RELAY_PATH}`, {
 		rejectUnauthorized: false,
 	});
 	await new Promise<void>((resolve, reject) => {

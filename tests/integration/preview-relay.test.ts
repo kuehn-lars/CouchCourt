@@ -13,7 +13,7 @@ import type { AddressInfo } from "node:net";
 import { expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { relayPlugin } from "../../scripts/relay-plugin.ts";
-import { PROTOCOL_VERSION } from "../../src/shared/protocol.ts";
+import { PROTOCOL_VERSION, RELAY_PATH } from "../../src/shared/protocol.ts";
 
 const TIMEOUT_MS = 2000;
 
@@ -43,7 +43,7 @@ it("attaches the relay to a preview server, so `vite preview` is playable", asyn
 		httpServer,
 	});
 
-	const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+	const ws = new WebSocket(`ws://127.0.0.1:${port}${RELAY_PATH}`);
 	await new Promise<void>((resolve) => ws.once("open", () => resolve()));
 	ws.send(JSON.stringify({ t: "hello", v: PROTOCOL_VERSION }));
 

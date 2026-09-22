@@ -16,6 +16,7 @@ describe("isControllerMessage", () => {
 			{ t: "ready", ready: true },
 			{ t: "aim", yaw: 0.2, pitch: -1.1 },
 			{ t: "swing", kind: "forehand", power: 0.75, at: 1234.5 },
+			{ t: "swing", kind: "overhead", power: 0.9, at: 1 },
 		];
 		for (const message of valid) {
 			expect(isControllerMessage(message), JSON.stringify(message)).toBe(true);
@@ -61,7 +62,7 @@ describe("isControllerMessage", () => {
 		expect(isControllerMessage(message)).toBe(true);
 		if (isControllerMessage(message) && message.t === "swing") {
 			// Compiles only if the guard narrows — this test is half type-level.
-			const kind: "forehand" | "backhand" | "serve" = message.kind;
+			const kind: "forehand" | "backhand" | "overhead" | "serve" = message.kind;
 			expect(kind).toBe("backhand");
 		}
 	});

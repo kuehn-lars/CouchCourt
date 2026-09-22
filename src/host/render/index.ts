@@ -9,53 +9,15 @@
  * canvas-shaped wiring, not pure logic (`CLAUDE.md` §3).
  */
 
-import type { Side } from "../../shared/protocol.ts";
-import { BASELINE_Z } from "../../shared/sim/court.ts";
-import type { MatchState } from "../../shared/sim/index.ts";
-import type { Vec3 } from "../../shared/sim/state.ts";
+import type { MatchState, Vec3 } from "../../shared/sim/index.ts";
 import type { CameraMode } from "./camera.ts";
 import { buildCourt } from "./court.ts";
 import { createEffects } from "./effects.ts";
 import { createBallVisual, createPlayersVisual } from "./entities.ts";
+import { type RenderEvent, strokeAnim } from "./events.ts";
 import { createScene } from "./scene.ts";
 import { buildStadium } from "./stadium.ts";
 import { createScoreUI } from "./ui.ts";
-
-export type RenderEvent =
-	| { readonly kind: "hit"; readonly side: Side; readonly position: Vec3 }
-	| { readonly kind: "bounce"; readonly position: Vec3 }
-	| { readonly kind: "point" };
-
-/** Ball must be this low, metres, and moving upward, to count as a bounce.
- * A heuristic on the interpolated ball state, not a sim event — cosmetic
- * only, see the phase 8 session log for why `MatchState` doesn't carry a
- * "bounced this tick" flag of its own. */
-const BOUNCE_HEIGHT = 0.2;
-
-/** Diffs two consecutive tick states into the effects worth drawing. Mirrors
- * `main.ts`'s own `hit`/`point` feedback derivation (`toHit` flip, `score`
- * reference change) rather than adding a second notion of what a hit is. */
-export function detectEvents(
-	before: MatchState,
-	current: MatchState,
-): RenderEvent[] {
-	const events: RenderEvent[] = [];
-
-	if (before.toHit !== current.toHit) {
-		events.push({ kind: "hit", side: before.toHit, position: current.ball.p });
-	}
-	if (
-		before.ball.v.y < 0 &&
-		current.ball.v.y > 0 &&
-		current.ball.p.y < BOUNCE_HEIGHT
-	) {
-		events.push({ kind: "bounce", position: current.ball.p });
-	}
-	if (before.score !== current.score) {
-		events.push({ kind: "point" });
-	}
-	return events;
-}
 
 export interface Renderer {
 	/** A brief line at the bottom of the screen. */
@@ -79,10 +41,7 @@ export function createRenderer(
 	scene.add(buildCourt());
 
 	const ball = createBallVisual(scene);
-	const players = createPlayersVisual(scene, {
-		near: BASELINE_Z,
-		far: -BASELINE_Z,
-	});
+	const players = createPlayersVisual(scene);
 	const effects = createEffects(scene);
 	const scoreUI = createScoreUI(uiRoot);
 
@@ -90,22 +49,46 @@ export function createRenderer(
 		note: scoreUI.note,
 
 		render(previous, current, alpha, dt, events, cameraMode) {
+			let struckAt: Vec3 | null = null;
 			for (const event of events) {
 				switch (event.kind) {
 					case "hit":
-						players.swing(event.side);
+						struckAt = event.position;
+						if (event.revised) break;
+						players.swing(event.side, event.stroke, event.power);
 						effects.hit(event.position);
+						break;
+					case "whiff":
+						players.swing(event.side, event.stroke, 0.7);
 						break;
 					case "bounce":
 						effects.bounce(event.position);
 						break;
+					case "toss":
 					case "point":
 						break;
 				}
 			}
 
-			const ballPos = ball.update(previous.ball, current.ball, alpha);
-			players.update(previous.players, current.players, alpha, dt);
+			const ballPos = ball.update(
+				previous.ball,
+				current.ball,
+				alpha,
+				dt,
+				struckAt,
+			);
+			const c = current.contact;
+			players.update(previous.players, current.players, alpha, dt, {
+				ready:
+					c === null
+						? null
+						: {
+								side: c.side,
+								stroke: strokeAnim({ kind: c.stroke, air: c.air }),
+								inSeconds: c.at - current.time,
+							},
+				tossing: current.toss !== null ? current.toHit : null,
+			});
 			effects.update(dt);
 			scoreUI.update(current.score);
 			updateCamera(cameraMode, ballPos);

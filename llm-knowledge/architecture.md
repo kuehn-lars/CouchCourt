@@ -1,6 +1,6 @@
 ---
 title: How SwingCourt fits together
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [map, architecture, core]
 status: current
 code:
@@ -53,11 +53,11 @@ This is the path that matters. Everything else in the codebase supports it.
  devicemotion 60Hz
    │  MotionSample[]
    ▼
- createSwingStream()     ①✅
-   │  Swing{kind,power,at}
+ createSwingStream()     ①  every rotation PEAK, ~50ms after it
+   │  Swing{kind,power,at,spin,lag}   kind: forehand/backhand/overhead
    ▼
- ws.send {t:"swing"}     ②✅ ──▶  parseControllerMessage
-                                 attach playerId from socket
+ ws.send {t:"swing"}     ②  ──▶  parseControllerMessage
+   (only while playing)          attach playerId from socket
                                  forward to host       ──▶  onmessage
                                                               │
                                                               ▼
@@ -71,30 +71,49 @@ This is the path that matters. Everything else in the codebase supports it.
                                           │ N fixed 1/120s ticks
                                           ▼
                                         tick(state, inputs, dt)
-                                          │  applySwing
-                                          │    → timingErrorFor
-                                          │    → resolveShot  → ball.v
-                                          │  stepBall         → net?/bounce?
-                                          │  resolveStep      → point?
-                                          │  movePlayers
+                                          │  applySwing at swing time = arrival − lag ⑤
+                                          │    waiting-serve → toss, then hit the toss
+                                          │    vs the FROZEN contact ⑥:
+                                          │      early → arm, strike at contact
+                                          │      late  → strike from contact, rewind
+                                          │      hardest peak in the window wins
+                                          │  fireArmed · advanceBall · planContact
+                                          │  movePlayers (REACTION, stance, recovery)
                                           ▼
                                         MatchState (new object)
                                           │
                                           ├─▶ detectEvents(before, after)
-                                          │     → RenderEvent[]
+                                          │     hit (from contact) · whiff · toss …
                                           ▼
                                         render(previous, current, alpha, …)
                                               │
- buzz  ◀──  {t:"feedback"}  ◀──  route to playerId  ◀──  send feedback ④
+ flash/toast ◀── {t:"feedback"} ◀── route to playerId ◀── hit / point / miss ④
 ```
 
-① ② **Built 2026-09-20**, not yet seen running on a phone. The `Swing`
-also carries `spin`, read from the phone's `beta` rotation axis, which
-becomes the in-flight ball's `gravityScale` — the one place phone motion
-reaches the physics beyond power. [[2026-09-20-spin-from-wrist-roll]].
+① **Rebuilt 2026-09-22**: announces each rotation lobe at its peak, and lets
+the host pick which peak was the swing. Reads the stroke at the peak,
+including overhead ([[2026-09-22-stroke-classifier]]). Unverified on a phone.
+② Swings are only sent while the match is `playing`.
 ③ The swing is stamped with the **host's** sim clock, never the phone's
 `swing.at` — [[0007-host-arrival-time-for-swing-timing]].
-④ `hit`/`miss` per swing, `point` to both phones on a score change.
+④ `hit` to whoever struck a new stroke; on a point, `point` to the winner and
+`miss` to the loser. Read off state, not off the input.
+⑤ `swing.lag` is a duration inside the phone's own clock
+([[0013-detector-latency-is-compensated]]).
+⑥ **The contact is the hinge of the whole diagram.** `predictStrike` plans it;
+`rally.ts` freezes it once the ball bounces on the receiver's side, and every
+swing is judged against that one frozen meeting — which may be in the past.
+Re-predicting at arrival instead is what made every return whiff until
+2026-09-22. [[0015-contact-model]].
+
+**Where the ball goes** is the stroke the phone read: forehand to screen-left,
+backhand to screen-right (screen space, because both players face the same
+screen), overhead a smash down the middle — and an overhead only connects
+with a ball taken out of the air. Timing is how well: on time is paced and
+wide of the middle, early goes wider and out, late goes central and long.
+Forehand or backhand *stance* is still set from where the ball is. Every
+launch is solved through `stepBall` to land where it was aimed.
+[[0016-stroke-decides-direction]], [[0015-contact-model]].
 
 ## What each hop is allowed to assume
 
@@ -231,10 +250,25 @@ screen, rematch, and back to the lobby — plus pause-on-disconnect and the
 controller's join flow, with no console errors on either page. The first time
 anything here has been watched rather than inferred.
 
+Watched again on 2026-09-21 after the direction, movement and animation work:
+lobby, countdown, a game played out with the scoreboard ticking through
+0 all / 15 / 30 / 40 / Game, players running to the ball, no console errors.
+Four bugs came out of that run and **none of them were in the game** — the
+relay dying on a malformed frame, the relay dropping a field on the wire, the
+relay killing Vite's HMR socket, and a camera framing a range players had
+outgrown.
+
+Watched again on 2026-09-22 after the contact-model rewrite: a scripted phone
+over the real relay, swinging blind every 280ms against the solo bot, got 11
+hits, 2 points won and 2 lost in 20s, with no console errors on the host. The
+new controller page was screenshotted at phone size.
+
 A real phone, a real swing and a real frame rate have not. Headless Chrome
 renders through SwiftShader and has no motion sensors, so it says nothing
 about 60fps on a MacBook GPU and nothing at all about feel, which is the bar
-`PRODUCT.md` sets.
+`PRODUCT.md` sets. Nor has the direction classifier been measured against a
+single swing recorded at rally spacing — every committed trace is a
+multi-rep capture. [[2026-09-21-swing-direction-classifier]].
 
 ## What is deliberately not here
 

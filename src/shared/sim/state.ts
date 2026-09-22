@@ -29,11 +29,19 @@ export interface Ball {
 }
 
 /**
- * v1 has no manual movement: the sim places each player itself (phase 4).
- * Only `x` moves — a player stays on their own baseline, so the rest of the
- * position is derived from `side` rather than stored and kept in sync.
+ * v1 has no manual movement: the sim places each player itself. Both `x` and
+ * `z` move — a player runs in from the baseline for a short ball and stays
+ * back for a deep one, which is the whole of `PRODUCT.md`'s "ball physics
+ * with automatic player movement".
+ *
+ * `z` was added on 2026-09-21. Before it, a player slid along their own
+ * baseline and their position was decoration: contact was taken at the
+ * ball's position wherever the avatar happened to be. It is load-bearing now
+ * — `predictStrike` decides where the player stands AND when they can hit,
+ * and `rally.ts` times the swing against that same answer.
  */
 export interface Player {
 	readonly side: Side;
 	readonly x: number;
+	readonly z: number;
 }

@@ -17,7 +17,7 @@
  * before that is silent on purpose rather than broken.
  */
 
-import type { RenderEvent } from "../render/index.ts";
+import type { RenderEvent } from "../render/events.ts";
 
 /** A short noise buffer, reused by every percussive sound. Built once: a
  * second of noise is 44k floats and generating one per hit would allocate in
@@ -114,10 +114,22 @@ export function createAudio(): Audio {
 
 			for (const event of events) {
 				switch (event.kind) {
-					case "hit":
-						// Strings: a bright, very short crack with a pitched core.
-						burst(now, 0.55, 2600, 1.1, 0.075);
-						tone(now, 320, 0.22, 0.09, "square");
+					case "hit": {
+						// A re-struck ball is the same shot: one crack, not two.
+						if (event.revised) break;
+						// Strings: a bright, very short crack with a pitched
+						// core. Harder swings are louder and a touch higher.
+						const p = event.power;
+						burst(now, 0.35 + 0.3 * p, 2200 + 900 * p, 1.1, 0.075);
+						tone(now, 280 + 90 * p, 0.2, 0.09, "square");
+						break;
+					}
+					case "whiff":
+						// Air: a soft, breathy swish and nothing pitched.
+						burst(now, 0.12, 1400, 0.5, 0.2);
+						break;
+					case "toss":
+						tone(now, 520, 0.05, 0.12, "sine");
 						break;
 					case "bounce":
 						// Court: duller, lower, and longer than the racket.

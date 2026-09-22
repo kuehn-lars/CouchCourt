@@ -1,13 +1,15 @@
 ---
 title: The phone streams swings, it does not batch them
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [decision, swing, controller, latency, core]
-status: current
+status: superseded
 code:
   - `src/shared/swing/detector.ts`
   - `src/shared/swing/stream.ts`
   - `src/shared/sim/shot.ts`
 ---
+
+**Superseded by [[0015-contact-model]] (2026-09-22).** The phone now announces a swing at its peak (~50ms median), not after a decay trigger and a hold. The reasoning below about why `detectSwings` cannot be streamed still holds.
 
 # 0009 — The phone streams swings, it does not batch them
 

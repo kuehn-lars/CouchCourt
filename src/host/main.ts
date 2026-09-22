@@ -20,12 +20,14 @@
  */
 
 import {
+	type FeedbackKind,
 	type HostBoundMessage,
 	type HostMessage,
 	type LobbyPlayer,
 	type MatchPhase,
 	type PlayerId,
 	PROTOCOL_VERSION,
+	RELAY_PATH,
 	type Side,
 } from "../shared/protocol.ts";
 import { type Bot, createBot } from "../shared/sim/bot.ts";
@@ -39,11 +41,8 @@ import {
 import { createAudio } from "./audio/index.ts";
 import { advance, FIXED_DT } from "./loop.ts";
 import { type CameraMode, nextMode } from "./render/camera.ts";
-import {
-	createRenderer,
-	detectEvents,
-	type RenderEvent,
-} from "./render/index.ts";
+import { detectEvents, type RenderEvent } from "./render/events.ts";
+import { createRenderer } from "./render/index.ts";
 import { createLobbyUI } from "./ui/lobby.ts";
 
 const canvas = document.getElementById("scene");
@@ -55,7 +54,7 @@ const renderer = createRenderer(canvas, uiRoot);
 const audio = createAudio();
 
 const socket = new WebSocket(
-	`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`,
+	`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${RELAY_PATH}`,
 );
 
 function send(msg: HostMessage): void {
@@ -138,9 +137,10 @@ const lobbyUI = createLobbyUI(uiRoot, {
 
 		if (solo) {
 			botSide = other(first.side);
-			// 0.7 rallies for about nine shots against a competent player, and
-			// loses points — see llm-knowledge/modules/shared-sim.md.
-			bot = createBot(botSide, 0.7);
+			// Loses nearly 6 points in 10 to a decent player and wins nearly 6
+			// in 10 from a newcomer, with rallies of eight to ten shots —
+			// see llm-knowledge/experiments/2026-09-22-stroke-direction-balance.md.
+			bot = createBot(botSide, 0.65);
 		} else {
 			if (ready.length < 2) return;
 			botSide = null;
@@ -204,11 +204,10 @@ window.addEventListener("keydown", (event) => {
 const frameEvents: RenderEvent[] = [];
 
 /**
- * Runs one fixed-step tick. `inputs` holds at most one swing — the queue is
- * drained one input per tick rather than dumped into the frame's first tick,
- * so a `hit`/`miss` feedback message can be attributed to the exact swing
- * that caused it (see the session log; two swings landing in the same ~8ms
- * tick is not a case v1's single-ball, no-doubles rules need to handle).
+ * Runs one fixed-step tick with every swing that arrived since the last one.
+ * Feedback is read off the state, not off the input: under the contact model
+ * an early swing is held until the ball arrives, so the tick a swing lands
+ * on says nothing about whether it will connect.
  */
 function runTick(inputs: readonly RallyInput[]): void {
 	const before = current;
@@ -216,24 +215,19 @@ function runTick(inputs: readonly RallyInput[]): void {
 	current = tick(before, inputs, FIXED_DT);
 	frameEvents.push(...detectEvents(before, current));
 
-	const swung = inputs[0];
-	if (swung && swung.side !== botSide) {
-		const id = playerIdFor(swung.side);
-		if (id) {
-			send({
-				t: "feedback",
-				playerId: id,
-				kind: current.toHit !== before.toHit ? "hit" : "miss",
-			});
-		}
+	const stroke = current.stroke;
+	// A new stroke, not a harder peak re-striking the same ball.
+	if (stroke && stroke !== before.stroke && stroke.at !== before.stroke?.at) {
+		feedback(stroke.side, "hit");
 	}
 
 	// `Score` is only ever replaced, never mutated in place (every
 	// `awardPoint` call returns a new object) — reference inequality is
 	// exactly "the score just changed" here.
 	if (current.score !== before.score) {
-		for (const player of players)
-			send({ t: "feedback", playerId: player.playerId, kind: "point" });
+		for (const side of ["near", "far"] as const) {
+			feedback(side, side === current.lastPoint ? "point" : "miss");
+		}
 	}
 
 	if (current.score.setWinner !== null && phase === "playing") {
@@ -241,6 +235,12 @@ function runTick(inputs: readonly RallyInput[]): void {
 		winner = current.score.setWinner;
 		announce();
 	}
+}
+
+function feedback(side: Side, kind: FeedbackKind): void {
+	if (side === botSide) return;
+	const id = playerIdFor(side);
+	if (id) send({ t: "feedback", playerId: id, kind });
 }
 
 let accumulator = 0;
@@ -276,8 +276,7 @@ function frame(now: number): void {
 			if (botInput && botSide) {
 				pending.push({ side: botSide, swing: botInput, time: current.time });
 			}
-			const input = pending.shift();
-			runTick(input ? [input] : []);
+			runTick(pending.splice(0));
 		}
 
 		audio.play(frameEvents);
