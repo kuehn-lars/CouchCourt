@@ -1,13 +1,15 @@
 ---
 title: The serve only landed at 7 powers in 21. Aiming it fixed that
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [experiment, sim, feel, serve]
-status: current
+status: superseded
 code:
   - `src/shared/sim/shot.ts`
   - `src/shared/sim/rally.ts`
   - `src/shared/sim/rally.test.ts`
 ---
+
+**Superseded by [[2026-09-22-contact-model-feel]].** Serves are now solved into the box per shot rather than lerped between two measured angles ([[0015-contact-model]]). The finding that slice floats a serve long still explains why the solver must fly the real spin.
 
 # The serve that lands
 

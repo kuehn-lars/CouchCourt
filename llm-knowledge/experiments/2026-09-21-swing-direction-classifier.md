@@ -1,6 +1,6 @@
 ---
 title: What actually tells a forehand from a backhand
-updated: 2026-09-21
+updated: 2026-09-22
 tags: [experiment, swing, detector, measurement]
 status: current
 code:
@@ -8,6 +8,8 @@ code:
   - `src/shared/swing/stream.ts`
   - `tests/fixtures/motion/`
 ---
+
+**Historical as of [[0015-contact-model]].** The phone still classifies `kind` this way, but the sim ignores it: stroke side now comes from where the ball is.
 
 # 2026-09-21 — What actually tells a forehand from a backhand
 

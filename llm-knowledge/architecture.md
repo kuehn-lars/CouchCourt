@@ -1,6 +1,6 @@
 ---
 title: How SwingCourt fits together
-updated: 2026-09-21
+updated: 2026-09-22
 tags: [map, architecture, core]
 status: current
 code:
@@ -53,11 +53,11 @@ This is the path that matters. Everything else in the codebase supports it.
  devicemotion 60Hz
    │  MotionSample[]
    ▼
- createSwingStream()     ①✅
-   │  Swing{kind,power,at,spin,lag}
+ createSwingStream()     ①  every rotation PEAK, ~50ms after it
+   │  Swing{power,at,spin,lag}   (kind sent, ignored)
    ▼
- ws.send {t:"swing"}     ②✅ ──▶  parseControllerMessage
-                                 attach playerId from socket
+ ws.send {t:"swing"}     ②  ──▶  parseControllerMessage
+   (only while playing)          attach playerId from socket
                                  forward to host       ──▶  onmessage
                                                               │
                                                               ▼
@@ -71,47 +71,44 @@ This is the path that matters. Everything else in the codebase supports it.
                                           │ N fixed 1/120s ticks
                                           ▼
                                         tick(state, inputs, dt)
-                                          │  applySwing
-                                          │    → strokeFor     (serve? from phase)
-                                          │    → swingTime     (minus swing.lag ⑤)
-                                          │    → predictStrike (where + when ⑥)
-                                          │    → resolveShot   → ball.v
-                                          │  stepBall          → net?/bounce?
-                                          │  resolveStep       → point?
-                                          │  movePlayers       → predictStrike again
+                                          │  applySwing at swing time = arrival − lag ⑤
+                                          │    waiting-serve → toss, then hit the toss
+                                          │    vs the FROZEN contact ⑥:
+                                          │      early → arm, strike at contact
+                                          │      late  → strike from contact, rewind
+                                          │      hardest peak in the window wins
+                                          │  fireArmed · advanceBall · planContact
+                                          │  movePlayers (REACTION, stance, recovery)
                                           ▼
                                         MatchState (new object)
                                           │
                                           ├─▶ detectEvents(before, after)
-                                          │     → RenderEvent[]
+                                          │     hit (from contact) · whiff · toss …
                                           ▼
                                         render(previous, current, alpha, …)
                                               │
- buzz  ◀──  {t:"feedback"}  ◀──  route to playerId  ◀──  send feedback ④
+ flash/toast ◀── {t:"feedback"} ◀── route to playerId ◀── hit / point / miss ④
 ```
 
-① ② **Built 2026-09-20**, not yet seen running on a phone. What the phone
-decides is deliberately small: **which way the racket swept** (forehand or
-backhand — never a serve, the sim knows that from `phase`), how hard, the
-wrist roll for `spin`, and how long it took to notice. Everything else is the
-host's.
+① **Rebuilt 2026-09-22**: announces each rotation lobe at its peak, and lets
+the host pick which peak was the swing. Unverified on a phone.
+② Swings are only sent while the match is `playing`.
 ③ The swing is stamped with the **host's** sim clock, never the phone's
 `swing.at` — [[0007-host-arrival-time-for-swing-timing]].
-④ `hit`/`miss` per swing, `point` to both phones on a score change.
-⑤ `swing.lag` is a duration measured inside the phone's own clock, so
-subtracting it does not reintroduce the skew ③ exists to avoid. Without it
-every swing reads late: the detector announces ~200ms after the peak and the
-clean window is 120ms. [[0013-detector-latency-is-compensated]].
-⑥ **`predictStrike` is the hinge of the whole diagram.** One function answers
-where a player meets the ball and when, and the swing's timing, both players'
-feet, the bot's plan and the avatars all read that same answer. Two functions
-answering it is how a player gets judged against a ball arriving ten metres
-behind them. [[0014-players-run-to-the-ball]].
+④ `hit` to whoever struck a new stroke; on a point, `point` to the winner and
+`miss` to the loser. Read off state, not off the input.
+⑤ `swing.lag` is a duration inside the phone's own clock
+([[0013-detector-latency-is-compensated]]).
+⑥ **The contact is the hinge of the whole diagram.** `predictStrike` plans it;
+`rally.ts` freezes it once the ball bounces on the receiver's side, and every
+swing is judged against that one frozen meeting — which may be in the past.
+Re-predicting at arrival instead is what made every return whiff until
+2026-09-22. [[0015-contact-model]].
 
-**Where the ball goes** is `swing.kind`, not the timing — the stroke you
-played, aimed at a place on the far side rather than pushed sideways at a
-fixed speed. Timing decides how well you hit it, and sprays it when you did
-not. [[0012-swing-kind-is-the-shot-direction]].
+**Where the ball goes** is timing, the Wii rule: early pulls it across the
+body, late pushes it the other way, the edge of the window sprays it out.
+Forehand or backhand is chosen from where the ball is. Every launch is solved
+through `stepBall` to land where it was aimed. [[0015-contact-model]].
 
 ## What each hop is allowed to assume
 
@@ -255,6 +252,11 @@ Four bugs came out of that run and **none of them were in the game** — the
 relay dying on a malformed frame, the relay dropping a field on the wire, the
 relay killing Vite's HMR socket, and a camera framing a range players had
 outgrown.
+
+Watched again on 2026-09-22 after the contact-model rewrite: a scripted phone
+over the real relay, swinging blind every 280ms against the solo bot, got 11
+hits, 2 points won and 2 lost in 20s, with no console errors on the host. The
+new controller page was screenshotted at phone size.
 
 A real phone, a real swing and a real frame rate have not. Headless Chrome
 renders through SwiftShader and has no motion sensors, so it says nothing

@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { BallEnv } from "./ball.ts";
+import { type BallEnv, DRAG_K } from "./ball.ts";
 import { BASELINE_Z, SINGLES_HALF_WIDTH } from "./court.ts";
 import {
 	MAX_LOOKAHEAD,
 	movePlayer,
 	PLAYER_SPEED,
-	predictCrossingTime,
-	predictCrossingX,
 	predictStrike,
+	STRIKE_COMFORT,
 	STRIKE_HEIGHT_MAX,
 	STRIKE_HEIGHT_MIN,
 } from "./players.ts";
+import { groundstroke } from "./shot.ts";
 import type { Ball, Player } from "./state.ts";
 
 const VACUUM: BallEnv = { gravityScale: 1, drag: 0 };
@@ -23,95 +23,30 @@ const ball = (
 	v: { x: v[0], y: v[1], z: v[2] },
 });
 
-describe("predictCrossingX", () => {
-	it("targets inside the court for a ball headed to the far corner", () => {
-		// Clears the net and crosses the far baseline plane well wide of the
-		// sideline (raw x ≈ 10.5m against a 4.115m half-width) — the clamp has
-		// to actually do something here, not just pass an already-in-bounds x.
-		const start = ball([2, 1.5, 8], [6, 3, -14]);
-		const x = predictCrossingX(start, VACUUM, -BASELINE_Z);
-
-		expect(Math.abs(x)).toBeLessThanOrEqual(SINGLES_HALF_WIDTH);
-	});
-
-	it("clamps rather than running away for a ball headed well out", () => {
-		// Moving mostly sideways: crosses the target plane, if ever, miles wide.
-		const start = ball([2, 1, 5], [40, 0, -1]);
-		const x = predictCrossingX(start, VACUUM, -BASELINE_Z);
-
-		expect(Math.abs(x)).toBeLessThanOrEqual(SINGLES_HALF_WIDTH);
-	});
-
-	it("agrees with stepBall's own trajectory at the crossing", async () => {
-		const { stepBall } = await import("./ball.ts");
-		const start = ball([2, 1.5, 8], [6, 3, -14]);
-		const dt = 1 / 120;
-
-		// Same loop `predictCrossingX` runs internally, done here independently
-		// so the test is not just calling the code under test twice.
-		let current = start;
-		let expected: number | undefined;
-		for (let i = 0; i < MAX_LOOKAHEAD / dt; i++) {
-			const before = current.p.z;
-			const step = stepBall(current, dt, VACUUM);
-			const after = step.ball.p.z;
-			if (before > -BASELINE_Z !== after > -BASELINE_Z) {
-				const f = (before - -BASELINE_Z) / (before - after);
-				const raw = current.p.x + (step.ball.p.x - current.p.x) * f;
-				expected = Math.max(
-					-SINGLES_HALF_WIDTH,
-					Math.min(SINGLES_HALF_WIDTH, raw),
-				);
-				break;
-			}
-			current = step.ball;
-		}
-
-		expect(expected).toBeDefined();
-		expect(predictCrossingX(start, VACUUM, -BASELINE_Z)).toBeCloseTo(
-			expected as number,
-			10,
-		);
+describe("predictStrike's groundstroke", () => {
+	it("lets a fast ball come up and drop to the waist, instead of charging the bounce", () => {
+		// A hard, well-struck drive from the far baseline.
+		const env = { gravityScale: 1, drag: DRAG_K };
+		const from = { x: 0, y: 0.9, z: -BASELINE_Z };
+		const incoming = {
+			p: from,
+			v: groundstroke(from, "far", "forehand", 0, 0.9, env),
+		};
+		const strike = predictStrike(incoming, env, "near", {
+			side: "near",
+			x: 0,
+			z: BASELINE_Z,
+		});
+		expect(strike.air).toBe(false);
+		expect(strike.ball.y).toBeLessThanOrEqual(STRIKE_COMFORT + 0.1);
+		// Above the ankles: a flat drive skids, but it is taken off the
+		// bounce, not off the floor.
+		expect(strike.ball.y).toBeGreaterThan(0.3);
+		// Taken around the baseline, not rushed in towards the service line.
+		expect(strike.z).toBeGreaterThan(BASELINE_Z - 1.5);
 	});
 });
 
-describe("predictCrossingTime", () => {
-	it("agrees with stepBall's own trajectory at the crossing", async () => {
-		const { stepBall } = await import("./ball.ts");
-		const start = ball([2, 1.5, 8], [6, 3, -14]);
-		const dt = 1 / 120;
-
-		let current = start;
-		let expected: number | undefined;
-		for (let i = 0; i < MAX_LOOKAHEAD / dt; i++) {
-			const before = current.p.z;
-			const step = stepBall(current, dt, VACUUM);
-			const after = step.ball.p.z;
-			if (before > -BASELINE_Z !== after > -BASELINE_Z) {
-				const f = (before - -BASELINE_Z) / (before - after);
-				expected = (i + f) * dt;
-				break;
-			}
-			current = step.ball;
-		}
-
-		expect(expected).toBeDefined();
-		expect(predictCrossingTime(start, VACUUM, -BASELINE_Z)).toBeCloseTo(
-			expected as number,
-			10,
-		);
-	});
-
-	it("is undefined for a ball that never reaches the plane", () => {
-		// Headed straight up: z never moves, so it never crosses z = -BASELINE_Z.
-		const start = ball([0, 1, 5], [0, 10, 0]);
-		expect(predictCrossingTime(start, VACUUM, -BASELINE_Z)).toBeUndefined();
-	});
-});
-
-// One predictor answers both "where does this player stand" and "when do
-// they hit it", so the movement and the timing can never disagree about the
-// same ball — see llm-knowledge/modules/shared-sim.md.
 describe("predictStrike", () => {
 	const at = (side: "near" | "far", x: number, z: number): Player => ({
 		side,

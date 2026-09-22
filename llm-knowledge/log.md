@@ -324,3 +324,35 @@ through a full game in headless Chrome with no console errors.
 direction accuracy is still measured only against multi-rep captures — six
 single swings at rally spacing remain the recording this project keeps asking
 for.
+
+## 2026-09-22 — The contact model: returns connect, and it plays like Wii Tennis
+
+**Why every return whiffed.** The user reported that only the serve ever
+connected. Driving the real sim showed it: `applySwing` re-predicted the strike
+*when the swing arrived*, and a swing announced ~200ms after its peak arrived
+after the ball had passed, so the predictor invented a strike further on and a
+perfectly timed swing read as **650ms early**. Latency compensation was right
+and useless — the thing it was compared with had moved. The serve has no
+timing, so it always worked.
+
+**Rebuilt around one frozen contact per ball** ([[0015-contact-model]],
+superseding [[0012-swing-kind-is-the-shot-direction]] and
+[[0009-streaming-swing-detection]]): early swings are held and struck at the
+contact, late ones are rewound, the hardest peak in the window wins. Direction
+is timing (the Wii rule) and forehand/backhand comes from where the ball is.
+Launches are solved through `stepBall` to land where aimed. The serve is
+toss-then-hit. The phone announces each rotation peak ~50ms after it instead
+of ~200ms. The renderer coils the racket before contact, runs the legs, swings
+at air on a whiff, and draws a rewound ball off the racket. The controller page
+was redesigned around a live swing meter.
+
+**Balanced against a simulated human**, which found that nothing could ever be
+beaten on the run (1.1-1.3s flights, 1.8m reach) and humans never missed
+([[2026-09-22-contact-model-feel]]). Shipped: a σ=60ms player beats the 0.7
+bot 25-14 in points, a σ=100ms one loses 16-29. The balancing also caught
+`revise` judging a late swing by its arrival instead of when it happened, and
+a net-lift step that made harder swings fly slower.
+
+382 tests, typecheck, lint, build green; watched in headless Chrome with a
+scripted phone, no console errors. **Not verified: a real phone, a real person,
+`TIMING_IDEAL`, the iOS 18 haptic trick.**

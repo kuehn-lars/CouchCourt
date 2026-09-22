@@ -1,6 +1,6 @@
 ---
 title: "Module: src/shared/swing — traces and swing detection"
-updated: 2026-09-21
+updated: 2026-09-22
 tags: [module, swing-detection, motion]
 status: current
 code:
@@ -19,11 +19,14 @@ Turns a stream of phone motion samples into the semantic `Swing` events the
 wire carries. Pure, so it is tuned offline against 20 recorded traces instead
 of in a living room. **This is the project's main testing leverage.**
 
-There are now **two detectors sharing one definition of what a swing is.**
-`detector.ts` holds a batch detector (`detectSwings`) that sees a whole trace
-at once, and `stream.ts` holds a live detector (`createSwingStream`) that
-emits mid-swing. See [[0009-streaming-swing-detection]] for why both exist —
-the short version is that batch cannot be fast enough for a live game.
+There are **two detectors sharing `swingFrom`** — one definition of a swing's
+power, spin and stroke side. `detector.ts` holds a batch detector
+(`detectSwings`) that sees a whole trace at once and has no production caller;
+`stream.ts` holds the live one (`createSwingStream`) that the phone runs.
+**Since 2026-09-22 the live detector is a different algorithm from the batch
+one**: it announces each rotation lobe at its peak, ~50ms after it, and leaves
+telling a swing from a gesture to the host ([[0015-contact-model]]). The
+duration-and-merge method described below is now the batch detector's only.
 
 ## Files
 
@@ -31,7 +34,7 @@ the short version is that batch cannot be fast enough for a live game.
 | --- | --- |
 | `src/shared/swing/trace.ts` | `MotionSample`, `MotionTrace`, `isTrace`, `toSample`, `formatTrace`, `measuredHz`, `longestGapMs`, `nextTraceName`, `MAX_GAP_MS` |
 | `src/shared/swing/detector.ts` | `detectSwings` (batch), `rotMagnitude`, `swingFrom`, `TURN_AXIS`, and every tuned threshold |
-| `src/shared/swing/stream.ts` | `createSwingStream` (live), `PEAK_DECAY_EMIT`, `EMIT_HOLD_MS` |
+| `src/shared/swing/stream.ts` | `createSwingStream` (live peak detector), its thresholds, and `level` for the controller's meter |
 | `tests/fixtures/motion/` | 26 committed captures, seven labels, plus their README |
 
 ## Wiring — and the seam
@@ -40,10 +43,7 @@ the short version is that batch cannot be fast enough for a live game.
 record.ts (controller)    ──▶ trace.ts    toSample, measuredHz, longestGapMs
 trace-endpoint.ts         ──▶ trace.ts    isTrace, formatTrace, nextTraceName
 detector.ts                    trace.ts    MotionSample
-stream.ts                 ──▶ detector.ts  rotMagnitude, swingFrom, TURN_AXIS,
-                                            SWING_ROT_THRESHOLD_DEG_S,
-                                            MIN_SWING_DURATION_MS,
-                                            EPISODE_MERGE_GAP_MS
+stream.ts                 ──▶ detector.ts  rotMagnitude, swingFrom, TURN_AXIS
 fixtures.test.ts          ──▶ trace.ts    isTrace, measuredHz, longestGapMs
 
 controller/main.ts         ──▶ stream.ts   createSwingStream            ◀── production caller
@@ -64,7 +64,28 @@ unverified on real hardware.
 **reader** (`isTrace`) of the on-disk format, and `trace.test.ts` round-trips
 one through the other. Split them across modules and they drift.
 
-## How detection actually works
+## The live detector (since 2026-09-22)
+
+A **lobe** is a run of rotation ≥ `LOBE_FLOOR_DEG_S` (200°/s). Its peak is
+announced once rotation falls to `PEAK_CONFIRM` (0.85) of it — or the lobe
+ends outright — provided the peak reached `TRIGGER_DEG_S` (400) after at least
+`MIN_RISE_MS` (40ms) of wind-up. A later peak in the same lobe ≥ `REFIRE_RATIO`
+(1.05×) the last one is announced too. So one real swing is typically two or
+three announcements — backswing, swing, follow-through — and **the host plays
+the hardest one inside its timing window**. The phone does not try to guess
+which peak was "the swing".
+
+Measured on the committed swing traces: lag median ~50ms, p90 ~84ms; every
+lobe ≥600°/s reported at ≥95% of its peak; idle and pocket traces never fire.
+**Gestures and walking do fire** — no gate checkable at the peak separates
+them (rise times overlap). That is safe only because of how the host uses a
+swing; see [[0015-contact-model]] and [[2026-09-22-contact-model-feel]].
+
+Trap already sprung: a lobe that crashes from its peak straight under the
+floor in one sample used to end without announcing. The peak most likely to
+do that is the real swing's.
+
+## How the batch detector works
 
 Peak angular velocity **cannot** separate a swing from a hand gesture — the
 ranges overlap, measured: swings 585.7–1296.2°/s, gestures up to 866.2°/s.
@@ -97,9 +118,9 @@ the decision rested on noise, and all ten of that trace's swings came out
 wrong. Numbers, the twelve statistics tried, and the grip-invariant approach
 that failed: [[2026-09-21-swing-direction-classifier]].
 
-Result on the fixtures: **0 false positives and 0 misses across all 26
-traces**, and direction right on 52 of 55 streamed emissions (50 of 52 on
-gameplay-shaped isolated swings). Every threshold sits on a measured plateau,
+Result for the batch detector on the fixtures: **0 false positives and 0
+misses across all 26 traces**. (The 52/55 direction figure was the old
+streaming detector's; the live detector's `kind` is no longer used by the sim.) Every threshold sits on a measured plateau,
 not a knife-edge — the original derivation is
 [[2026-09-19-swing-detector-tuning]].
 
@@ -158,7 +179,8 @@ as nothing. `PRODUCT.md` asks to guess in the player's favour.
 
 ## See also
 
-[[architecture]] · [[modules/controller]] · [[0009-streaming-swing-detection]] ·
+[[architecture]] · [[modules/controller]] · [[0015-contact-model]] ·
+[[2026-09-22-contact-model-feel]] · [[0009-streaming-swing-detection]] ·
 [[2026-09-20-streaming-swing-latency]] · [[ios-motion-permission]] ·
 [[2026-09-19-ios-devicemotion-sampling]] · [[2026-09-19-swing-detector-tuning]]
 

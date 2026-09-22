@@ -1,61 +1,57 @@
 /**
- * The live counterpart to `detectSwings`. Same thresholds, same idea of what a
- * swing is — but it emits BEFORE the swing has finished, because the batch
- * detector cannot know an episode ended until `EPISODE_MERGE_GAP_MS` of quiet
- * has passed, and a second of latency is not a game.
+ * The live swing detector that runs on the phone. It announces a swing at its
+ * **peak** — the moment the racket is moving fastest, which is the moment it
+ * would meet the ball — one or two samples after it happens.
  *
- * Why this exists at all, what firing early costs, and the alternatives
- * rejected: `llm-knowledge/decisions/0009-streaming-swing-detection.md`.
- * The measurements behind PEAK_DECAY_EMIT:
- * `llm-knowledge/experiments/2026-09-20-streaming-swing-latency.md`.
+ * The previous detector waited for 300ms of sustained rotation, then for the
+ * run to decay, then another 150ms, so its swings arrived a median 200ms after
+ * the peak (p90 334ms). That delay is what the host could not undo, and it is
+ * why returns stopped connecting
+ * (`llm-knowledge/decisions/0015-contact-model.md`).
+ *
+ * **What it gave up.** The sustained-rotation gate was what kept a hand
+ * gesture or a walking stride from firing, and no gate that can be checked at
+ * the peak separates them from real swings (measured 2026-09-22: backhands
+ * rise to their peak in 66-183ms, gestures in 11-134ms). They fire now. That
+ * is affordable because the host has changed what a swing *means*: nothing
+ * happens unless a ball is at the player's contact point, or the player is
+ * about to serve (where a stray swing tosses the ball, which is caught). A
+ * phone lying still or in a pocket still never gets near a swing — the bar
+ * `PRODUCT.md` actually sets.
+ *
+ * **One swing, several peaks.** A backswing, the swing and the
+ * follow-through can each fire. The host plays the hardest one inside the
+ * timing window, so the phone reports them all rather than guessing.
  *
  * `src/shared/**` is compiled under both a DOM-only and a Node-only tsconfig,
  * so this file names no DOM type and no Node global.
  */
 
 import type { Swing } from "../protocol.ts";
-import {
-	EPISODE_MERGE_GAP_MS,
-	MIN_SWING_DURATION_MS,
-	rotMagnitude,
-	SWING_ROT_THRESHOLD_DEG_S,
-	swingFrom,
-	TURN_AXIS,
-} from "./detector.ts";
+import { rotMagnitude, swingFrom, TURN_AXIS } from "./detector.ts";
 import { MAX_GAP_MS, type MotionSample } from "./trace.ts";
 
-/**
- * Fraction of the run's running peak that rotation must fall to before the
- * swing is announced. The peak is behind us at that point, so the swing can be
- * classified and scaled from it.
- *
- * Measured across the 20 committed fixtures: 0.7 emits a median 133ms after
- * the peak (p90 234ms, max 317ms), against 1066ms for a faithful batch replay.
- * 0.6 and 0.5 are slower on both — the run must decay further before they
- * trigger. Higher than 0.7 fires on the first downward tick, which is noise or
- * a local maximum of a swing still accelerating.
- */
-export const PEAK_DECAY_EMIT = 0.7;
+/** deg/s. Rotation below this is not part of any swing: a lobe starts and
+ * ends here. Idle and pocket captures peak at 301 at most. */
+export const LOBE_FLOOR_DEG_S = 200;
 
-/**
- * Extra milliseconds of the swing to watch after the decay trigger fires,
- * before announcing it.
- *
- * The decay trigger says "the peak is behind us". It does not say the swing
- * is over, and the difference decides forehand from backhand: at the trigger
- * the racket is often still coming through, and the fastest turn of the whole
- * swing has not happened yet. Measured across all 15 swing traces — the 9
- * original 6s captures plus the 6 new 30s ones — the direction is right in
- * 47 of 55 emissions at +0ms and **52 of 55 at +150ms**. On isolated swings
- * cut out with real quiet either side, which is what gameplay actually looks
- * like, it is 50 of 52. Past +150ms nothing further is gained.
- *
- * The cost is latency: median 133ms after the peak becomes 200ms, p90 334ms.
- * That would be unaffordable — `MISS_WINDOW` is 280ms, so p90 would read as a
- * whiff — except that `Swing.lag` now carries the delay and the host subtracts
- * it. See `llm-knowledge/decisions/0013-detector-latency-is-compensated.md`.
- */
-export const EMIT_HOLD_MS = 150;
+/** deg/s a lobe must peak at to be a swing. The same number `power` starts
+ * counting from (`POWER_FLOOR_DEG_S`); the softest real swing peak in the
+ * fixtures is 405. */
+export const TRIGGER_DEG_S = 400;
+
+/** Fraction of the peak rotation must fall to before the peak is announced.
+ * A swing decelerates steeply after contact, so this is one sample, two at
+ * most — and it is what stops a swing still speeding up from firing early. */
+export const PEAK_CONFIRM = 0.85;
+
+/** A lobe that reaches its peak faster than this is a knock or a drop, not
+ * a swing — nothing with a racket in it winds up in under 40ms. */
+export const MIN_RISE_MS = 40;
+
+/** How much harder a later peak in the same lobe must be to be reported as
+ * well — the swing after a backswing that never paused. */
+export const REFIRE_RATIO = 1.05;
 
 export interface SwingStream {
 	/**
@@ -63,78 +59,69 @@ export interface SwingStream {
 	 * `null`. At most one swing per call.
 	 */
 	push(sample: MotionSample): Swing | null;
+	/** Rotation of the latest sample, deg/s — the controller draws it. */
+	readonly level: number;
 }
 
-/**
- * Carries O(1) state — the run's start, its peak sample and that peak's
- * magnitude. Deliberately no sample buffer: a player who shakes the phone for
- * a minute must cost nothing, and a buffer would need a length nobody has
- * measured.
- */
+/** O(1) state: no sample buffer, so a phone shaken for a minute costs
+ * nothing. */
 export function createSwingStream(): SwingStream {
-	let runStart: number | null = null;
-	let lastHot: number | null = null;
+	let lobeStart: number | null = null;
+	let lastT: number | null = null;
 	let peak: MotionSample | null = null;
 	let peakMag = 0;
-	// The fastest turn seen so far, tracked separately from the loudest
-	// sample because they are routinely different samples and this is the one
-	// that decides which way the ball goes (`detector.ts`, `turnOf`).
+	// The fastest turn so far, which is what decides forehand or backhand
+	// (`detector.ts`, `classify`) — often a different sample from the peak.
 	let turn: MotionSample | null = null;
 	let turnMag = 0;
-	// Sample time at which a swing whose peak is already behind it will be
-	// announced. Set by the decay trigger, not acted on until it passes, so
-	// the run keeps feeding `peak` and `turn` in the meantime.
-	let holdUntil: number | null = null;
-	// Absolute sample time until which everything is ignored. This is the
-	// streaming equivalent of the batch detector's episode merge: one swing's
-	// backswing, strike and follow-through must announce themselves once.
-	let mutedUntil: number | null = null;
+	/** Magnitude of the last peak this lobe announced, or 0. */
+	let fired = 0;
+	let level = 0;
 
-	const clearRun = (): void => {
-		runStart = null;
-		lastHot = null;
+	const endLobe = (): void => {
+		lobeStart = null;
 		peak = null;
 		peakMag = 0;
 		turn = null;
 		turnMag = 0;
-		holdUntil = null;
+		fired = 0;
 	};
 
-	const emit = (at: number): Swing | null => {
-		if (peak === null || turn === null) return null;
-		const swing = { ...swingFrom(peak, turn), lag: at - peak.t };
-		mutedUntil = at + EPISODE_MERGE_GAP_MS;
-		clearRun();
+	/** The pending peak, if it has qualified and the rotation has fallen far
+	 * enough off it to be sure it was the peak. */
+	const announce = (now: number, ended: boolean): Swing | null => {
+		if (peak === null || turn === null || lobeStart === null) return null;
+		const needed = fired > 0 ? fired * REFIRE_RATIO : TRIGGER_DEG_S;
+		if (peakMag < needed) return null;
+		if (!ended && level > peakMag * PEAK_CONFIRM) return null;
+		if (fired === 0 && peak.t - lobeStart < MIN_RISE_MS) return null;
+
+		const swing = { ...swingFrom(peak, turn), lag: now - peak.t };
+		fired = peakMag;
+		peak = null;
+		peakMag = 0;
+		turn = null;
+		turnMag = 0;
 		return swing;
 	};
 
 	return {
-		push(sample: MotionSample): Swing | null {
-			if (mutedUntil !== null) {
-				if (sample.t < mutedUntil) return null;
-				mutedUntil = null;
-			}
+		get level() {
+			return level;
+		},
+		push(sample) {
+			const m = rotMagnitude(sample.rot);
+			level = m;
+			// A stalled sensor, not a continuous lobe: `sample.t` keeps
+			// running through a stall (MAX_GAP_MS is measured in trace.ts).
+			if (lastT !== null && sample.t - lastT > MAX_GAP_MS) endLobe();
+			lastT = sample.t;
 
-			const magnitude = rotMagnitude(sample.rot);
-
-			if (magnitude >= SWING_ROT_THRESHOLD_DEG_S) {
-				// A gap this long is a stalled sensor, not a continuous swing
-				// (MAX_GAP_MS is measured in trace.ts against real capture
-				// stalls). `sample.t` keeps advancing through the stall, so
-				// without this the resumed run inherits a runStart and peak
-				// from before it and can qualify and emit off almost no real
-				// motion.
-				if (
-					runStart !== null &&
-					lastHot !== null &&
-					sample.t - lastHot > MAX_GAP_MS
-				) {
-					clearRun();
-				}
-				if (runStart === null) runStart = sample.t;
-				lastHot = sample.t;
-				if (magnitude > peakMag) {
-					peakMag = magnitude;
+			const ended = m < LOBE_FLOOR_DEG_S;
+			if (!ended) {
+				lobeStart ??= sample.t;
+				if (m > peakMag) {
+					peakMag = m;
 					peak = sample;
 				}
 				const turning = Math.abs(sample.rot[TURN_AXIS] ?? 0);
@@ -142,35 +129,13 @@ export function createSwingStream(): SwingStream {
 					turnMag = turning;
 					turn = sample;
 				}
-				// The hold set by an earlier decay trigger. Everything above
-				// still ran, so the swing announced here is the best view of
-				// it available — that is the entire point of waiting.
-				if (holdUntil !== null) {
-					return sample.t >= holdUntil ? emit(sample.t) : null;
-				}
-				// Duration measured to this sample, exactly as `findRuns` does.
-				const qualified = sample.t - runStart >= MIN_SWING_DURATION_MS;
-				if (qualified && magnitude < peakMag * PEAK_DECAY_EMIT) {
-					holdUntil = sample.t + EMIT_HOLD_MS;
-				}
-				return null;
 			}
 
-			// Below threshold: the run is over. Announce it if it was long
-			// enough, measured between its first and last HOT samples so this
-			// agrees with the batch detector rather than counting the silent
-			// sample that ended it.
-			const started = runStart;
-			const ended = lastHot;
-			if (
-				started !== null &&
-				ended !== null &&
-				ended - started >= MIN_SWING_DURATION_MS
-			) {
-				return emit(sample.t);
-			}
-			clearRun();
-			return null;
+			// A lobe that ends straight off its peak — rotation falling from
+			// 1300 to under the floor in one sample — still announces it.
+			const swing = announce(sample.t, ended);
+			if (ended) endLobe();
+			return swing;
 		},
 	};
 }

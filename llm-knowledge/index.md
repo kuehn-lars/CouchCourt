@@ -1,6 +1,6 @@
 ---
 title: Index
-updated: 2026-09-21
+updated: 2026-09-22
 tags: [meta]
 status: current
 ---
@@ -50,12 +50,13 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0006-relay-session-policy]] | Host replacement, no slot reclaim, liveness defaults |
 | [[0007-host-arrival-time-for-swing-timing]] | Swing timing uses host arrival, never the phone's clock |
 | [[0008-timing-not-aim-for-shot-direction]] | Direction comes from timing's sign; the `aim` stream is dead |
-| [[0009-streaming-swing-detection]] | The phone emits a swing before it finishes. Why `detectSwings` cannot be streamed, and what firing early costs |
+| [[0009-streaming-swing-detection]] | **Superseded by 0015.** The decay-trigger live detector, and why `detectSwings` cannot be streamed |
 | [[0010-vite-preview-as-production-server]] | `npm start` is `vite build && vite preview`. Why no hand-written Node entry point exists |
 | [[0011-qrcode-generator-dependency]] | The one new dependency, and why the join code is not hand-rolled |
-| [[0012-swing-kind-is-the-shot-direction]] | The stroke you play decides where the ball goes. Supersedes 0008's direction rule, and why the phone stopped guessing serves |
+| [[0012-swing-kind-is-the-shot-direction]] | **Superseded by 0015.** The stroke you played decided where the ball went |
 | [[0013-detector-latency-is-compensated]] | The phone reports how late its detector was and the host subtracts it. Every swing had been reading late |
-| [[0014-players-run-to-the-ball]] | Players move in x and z, and one predictor says where they meet the ball and when |
+| [[0014-players-run-to-the-ball]] | Players move in x and z, and one predictor says where they meet the ball and when. Amended by 0015 |
+| [[0015-contact-model]] | **Why returns whiffed, and the fix.** One frozen contact per ball; early swings wait, late ones rewind; hardest peak wins; timing is direction (Wii rule); launches solved to land; toss-then-hit serve; peak detector on the phone |
 
 ## Platform
 
@@ -94,13 +95,14 @@ the evidence that produced them.
 | [[2026-09-19-lan-tls-verification]] | Proving the LAN HTTPS approach works, and two conclusions that were wrong |
 | [[2026-09-19-ios-devicemotion-sampling]] | The real sample rate (60.00Hz), stall behaviour, and why a peak threshold cannot separate a backhand from a hand gesture |
 | [[2026-09-19-swing-detector-tuning]] | The duration/merge/classification thresholds that do separate them |
-| [[2026-09-20-shot-envelope]] | The shot-feel constants, and two fixture-design bugs that cost more than the tuning |
+| [[2026-09-20-shot-envelope]] | **Superseded** by solved launches. The shot-feel constants, and two fixture-design bugs that cost more than the tuning |
 | [[2026-09-20-serve-reachability-recheck]] | The "unreturnable serve" finding did not reproduce: every legal serve power gives a 0.48–0.67s return window |
-| [[2026-09-20-streaming-swing-latency]] | Batch detection is 1066ms late. Streaming is 117ms and fires on the backswing — and the fixtures are all denser than gameplay |
-| [[2026-09-20-serve-that-lands]] | The serve landed at 7 powers in 21. Contact height and a power-lerped angle make it 21 of 21 |
+| [[2026-09-20-streaming-swing-latency]] | **Superseded** by the peak detector. Batch detection is 1066ms late. Streaming is 117ms and fires on the backswing — and the fixtures are all denser than gameplay |
+| [[2026-09-20-serve-that-lands]] | **Superseded** by solved serves. The serve landed at 7 powers in 21. Contact height and a power-lerped angle make it 21 of 21 |
 | [[2026-09-20-spin-from-wrist-roll]] | Where `Swing.spin` comes from, and why no committed fixture can confirm it |
 | [[2026-09-20-camera-framing]] | The far player rendered at 0.25x the near one. Why a frustum test could not catch it |
 | [[2026-09-21-swing-direction-classifier]] | What actually tells a forehand from a backhand, the twelve statistics tried, and the grip-invariant idea that does not pay |
+| [[2026-09-22-contact-model-feel]] | The whiff reproduced (−650ms), peak-detector latency (50ms median), and balancing against a simulated human: what made points end |
 | [[2026-09-21-camera-frames-a-moving-player]] | The camera framed a court, not the players in it — and the guard passed while the legs hung off the screen |
 | [[2026-09-20-serve-reachability]] | **Superseded.** The original, wrong claim — kept so nobody re-derives it |
 
@@ -114,6 +116,10 @@ folders above and recorded in [[log]]. See `llm-knowledge/sessions/README.md`.
 
 Things that are true today and that a session should not be surprised by.
 
+- **The 2026-09-22 feel rewrite is tuned against a simulated human.** The
+  balance constants and `TIMING_IDEAL` (network + display latency) need a real
+  phone and a real person; the iOS 18 switch-haptic trick is untried. See
+  [[2026-09-22-contact-model-feel]].
 - **Seen running in a browser, never on a phone.** 2026-09-21: the whole
   loop again — lobby, countdown, a game played out, the scoreboard ticking
   through 0 all / 15 / 30 / 40 / Game — in headless Chrome with **no console
@@ -136,10 +142,9 @@ Things that are true today and that a session should not be surprised by.
 - **`Swing.spin`'s rotation axis is still a design decision, not a
   measurement** ([[2026-09-20-spin-from-wrist-roll]]). Unchanged by the
   2026-09-21 work, which only touched the direction axis.
-- **Two perfect bots rally forever.** 273 hits and no point in 40,000 ticks
-  ([[modules/shared-sim]]). Solo mode uses skill 0.7, which does lose points
-  — but nothing stops a rally that never ends, and no rally-length cap
-  exists.
+- **Two perfect bots rally forever** ([[modules/shared-sim]]). Solo mode uses
+  skill 0.7, which beats a novice and loses to a decent player; no
+  rally-length cap exists.
 - **How long iOS waits before suspending a backgrounded tab is unmeasured**,
   which is why the relay's 15s ping interval is a guess rather than a tuned
   constant.

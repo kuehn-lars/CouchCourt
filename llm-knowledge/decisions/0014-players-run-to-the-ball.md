@@ -1,6 +1,6 @@
 ---
 title: Players run to the ball, and one predictor says where and when
-updated: 2026-09-21
+updated: 2026-09-22
 tags: [decision, sim, movement, core]
 status: current
 code:
@@ -9,6 +9,8 @@ code:
   - `src/shared/sim/rally.ts`
   - `src/shared/sim/bot.ts`
 ---
+
+**Amended by [[0015-contact-model]] (2026-09-22).** `predictStrike` is still the one answer, but it is now frozen into `MatchState.contact`; the ground strike is where the ball drops back to waist height, not 1.4m behind the bounce; players wait `REACTION` before running and recover at half speed.
 
 # 0014 — Players run to the ball, and one predictor says where and when
 

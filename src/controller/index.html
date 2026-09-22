@@ -3,12 +3,9 @@
 	<head>
 		<meta charset="utf-8" />
 		<!--
-			A tennis ball, inline as a data URI rather than a file in `public/`.
-			Without any icon link at all the browser still asks for
-			`/favicon.ico` and gets a 404 — the last console error on the
-			shipping build, and a generic tab icon on the host screen someone
-			is about to show a room. Inline keeps it to zero new files and no
-			asset pipeline; `#` has to be written `%23` inside a data URI.
+			A tennis ball, inline as a data URI rather than a file in `public/`:
+			without any icon link the browser asks for `/favicon.ico` and gets a
+			404. `#` has to be written `%23` inside a data URI.
 		-->
 		<link
 			rel="icon"
@@ -23,51 +20,342 @@
 			name="viewport"
 			content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
 		/>
+		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<meta name="theme-color" content="#0b1d13" />
+		<meta name="theme-color" content="#07140e" />
 		<title>SwingCourt Controller</title>
 		<style>
+			/* Registered so the ring's arc can animate between swings. */
+			@property --power {
+				syntax: "<number>";
+				inherits: true;
+				initial-value: 0;
+			}
+			:root {
+				--bg: #07140e;
+				--bg-2: #0f2a1d;
+				--ink: #eefaf2;
+				--muted: rgba(238, 250, 242, 0.62);
+				--line: rgba(238, 250, 242, 0.12);
+				--ball: #d8f24a;
+				--accent: #7fe0a4;
+				--hit: #7fe0a4;
+				--miss: #ff6b6b;
+				--point: #ffd166;
+				/* Live swing level 0..1 and last swing power 0..1, set from JS. */
+				--level: 0;
+				--power: 0;
+			}
+			* {
+				box-sizing: border-box;
+			}
 			html,
 			body {
 				margin: 0;
 				height: 100%;
-				background: #0b1d13;
-				color: #e8f5ec;
-				font: 16px/1.5 -apple-system, system-ui, sans-serif;
+				color: var(--ink);
+				font: 16px/1.45 -apple-system, "SF Pro Rounded", system-ui, sans-serif;
 				/* A racket swing must never scroll or rubber-band the page. */
 				overscroll-behavior: none;
 				touch-action: none;
 				-webkit-user-select: none;
 				user-select: none;
+				-webkit-tap-highlight-color: transparent;
 			}
-			/* Default link blue is close to unreadable on this background. */
+			body {
+				background:
+					radial-gradient(120% 70% at 50% 0%, var(--bg-2), transparent 70%),
+					var(--bg);
+				overflow: hidden;
+			}
+			/* Full-screen colour wash for feedback; the only thing that works
+			   on iOS, which has no navigator.vibrate. */
+			body::after {
+				content: "";
+				position: fixed;
+				inset: 0;
+				pointer-events: none;
+				background: var(--flash, transparent);
+				opacity: 0;
+				transition: opacity 360ms ease-out;
+			}
+			body.flash::after {
+				opacity: 0.55;
+				transition: none;
+			}
 			a {
-				color: #7fe0a4;
+				color: var(--accent);
 			}
 			main {
-				display: grid;
-				place-content: center;
 				height: 100%;
-				padding: max(1rem, env(safe-area-inset-top)) 1rem
-					max(1rem, env(safe-area-inset-bottom));
+				display: flex;
+				flex-direction: column;
+				padding: max(16px, env(safe-area-inset-top)) 20px
+					max(20px, env(safe-area-inset-bottom));
+			}
+			#gate[hidden],
+			#play[hidden] {
+				display: none;
+			}
+
+			/* ---------------------------------------------------- gate */
+			#gate {
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				justify-content: center;
+				gap: 18px;
 				text-align: center;
+				max-width: 420px;
+				margin: 0 auto;
+			}
+			.emblem {
+				width: 96px;
+				height: 96px;
+				margin: 0 auto 4px;
+				border-radius: 50%;
+				background: radial-gradient(circle at 35% 30%, #f1ff9a, var(--ball) 55%, #a9c21f);
+				box-shadow:
+					0 0 0 6px rgba(216, 242, 74, 0.12),
+					0 18px 40px rgba(216, 242, 74, 0.25);
+				position: relative;
+				animation: bob 2.4s ease-in-out infinite;
+			}
+			.emblem::before,
+			.emblem::after {
+				content: "";
+				position: absolute;
+				top: 8%;
+				bottom: 8%;
+				width: 60%;
+				border: 3px solid rgba(255, 255, 255, 0.85);
+				border-radius: 50%;
+			}
+			.emblem::before {
+				left: -38%;
+				border-left-color: transparent;
+				border-top-color: transparent;
+				border-bottom-color: transparent;
+			}
+			.emblem::after {
+				right: -38%;
+				border-right-color: transparent;
+				border-top-color: transparent;
+				border-bottom-color: transparent;
+			}
+			@keyframes bob {
+				50% {
+					transform: translateY(-8px);
+				}
+			}
+			h1 {
+				margin: 0;
+				font-size: 2.1rem;
+				letter-spacing: -0.02em;
+			}
+			.lede {
+				margin: 0;
+				color: var(--muted);
+			}
+			.grip {
+				display: flex;
+				gap: 12px;
+				align-items: center;
+				text-align: left;
+				padding: 12px 14px;
+				border: 1px solid var(--line);
+				border-radius: 14px;
+				background: rgba(255, 255, 255, 0.03);
+				font-size: 0.92rem;
+				color: var(--muted);
+			}
+			.grip b {
+				color: var(--ink);
+				font-weight: 600;
+			}
+			.grip-icon {
+				flex: none;
+				width: 36px;
+				height: 36px;
+				border-radius: 10px;
+				display: grid;
+				place-items: center;
+				background: rgba(127, 224, 164, 0.14);
+				font-size: 1.3rem;
 			}
 			button {
 				font: inherit;
-				padding: 0.9rem 1.6rem;
-				border: 0;
-				border-radius: 0.6rem;
-				background: #7fe0a4;
-				color: #0b1d13;
-				font-weight: 600;
-			}
-			.side {
-				font-size: 2rem;
+				font-size: 1.1rem;
 				font-weight: 700;
-				margin: 0 0 0.25rem;
+				padding: 1.05rem 1.6rem;
+				border: 0;
+				border-radius: 999px;
+				background: linear-gradient(180deg, #a6f0c2, var(--accent));
+				color: #062014;
+				box-shadow: 0 10px 30px rgba(127, 224, 164, 0.3);
+			}
+			button:active {
+				transform: scale(0.98);
+			}
+			#gate-status {
+				min-height: 1.5em;
+				margin: 0;
+				font-size: 0.9rem;
+				color: var(--point);
+			}
+
+			/* ---------------------------------------------------- play */
+			#play {
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				gap: 12px;
+			}
+			.bar {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				gap: 8px;
+			}
+			.chip,
+			.pill {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				padding: 7px 13px;
+				border-radius: 999px;
+				font-size: 0.88rem;
+				font-weight: 600;
+				white-space: nowrap;
+			}
+			.chip {
+				background: color-mix(in srgb, var(--accent) 20%, transparent);
+				color: var(--accent);
+			}
+			.chip::before {
+				content: "";
+				width: 9px;
+				height: 9px;
+				border-radius: 50%;
+				background: var(--accent);
+				box-shadow: 0 0 10px var(--accent);
+			}
+			.pill {
+				border: 1px solid var(--line);
+				color: var(--muted);
+			}
+			.stage {
+				flex: 1;
+				display: grid;
+				place-items: center;
+				position: relative;
+			}
+			.ring {
+				--size: min(72vw, 46vh, 320px);
+				width: var(--size);
+				height: var(--size);
+				border-radius: 50%;
+				position: relative;
+				display: grid;
+				place-items: center;
+				/* The last swing's power, as an arc. */
+				background:
+					conic-gradient(
+						var(--accent) calc(var(--power) * 1turn),
+						rgba(255, 255, 255, 0.07) 0
+					);
+				transition: --power 300ms;
+			}
+			/* Live rotation: a glow that swells as the phone swings. */
+			.ring::before {
+				content: "";
+				position: absolute;
+				inset: -6%;
+				border-radius: 50%;
+				background: radial-gradient(
+					circle,
+					color-mix(in srgb, var(--accent) 45%, transparent) 0,
+					transparent 65%
+				);
+				opacity: var(--level);
+				transform: scale(calc(0.85 + var(--level) * 0.3));
+			}
+			.face {
+				position: absolute;
+				inset: 9%;
+				border-radius: 50%;
+				background:
+					repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 14px),
+					repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 14px),
+					radial-gradient(circle at 50% 35%, #173a29, #0a1d14);
+				box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.08);
+				display: grid;
+				place-content: center;
+				text-align: center;
+			}
+			.power {
+				font-size: calc(var(--size) * 0.26);
+				font-weight: 800;
+				letter-spacing: -0.04em;
+				line-height: 1;
+				font-variant-numeric: tabular-nums;
+			}
+			.unit {
+				margin-top: 6px;
+				font-size: 0.8rem;
+				letter-spacing: 0.14em;
+				text-transform: uppercase;
+				color: var(--muted);
+			}
+			.ring.pop {
+				animation: pop 260ms ease-out;
+			}
+			@keyframes pop {
+				30% {
+					transform: scale(1.06);
+				}
+			}
+			.toast {
+				position: absolute;
+				bottom: 0;
+				left: 0;
+				right: 0;
+				margin: 0;
+				text-align: center;
+				font-size: 1.6rem;
+				font-weight: 800;
+				letter-spacing: -0.01em;
+				opacity: 0;
+				transform: translateY(8px);
+				transition:
+					opacity 400ms ease,
+					transform 400ms ease;
+			}
+			.toast.show {
+				opacity: 1;
+				transform: none;
+				transition: none;
 			}
 			.hint {
-				opacity: 0.7;
+				margin: 0;
+				padding: 14px 16px;
+				border-radius: 16px;
+				background: rgba(255, 255, 255, 0.05);
+				border: 1px solid var(--line);
+				text-align: center;
+				font-size: 1.02rem;
+			}
+			.hint small {
+				display: block;
+				margin-top: 4px;
+				color: var(--muted);
+				font-size: 0.85rem;
+			}
+			/* The iOS 18 haptic trick needs a real switch in the page. */
+			.haptic {
+				position: fixed;
+				left: -9999px;
+				opacity: 0;
 			}
 		</style>
 	</head>
@@ -80,22 +368,44 @@
 		-->
 		<main>
 			<section id="gate">
+				<div class="emblem" aria-hidden="true"></div>
 				<h1>SwingCourt</h1>
-				<p>
-					This phone is your racket. It needs access to motion sensors to
-					feel your swing — nothing is recorded or sent anywhere but the
-					screen you are playing on.
+				<p class="lede">
+					This phone is your racket. It needs the motion sensors to feel your
+					swing — nothing is recorded or sent anywhere but the screen you are
+					playing on.
 				</p>
-				<button id="enable" type="button">Enable motion</button>
+				<div class="grip">
+					<span class="grip-icon" aria-hidden="true">🎾</span>
+					<span
+						><b>Hold it like a racket handle</b>, top edge pointing up the
+						racket, and swing from the shoulder.</span
+					>
+				</div>
+				<button id="enable" type="button">Let’s play</button>
 				<p id="gate-status" role="status"></p>
 			</section>
 
 			<section id="play" hidden>
-				<p id="side" class="side"></p>
-				<p id="status" role="status">Connecting…</p>
+				<header class="bar">
+					<span id="side" class="chip">Your side</span>
+					<span id="status" class="pill" role="status">Connecting…</span>
+				</header>
+				<div class="stage">
+					<div id="ring" class="ring" aria-hidden="true">
+						<div class="face">
+							<span id="power" class="power">–</span>
+							<span class="unit">swing power</span>
+						</div>
+					</div>
+					<p id="toast" class="toast" aria-live="polite"></p>
+				</div>
 				<p id="hint" class="hint">Waiting for the host.</p>
 			</section>
 		</main>
+		<label id="haptic-label" class="haptic" aria-hidden="true"
+			><input type="checkbox" switch tabindex="-1" />haptic</label
+		>
 		<script type="module" src="./main.ts"></script>
 	</body>
 </html>

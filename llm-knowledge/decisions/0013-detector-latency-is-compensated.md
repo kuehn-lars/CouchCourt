@@ -1,6 +1,6 @@
 ---
 title: The phone reports how late it is, and the host subtracts it
-updated: 2026-09-21
+updated: 2026-09-22
 tags: [decision, swing, protocol, latency, core]
 status: current
 code:
@@ -9,6 +9,8 @@ code:
   - `src/shared/sim/rally.ts`
   - `src/server/relay.ts`
 ---
+
+**Still current, with a different detector (2026-09-22).** `lag` is still subtracted, but it is now ~50ms not ~200ms, and compensation only works because the swing is compared with a *frozen* contact that may be in the past — see [[0015-contact-model]]. Before that, this compensation was correct and had no effect.
 
 # 0013 — The phone reports how late it is, and the host subtracts it
 

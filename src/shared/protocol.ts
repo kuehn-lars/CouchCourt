@@ -37,12 +37,11 @@ export const MAX_SWING_LAG_MS = 1000;
 
 /**
  * What to assume when a `Swing` carries no `lag` — a controller built before
- * the field existed. The measured median delay of the current detector across
- * all 26 committed traces, so an older phone is judged as if it behaved like
- * a current one, which is very nearly true. Assuming 0 instead would punish
- * it for a delay it is still incurring.
+ * the field existed. The measured median delay of the peak detector
+ * (`swing/stream.ts`) across the committed swing traces. Assuming 0 instead
+ * would punish it for a delay it is still incurring.
  */
-export const DEFAULT_SWING_LAG_MS = 200;
+export const DEFAULT_SWING_LAG_MS = 50;
 
 export type PlayerId = string;
 
@@ -50,6 +49,11 @@ export type PlayerId = string;
 export type Side = "near" | "far";
 
 /**
+ * **The sim no longer reads this for groundstrokes**: forehand or backhand is
+ * chosen from where the ball is, and direction from timing
+ * (`llm-knowledge/decisions/0015-contact-model.md`). The phone still sends its
+ * best guess, so the wire and older controllers are unchanged.
+ *
  * `serve` is assigned by the **simulation**, from `phase === "waiting-serve"`,
  * and is never claimed by a phone. The phone used to guess it from a wrist
  * pronation spike; six 30s captures showed hard forehands producing the same

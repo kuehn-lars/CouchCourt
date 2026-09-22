@@ -1,12 +1,14 @@
 ---
 title: Streaming the swing detector — what it costs
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [experiment, swing, controller, latency]
-status: current
+status: superseded
 code:
   - `src/shared/swing/detector.ts`
   - `tests/fixtures/motion/`
 ---
+
+**Superseded by [[2026-09-22-contact-model-feel]].** Describes the decay-trigger detector. The peak detector that replaced it emits a median ~50ms after the peak.
 
 # Streaming the swing detector — what it costs
 

@@ -1,268 +1,217 @@
 import { describe, expect, it } from "vitest";
-import type { Swing } from "../protocol.ts";
-import { type BallEnv, stepBall } from "./ball.ts";
-import { BASELINE_Z, SINGLES_HALF_WIDTH } from "./court.ts";
-import { CLEAN_WINDOW, MISS_WINDOW, resolveShot } from "./shot.ts";
-import type { Vec3 } from "./state.ts";
+import type { Side } from "../protocol.ts";
+import { type BallEnv, DRAG_K, stepBall } from "./ball.ts";
+import {
+	BASELINE_Z,
+	isInBounds,
+	isInServiceBox,
+	SINGLES_HALF_WIDTH,
+} from "./court.ts";
+import {
+	groundstroke,
+	SAFE_TIMING,
+	serveShot,
+	TIMING_EARLY,
+	TIMING_IDEAL,
+	TIMING_LATE,
+	timingOf,
+} from "./shot.ts";
+import type { Ball, Vec3 } from "./state.ts";
 
-const ENV: BallEnv = { gravityScale: 1.3, drag: 0.0206 };
+const FLAT: BallEnv = { gravityScale: 1, drag: DRAG_K };
+const DT = 1 / 120;
 
-const swing = (kind: Swing["kind"], power: number): Swing => ({
-	kind,
-	power,
-	at: 0,
-});
-
-const contact = (x: number, y: number, z: number): Vec3 => ({ x, y, z });
-
-/** Runs a shot forward to its first bounce, or gives up after a generous cap
- * of ticks — used to ask "where would this actually land" rather than
- * inspecting the raw outgoing vector. */
-function land(p: Vec3, v: Vec3) {
-	let ball = { p, v };
-	for (let i = 0; i < 1000; i++) {
-		const step = stepBall(ball, 1 / 120, ENV);
-		if (step.bounce) return step.bounce;
+/** Flies a shot to its first bounce, or reports the net stopping it. */
+function land(
+	from: Vec3,
+	v: Vec3,
+	env: BallEnv = FLAT,
+): { x: number; z: number } | "net" | "never" {
+	let ball: Ball = { p: from, v };
+	for (let i = 0; i < 1200; i++) {
+		const step = stepBall(ball, DT, env);
 		ball = step.ball;
+		if (step.net?.hit) return "net";
+		if (step.bounce) return step.bounce;
 	}
-	return undefined;
+	return "never";
 }
 
-describe("resolveShot", () => {
-	it("a perfect max-power forehand from the baseline lands in", () => {
-		const start = contact(0, 1, BASELINE_Z);
-		const v = resolveShot(swing("forehand", 1), 0, start, "near");
+const baseline = (side: Side, x = 0, y = 0.9): Vec3 => ({
+	x,
+	y,
+	z: side === "near" ? BASELINE_Z : -BASELINE_Z,
+});
 
-		expect(v).toBeDefined();
-		const bounce = land(start, v as Vec3);
-		expect(bounce).toBeDefined();
-		expect(Math.abs(bounce?.x ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(
-			SINGLES_HALF_WIDTH,
-		);
-		expect(bounce?.z ?? 1).toBeLessThan(0);
-		expect(bounce?.z ?? Number.NEGATIVE_INFINITY).toBeGreaterThanOrEqual(
-			-BASELINE_Z,
-		);
+describe("timingOf", () => {
+	it("is 0 for a swing on the ideal moment", () => {
+		expect(timingOf(TIMING_IDEAL)).toBe(0);
 	});
 
-	it("250ms of timing error lands short but does not whiff", () => {
-		const start = contact(0, 1, BASELINE_Z);
-		const clean = resolveShot(swing("forehand", 1), 0, start, "near") as Vec3;
-		const late = resolveShot(swing("forehand", 1), 0.25, start, "near");
-
-		expect(late).toBeDefined();
-		const cleanBounce = land(start, clean);
-		const lateBounce = land(start, late as Vec3);
-		expect(cleanBounce).toBeDefined();
-		expect(lateBounce).toBeDefined();
-		expect(Math.abs(lateBounce?.z ?? 0)).toBeLessThan(
-			Math.abs(cleanBounce?.z ?? 0),
-		);
+	it("runs to -1 at the early edge and +1 at the late edge", () => {
+		expect(timingOf(TIMING_IDEAL - TIMING_EARLY)).toBeCloseTo(-1);
+		expect(timingOf(TIMING_IDEAL + TIMING_LATE)).toBeCloseTo(1);
 	});
 
-	it("returns no shot at all past the miss window", () => {
-		const start = contact(0, 1, BASELINE_Z);
-		const v = resolveShot(
-			swing("forehand", 1),
-			MISS_WINDOW + 0.01,
-			start,
-			"near",
-		);
-
-		expect(v).toBeUndefined();
+	it("is undefined outside the window — the racket meets nothing", () => {
+		expect(timingOf(TIMING_IDEAL - TIMING_EARLY - 0.01)).toBeUndefined();
+		expect(timingOf(TIMING_IDEAL + TIMING_LATE + 0.01)).toBeUndefined();
 	});
+});
 
-	// The direction mechanic, replacing timing's sign on 2026-09-21 — see
-	// llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md.
-	describe("direction comes from the swing, not from the timing", () => {
-		const start = contact(0, 1, BASELINE_Z);
+describe("groundstroke", () => {
+	const powers = [0.15, 0.3, 0.5, 0.7, 0.85, 1];
+	const heights = [0.25, 0.6, 1, 1.6];
+	const xs = [-3.5, 0, 3.5];
 
-		it("sends a forehand and a backhand opposite ways from identical timing", () => {
-			const fore = resolveShot(
-				swing("forehand", 0.8),
-				0,
-				start,
-				"near",
-			) as Vec3;
-			const back = resolveShot(
-				swing("backhand", 0.8),
-				0,
-				start,
-				"near",
-			) as Vec3;
-
-			expect(fore.x).not.toBe(0);
-			expect(Math.sign(fore.x)).toBe(-Math.sign(back.x));
-		});
-
-		// A right-hander pulls the ball across their body. The near player
-		// faces -z so their right side is +x, and a forehand there sweeps
-		// toward -x; the far player faces the other way, so it mirrors. This
-		// is the same convention bot.ts already uses to pick which stroke it
-		// is playing, and the two must not drift apart.
-		it("mirrors the same stroke for the far player", () => {
-			const near = resolveShot(
-				swing("forehand", 0.8),
-				0,
-				start,
-				"near",
-			) as Vec3;
-			const far = resolveShot(
-				swing("forehand", 0.8),
-				0,
-				contact(0, 1, -BASELINE_Z),
-				"far",
-			) as Vec3;
-
-			expect(Math.sign(near.x)).toBe(-Math.sign(far.x));
-		});
-
-		it("pulls a forehand toward -x for the near player", () => {
-			const fore = resolveShot(
-				swing("forehand", 0.8),
-				0,
-				start,
-				"near",
-			) as Vec3;
-			expect(fore.x).toBeLessThan(0);
-		});
-
-		it("does not let timing steer a cleanly struck ball: early and late go the same way", () => {
-			const early = resolveShot(
-				swing("forehand", 0.8),
-				-0.1,
-				start,
-				"near",
-			) as Vec3;
-			const late = resolveShot(
-				swing("forehand", 0.8),
-				0.1,
-				start,
-				"near",
-			) as Vec3;
-
-			expect(early.x).toBe(late.x);
-		});
-
-		// The property a fixed sideways speed could not hold. A player who has
-		// run to the corner must still be able to hit the court.
-		it("aims at the same place wherever it is struck from", () => {
-			for (const x of [-3.5, -2, 0, 2, 3.5]) {
-				const from = contact(x, 1, BASELINE_Z);
-				const v = resolveShot(swing("forehand", 0.8), 0, from, "near");
-				expect(v, `no shot from x=${x}`).toBeDefined();
-				const bounce = land(from, v as Vec3);
-				expect(bounce, `never landed from x=${x}`).toBeDefined();
-				expect(
-					Math.abs(bounce?.x ?? Number.POSITIVE_INFINITY),
-					`from x=${x} landed at x=${bounce?.x}`,
-				).toBeLessThanOrEqual(SINGLES_HALF_WIDTH);
-				// A near forehand belongs on the -x half, from anywhere.
-				expect(bounce?.x ?? 1, `from x=${x}`).toBeLessThan(0);
+	it("lands in, over the net, from anywhere on the baseline at any power and height", () => {
+		for (const side of ["near", "far"] as const) {
+			for (const power of powers) {
+				for (const y of heights) {
+					for (const x of xs) {
+						for (const u of [-SAFE_TIMING, -0.4, 0, 0.4, SAFE_TIMING]) {
+							for (const stroke of ["forehand", "backhand"] as const) {
+								const from = baseline(side, x, y);
+								const at = land(
+									from,
+									groundstroke(from, side, stroke, u, power, FLAT),
+								);
+								if (at === "net" || at === "never") {
+									throw new Error(
+										`${side} ${stroke} p${power} y${y} x${x} u${u}: ${at}`,
+									);
+								}
+								expect(isInBounds(at.x, at.z)).toBe(true);
+								// And on the opponent's side of the net.
+								expect(Math.sign(at.z)).toBe(side === "near" ? -1 : 1);
+							}
+						}
+					}
+				}
 			}
-		});
-
-		// Timing keeps doing what it is good at: it decides how well the ball
-		// was struck, and a bad enough contact sprays it away from where the
-		// stroke was aimed. This is what keeps mishits out of the court now
-		// that timing no longer steers a clean ball.
-		it("sprays a badly mistimed stroke the way the timing erred, not the way the stroke went", () => {
-			const clean = resolveShot(
-				swing("forehand", 0.8),
-				0,
-				start,
-				"near",
-			) as Vec3;
-			const late = resolveShot(
-				swing("forehand", 0.8),
-				0.26,
-				start,
-				"near",
-			) as Vec3;
-
-			expect(clean.x).toBeLessThan(0); // aimed across, toward -x
-			expect(late.x).toBeGreaterThan(0); // sprayed the other way entirely
-		});
-
-		it("does not spray a stroke timed inside the clean window", () => {
-			const middle = resolveShot(
-				swing("forehand", 0.8),
-				0,
-				start,
-				"near",
-			) as Vec3;
-			const edge = resolveShot(
-				swing("forehand", 0.8),
-				CLEAN_WINDOW,
-				start,
-				"near",
-			) as Vec3;
-
-			expect(edge.x).toBe(middle.x);
-		});
-
-		it("hits a serve straight, because there is no stroke side to read", () => {
-			const serve = resolveShot(
-				swing("serve", 0.7),
-				0,
-				contact(0, 2.6, BASELINE_Z),
-				"near",
-			) as Vec3;
-
-			expect(serve.x).toBe(0);
-		});
+		}
 	});
 
-	it("a mishit arcs higher than a clean hit, not just shorter", () => {
-		// "lands short" alone is satisfied by speed loss alone; this isolates the
-		// quality-driven launch angle by checking the apex, not the landing spot.
-		const start = contact(0, 1, BASELINE_Z);
-		const clean = resolveShot(swing("forehand", 1), 0, start, "near") as Vec3;
-		const late = resolveShot(swing("forehand", 1), 0.25, start, "near") as Vec3;
-		const apex = (v: Vec3) => {
-			let ball = { p: start, v };
-			let peak = start.y;
-			for (let i = 0; i < 1000; i++) {
-				const step = stepBall(ball, 1 / 120, ENV);
-				peak = Math.max(peak, step.ball.p.y);
-				if (step.bounce) break;
-				ball = step.ball;
+	it("lands where it was aimed, with topspin and slice as well as flat", () => {
+		for (const gravityScale of [0.85, 1, 1.35]) {
+			const env = { gravityScale, drag: DRAG_K };
+			const from = baseline("near");
+			const flat = land(
+				from,
+				groundstroke(from, "near", "forehand", 0, 0.6, env),
+				env,
+			);
+			const loaded = land(
+				from,
+				groundstroke(from, "near", "forehand", 0, 0.6, FLAT),
+				FLAT,
+			);
+			if (typeof flat === "string" || typeof loaded === "string") {
+				throw new Error("did not land");
 			}
-			return peak;
+			expect(Math.abs(flat.z - loaded.z)).toBeLessThan(0.5);
+		}
+	});
+
+	it("goes deeper and faster the harder the swing", () => {
+		const from = baseline("near");
+		let lastSpeed = 0;
+		let lastDepth = 0;
+		for (const power of powers) {
+			const v = groundstroke(from, "near", "forehand", 0, power, FLAT);
+			const speed = Math.hypot(v.x, v.y, v.z);
+			const at = land(from, v);
+			if (typeof at === "string") throw new Error("did not land");
+			expect(speed).toBeGreaterThan(lastSpeed);
+			expect(-at.z).toBeGreaterThanOrEqual(lastDepth - 0.05);
+			lastSpeed = speed;
+			lastDepth = -at.z;
+		}
+	});
+
+	// The Wii rule: an early swing pulls the ball across the body, a late one
+	// pushes it the other way. The near player faces -z, so their right is +x.
+	it("pulls an early forehand to the hitter's left and pushes a late one right", () => {
+		const from = baseline("near");
+		const early = land(
+			from,
+			groundstroke(from, "near", "forehand", -0.7, 0.6, FLAT),
+		);
+		const late = land(
+			from,
+			groundstroke(from, "near", "forehand", 0.7, 0.6, FLAT),
+		);
+		if (typeof early === "string" || typeof late === "string") {
+			throw new Error("did not land");
+		}
+		expect(early.x).toBeLessThan(-1.5);
+		expect(late.x).toBeGreaterThan(1.5);
+	});
+
+	it("mirrors that for a backhand", () => {
+		const from = baseline("near");
+		const early = land(
+			from,
+			groundstroke(from, "near", "backhand", -0.7, 0.6, FLAT),
+		);
+		if (typeof early === "string") throw new Error("did not land");
+		expect(early.x).toBeGreaterThan(1.5);
+	});
+
+	it("mirrors it for the far player, whose right is -x", () => {
+		const from = baseline("far");
+		const early = land(
+			from,
+			groundstroke(from, "far", "forehand", -0.7, 0.6, FLAT),
+		);
+		if (typeof early === "string") throw new Error("did not land");
+		expect(early.x).toBeGreaterThan(1.5);
+	});
+
+	it("sends a swing at the very edge of the window wide", () => {
+		const from = baseline("near");
+		for (const u of [-1, 1]) {
+			const at = land(
+				from,
+				groundstroke(from, "near", "forehand", u, 0.6, FLAT),
+			);
+			if (typeof at === "string") throw new Error("did not land");
+			expect(Math.abs(at.x)).toBeGreaterThan(SINGLES_HALF_WIDTH);
+		}
+	});
+});
+
+describe("serveShot", () => {
+	it("lands in the service box at every power and quality, from both ends, both courts", () => {
+		for (const side of ["near", "far"] as const) {
+			for (const targetX of [-2.4, -1, 1, 2.4]) {
+				for (const power of [0.15, 0.4, 0.7, 1]) {
+					for (const quality of [0.4, 1]) {
+						for (const y of [2.1, 2.5, 2.8]) {
+							const from = baseline(side, targetX > 0 ? -0.8 : 0.8, y);
+							const v = serveShot(from, side, targetX, power, quality, FLAT);
+							const at = land(from, v);
+							if (typeof at === "string") {
+								throw new Error(
+									`${side} x${targetX} p${power} q${quality}: ${at}`,
+								);
+							}
+							const receiver = side === "near" ? "far" : "near";
+							expect(isInServiceBox(at.x, at.z, receiver)).toBe(true);
+						}
+					}
+				}
+			}
+		}
+	});
+
+	it("is faster the harder and the cleaner it is struck", () => {
+		const from = baseline("near", 0.8, 2.6);
+		const speed = (p: number, q: number) => {
+			const v = serveShot(from, "near", -2, p, q, FLAT);
+			return Math.hypot(v.x, v.y, v.z);
 		};
-
-		expect(apex(late)).toBeGreaterThan(apex(clean));
-	});
-
-	it("a low contact needs more elevation than a high one to clear the net", () => {
-		const low = resolveShot(
-			swing("forehand", 1),
-			0,
-			contact(0, 0.2, BASELINE_Z),
-			"near",
-		) as Vec3;
-		const high = resolveShot(
-			swing("forehand", 1),
-			0,
-			contact(0, 1.8, BASELINE_Z),
-			"near",
-		) as Vec3;
-		const elevation = (v: Vec3) => Math.atan2(v.y, -v.z);
-
-		expect(elevation(low)).toBeGreaterThan(elevation(high));
-	});
-
-	it("power is monotonic in outgoing speed", () => {
-		const start = contact(0, 1, BASELINE_Z);
-		const weak = resolveShot(swing("forehand", 0.2), 0, start, "near") as Vec3;
-		const strong = resolveShot(
-			swing("forehand", 0.9),
-			0,
-			start,
-			"near",
-		) as Vec3;
-		const speed = (v: Vec3) => Math.hypot(v.x, v.y, v.z);
-
-		expect(speed(strong)).toBeGreaterThan(speed(weak));
+		expect(speed(1, 1)).toBeGreaterThan(speed(0.4, 1));
+		expect(speed(1, 1)).toBeGreaterThan(speed(1, 0.4));
 	});
 });

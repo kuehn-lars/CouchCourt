@@ -1,6 +1,6 @@
 ---
 title: "Module: src/host — the Mac display"
-updated: 2026-09-21
+updated: 2026-09-22
 tags: [module, host, rendering]
 status: current
 code:
@@ -73,20 +73,22 @@ frame(now)
   frameDt = now - lastTime
   advance(accumulator, frameDt) → { ticks, accumulator, alpha }
   repeat ticks times:
-      input = pending.shift()          ← at most ONE swing per tick
+      inputs = pending.splice(0)       ← every swing that has arrived
       previous = current
-      current  = tick(previous, input ? [input] : [], FIXED_DT)
+      current  = tick(previous, inputs, FIXED_DT)
       frameEvents += detectEvents(previous, current)
-      send feedback hit|miss for that swing; point if score changed
+      "hit" to whoever struck a NEW stroke (stroke.at changed)
+      on a score change: "point" to lastPoint, "miss" to the other side
   renderer.render(previous, current, alpha, frameDt, frameEvents)
   clear frameEvents
 ```
 
-**One input per tick, drained oldest first**, rather than dumping a frame's
-whole queue into its first tick. That keeps a 1:1 tick-to-swing relationship
-so a `hit`/`miss` message can be attributed to the exact swing that caused it,
-at a cost of up to one tick (~8ms) when two swings land in the same frame —
-imperceptible, and doubles are out of scope.
+**Feedback is read off the state, not off the input** (since 2026-09-22). It
+used to be one input per tick so a `hit`/`miss` could be pinned on the swing
+that caused it — but under [[0015-contact-model]] an early swing is held until
+the ball arrives, and one real swing arrives as several peaks, so the tick a
+swing lands on says nothing about whether it connected. A revised stroke keeps
+its `at` and does not buzz twice.
 
 **Events are accumulated across every tick in a frame**, not read off the last
 one, or an event is lost whenever two ticks land in one rAF frame.
@@ -115,7 +117,9 @@ tick states**, mirroring the derivation `main.ts` already uses:
 
 | Event | Derived from |
 | --- | --- |
-| `hit` | `before.toHit !== current.toHit` **and** `current.stroke` is set |
+| `hit` | `current.stroke !== before.stroke`. Positioned at `stroke.from`, the contact point; `revised` when `stroke.at` is unchanged |
+| `whiff` | `whiffs[side]` went up — the avatar swings at air |
+| `toss` | `toss` went from `null` to set |
 | `point` | `before.score !== current.score` (reference inequality) |
 | `bounce` | `v.y` sign flip with `p.y < BOUNCE_HEIGHT` — a **heuristic**, visual only |
 
@@ -148,6 +152,22 @@ identical forehands in a row read as a looping GIF.
 
 The far player's group is already yawed by π, so the animations are authored
 once in the player's own frame and never mirrored per side.
+
+### Readying, running, and the rewound ball (2026-09-22)
+
+- **The racket coils before the ball arrives.** `PlayersCue.ready` carries the
+  contact's side, stroke and seconds to go; from 0.65s out the arm eases into
+  that stroke's start pose, fully coiled by 0.2s. The swing animation starts
+  from exactly that pose, so readying and hitting join up. During the toss the
+  server's racket is up behind the head.
+- **Legs hang from hip pivots and swing with distance covered**, not time, so
+  the feet never skate whatever speed the sim moves them.
+- **A rewound ball is drawn from the racket.** A late swing is resolved in the
+  past, so the ball the sim returns is already down the court. On a `hit`
+  event `ball.update` starts the drawn ball at `stroke.from` and closes on the
+  sim ball with a 60ms time constant; a revised hit does the same without a
+  second swing, crack or buzz. A jump over 3m with no hit is a new point and
+  snaps (and clears the trail).
 
 ## Renderer rules — the ceiling on how this is built
 

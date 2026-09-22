@@ -1,194 +1,263 @@
 /**
- * Shot resolution: the feel core. `resolveShot` turns a detected swing plus
- * its timing into an outgoing ball velocity.
+ * Shot resolution: the feel core. Turns "who hit it, how hard, and how early
+ * or late" into an outgoing ball velocity.
  *
- * There is no `aim` reading here on purpose
- * (`llm-knowledge/decisions/0008-timing-not-aim-for-shot-direction.md`): a
- * trustworthy compass zero needs a per-player calibration step the product
- * won't spend.
+ * **Every shot is aimed at a place and solved to land there.** The launch is
+ * found by flying candidate trajectories through `stepBall` — the same
+ * integrator the live ball uses — so a cleanly struck ball lands where it was
+ * aimed at every power, from every contact height, with every spin. The
+ * previous design picked a launch angle from a table and hoped; its mishits
+ * landed 3-17m long, which is why rallies barely existed
+ * (`llm-knowledge/decisions/0015-contact-model.md`).
  *
- * **Direction comes from which stroke you played.** A forehand pulls across
- * the body one way, a backhand the other; timing decides how well you hit it,
- * not where it goes. This replaced timing's sign on 2026-09-21 — see
- * `llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md`, which
- * supersedes 0008's direction rule and keeps the rest of it.
+ * **Direction is timing, as in Wii Tennis.** An early swing pulls the ball
+ * across the body, a late one pushes it the other way; the stroke side comes
+ * from where the ball is, not from the phone. Power is depth and pace. Only a
+ * swing at the ragged edge of the timing window is sent out wide — the risk
+ * of going for the line.
  *
  * `src/shared/**` is compiled under both a DOM-only and a Node-only tsconfig,
  * so this file names no DOM type and no Node global — see
  * `llm-knowledge/decisions/0002-host-authoritative-simulation.md`.
  */
 
-import type { Side, Swing } from "../protocol.ts";
-import type { Vec3 } from "./state.ts";
-
-/** Timing error inside this many seconds either side of ideal is full-quality
- * contact — deliberately wide, both because "generous input" is the product's
- * bar and because the swing detector's own latency already eats into it. */
-export const CLEAN_WINDOW = 0.12;
-
-/** Beyond this many seconds either side, the racket meets nothing. */
-export const MISS_WINDOW = 0.28;
-
-/** Groundstroke launch speed range, m/s, weakest to full power. Lowered from
- * the phase-5 placeholder (30) against `sim/playability.test.ts`'s envelope
- * — see `llm-knowledge/experiments/2026-09-20-shot-envelope.md`. */
-export const GROUND_SPEED_MIN = 15;
-export const GROUND_SPEED_MAX = 28;
-
-/** Serve launch speed range, m/s — hit from overhead, so a higher ceiling. */
-export const SERVE_SPEED_MIN = 18;
-export const SERVE_SPEED_MAX = 35;
-
-/** Speed kept at the ragged edge of the miss window, on top of power — a bad
- * mishit is slower than a good one at the same power. */
-export const MISHIT_SPEED_FACTOR = 0.45;
-
-/** Launch angle above horizontal for a clean, full-quality hit, radians. */
-export const LAUNCH_ANGLE_MIN = 0.12;
+import type { Side } from "../protocol.ts";
+import { type BallEnv, stepBall } from "./ball.ts";
+import { BALL_RADIUS, netHeightAt } from "./court.ts";
+import type { Ball, Vec3 } from "./state.ts";
 
 /**
- * Launch angle at the ragged edge of the miss window, radians. Higher and
- * slower than a clean hit, but not so high that the extra hang time lets a
- * weak shot outrun a fast flat one — measured against `stepBall` directly
- * (a lofted-but-slow trajectory can otherwise travel *further* than a flat
- * fast one, which is the opposite of "lands short").
+ * The timing window, seconds around the ideal contact. A swing up to
+ * `TIMING_EARLY` before it or `TIMING_LATE` after it meets the ball; anything
+ * outside is a whiff. Early is wider than late because an early swing can be
+ * held until the ball arrives, while a late one has to be rewound.
  */
-export const LAUNCH_ANGLE_MAX = 0.44;
-
-/** A contact at or above this height needs no extra elevation to clear the
- * net; below it, the launch angle steepens the lower it gets. */
-export const CONTACT_HEIGHT_REF = 1.1;
-
-/** Where a serve is struck, metres. Overhead, not at waist height. */
-export const SERVE_CONTACT_HEIGHT = 2.6;
+export const TIMING_EARLY = 0.3;
+export const TIMING_LATE = 0.2;
 
 /**
- * Serve launch angle, radians, lerped by power: a gentle serve is lofted in,
- * a hard one is hit down. **Measured, not guessed** — for every power from
- * 0.15 to 0.95 there is a band of angles that lands in the service box, the
- * band's midpoint is very nearly linear in power, and these two numbers are
- * that line's ends. See
- * `llm-knowledge/experiments/2026-09-20-serve-that-lands.md`.
- *
- * The effect is that a flat serve lands in the box at EVERY power, instead
- * of only the 0.30-0.45 sliver a fixed angle allowed. That sliver is what
- * made the first serve a coin toss: `PRODUCT.md` asks the game to guess in
- * the player's favour, and a serve nobody can land is the opposite.
+ * Where "on time" sits relative to the sim's contact moment, seconds. The
+ * phone's detector latency is subtracted exactly (`Swing.lag`), but the
+ * network hop and the display's own latency are not, and both make a player
+ * who swings exactly as the ball reaches their avatar arrive a little late.
+ * **A calibration knob, not a measurement** — the first session with a phone
+ * and a real screen should tune it by whether "on time" hits go down the
+ * middle.
  */
-export const SERVE_ANGLE_SLOW = 0.11;
-export const SERVE_ANGLE_FAST = -0.07;
+export const TIMING_IDEAL = 0.04;
 
-/** Extra launch angle, radians, for a contact right at ground level. Raised
- * from the phase-5 placeholder (0.3) so a low, well-timed contact reliably
- * clears the net instead of driving it into the band — see
- * `llm-knowledge/experiments/2026-09-20-shot-envelope.md`. Serves are
- * unaffected: their contact height always equals `CONTACT_HEIGHT_REF`, so
- * `heightDeficit` is always 0 for them. */
-export const HEIGHT_ANGLE_BOOST = 0.5;
+/** `|u|` beyond which a shot is aimed past the sideline. */
+export const SAFE_TIMING = 0.5;
 
-/**
- * Where a cleanly struck groundstroke is aimed, metres from the centre line
- * on the far side. Comfortably inside `SINGLES_HALF_WIDTH` (4.115) so a shot
- * that arrives a little wide of its aim is still in.
- *
- * The shot is aimed at a **place**, not given a fixed sideways speed, and
- * that is not a flourish. A fixed sideways speed works only while both
- * players stand on the centre mark. Measured on 2026-09-21, once the players
- * started running: a full-power forehand struck from x=+3 with a fixed 7 m/s
- * lateral landed out at **every one of 20 powers**, because it was already at
- * the sideline and was pushed further. Aiming instead of pushing puts the
- * clean-landing rate at 150/200 across five contact positions and both
- * strokes. `llm-knowledge/decisions/0012-swing-kind-is-the-shot-direction.md`
- * records why this overturns 0008's "no geometry solve" clause.
- */
-export const CROSS_COURT_X = 2.6;
+/** Hitter's-right offset, metres, of the aim at `|u| = SAFE_TIMING`, and at
+ * the very edge of the window. The first is ~0.8m inside the singles line;
+ * the second is ~0.9m outside it. */
+export const AIM_WIDE = 3.3;
+export const AIM_OUT = 5.5;
 
-/**
- * Nominal seconds of flight, used only to turn "aim at that x" into a
- * sideways speed. Deliberately a constant rather than solved from the
- * outgoing speed and drag: the real flight is 0.8-1.3s across the power
- * range, and sweeping this over that whole span moved the clean-landing rate
- * by two shots in two hundred. Solving it exactly would buy nothing and
- * couple the aim to the drag model.
- */
-export const AIM_FLIGHT_TIME = 1.1;
+/** Landing depth past the net, metres, for the softest and hardest swing.
+ * The baseline is at 11.89. */
+export const DEPTH_SOFT = 7;
+export const DEPTH_HARD = 10;
 
-/** Ceiling on the sideways speed the aim may ask for, m/s. A ball struck from
- * the far corner must not be flung across the court flat. */
-export const LATERAL_SPEED_MAX = 7;
+/** Launch angle a groundstroke starts its search from, radians: a soft swing
+ * is a loopy rally ball, a hard one is flat. Raised only if the net needs it. */
+export const ANGLE_SOFT = 0.2;
+export const ANGLE_HARD = 0.03;
 
-/**
- * Sideways speed, m/s, added by a stroke timed at the very edge of the miss
- * window, in the direction the timing erred. Zero inside `CLEAN_WINDOW`.
- *
- * This is what keeps a mishit honest now that timing no longer steers. Before
- * 2026-09-21 a mistimed shot flew wide because timing *was* the direction; the
- * property "a max-power shot deep in the miss window essentially never lands
- * in" was resting on that, and would have been silently lost. Measured back
- * to 0 of 8 landing in at this value; at 8 m/s one of them still lands.
- */
-export const MISHIT_SPRAY_MAX = 10;
+/** Height a groundstroke must clear the band by, metres. */
+export const NET_MARGIN = 0.12;
+
+/** Serve pace range, m/s, and how much of it a badly timed toss keeps. */
+export const SERVE_SPEED_MIN = 17;
+export const SERVE_SPEED_MAX = 36;
+export const SERVE_MISTIMED = 0.8;
+
+/** Serve landing depth past the net, metres. The service line is at 6.4. */
+export const SERVE_DEPTH_SOFT = 4.4;
+export const SERVE_DEPTH_HARD = 5.5;
+
+const SOLVE_DT = 1 / 120;
+const SOLVE_LIMIT = 600;
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp = (x: number, lo: number, hi: number) =>
 	Math.max(lo, Math.min(hi, x));
 
 /**
- * `swing` and its `timingError` (host arrival minus ideal contact, seconds,
- * signed) resolve to an outgoing velocity for a ball met at `contact` by the
- * player on `side`. `undefined` past `MISS_WINDOW` — the racket found nothing.
+ * `error` is swing time minus contact time, seconds. Returns -1 (as early as
+ * still connects) through 0 (on time) to +1 (as late as still connects), or
+ * `undefined` for a swing that meets nothing.
  */
-export function resolveShot(
-	swing: Swing,
-	timingError: number,
-	contact: Vec3,
+export function timingOf(error: number): number | undefined {
+	const x = error - TIMING_IDEAL;
+	if (x < -TIMING_EARLY || x > TIMING_LATE) return undefined;
+	return x < 0 ? x / TIMING_EARLY : x / TIMING_LATE;
+}
+
+/** Which way `side` hits: -1 toward -z (the near player), +1 toward +z. */
+export const forwardOf = (side: Side): number => (side === "near" ? -1 : 1);
+
+/** World `x` of the hitter's right hand: the near player faces -z, so their
+ * right is +x; the far player faces the other way. */
+export const rightOf = (side: Side): number => (side === "near" ? 1 : -1);
+
+interface Flight {
+	/** Horizontal distance from the launch point to the first bounce, or 0
+	 * when the net stopped it. */
+	readonly distance: number;
+	/** How far the ball cleared the band by, metres. Negative is a clip. */
+	readonly clearance: number;
+}
+
+function fly(from: Vec3, v: Vec3, env: BallEnv): Flight {
+	let ball: Ball = { p: from, v };
+	let clearance = Number.POSITIVE_INFINITY;
+	for (let i = 0; i < SOLVE_LIMIT; i++) {
+		const step = stepBall(ball, SOLVE_DT, env);
+		ball = step.ball;
+		if (step.net) {
+			if (step.net.hit) return { distance: 0, clearance: -1 };
+			clearance = step.net.y - BALL_RADIUS - netHeightAt(step.net.x);
+		}
+		if (step.bounce) {
+			return {
+				distance: Math.hypot(step.bounce.x - from.x, step.bounce.z - from.z),
+				clearance,
+			};
+		}
+	}
+	return { distance: Number.POSITIVE_INFINITY, clearance };
+}
+
+const velocity = (
+	dir: { x: number; z: number },
+	speed: number,
+	angle: number,
+): Vec3 => ({
+	x: dir.x * speed * Math.cos(angle),
+	y: speed * Math.sin(angle),
+	z: dir.z * speed * Math.cos(angle),
+});
+
+/** Bisection on a quantity `distance` increases with. */
+function solve(
+	lo: number,
+	hi: number,
+	want: number,
+	distance: (k: number) => number,
+): number {
+	for (let i = 0; i < 28; i++) {
+		const mid = (lo + hi) / 2;
+		if (distance(mid) < want) lo = mid;
+		else hi = mid;
+	}
+	return (lo + hi) / 2;
+}
+
+function toward(from: Vec3, target: { x: number; z: number }) {
+	const dx = target.x - from.x;
+	const dz = target.z - from.z;
+	const d = Math.hypot(dx, dz);
+	return { dir: { x: dx / d, z: dz / d }, distance: d };
+}
+
+/** Hitter's-right offset, metres, of a shot timed `u`. */
+function aimOffset(u: number): number {
+	const a = Math.abs(u);
+	const wide =
+		a <= SAFE_TIMING
+			? (a / SAFE_TIMING) * AIM_WIDE
+			: lerp(AIM_WIDE, AIM_OUT, (a - SAFE_TIMING) / (1 - SAFE_TIMING));
+	return Math.sign(u) * wide;
+}
+
+/**
+ * A groundstroke or volley struck at `from` by `side`, timed `u` (see
+ * `timingOf`), at `power` 0..1, flying in `env` (the spin of this shot).
+ */
+export function groundstroke(
+	from: Vec3,
 	side: Side,
-): Vec3 | undefined {
-	const absError = Math.abs(timingError);
-	if (absError > MISS_WINDOW) return undefined;
+	stroke: "forehand" | "backhand",
+	u: number,
+	power: number,
+	env: BallEnv,
+): Vec3 {
+	const p = clamp(power, 0, 1);
+	// Early pulls across the body: a forehand to the hitter's left, a
+	// backhand to their right. Late does the opposite.
+	const lateral = (stroke === "forehand" ? 1 : -1) * aimOffset(u);
+	const target = {
+		x: rightOf(side) * lateral,
+		z: forwardOf(side) * lerp(DEPTH_SOFT, DEPTH_HARD, p),
+	};
+	const { dir, distance } = toward(from, target);
 
-	const quality =
-		absError <= CLEAN_WINDOW
-			? 1
-			: 1 - (absError - CLEAN_WINDOW) / (MISS_WINDOW - CLEAN_WINDOW);
+	// The speed that lands a launch at `angle` on the target, and whether
+	// that trajectory clears the band.
+	const launch = (angle: number): { v: Vec3; clears: boolean } => {
+		const speed = solve(
+			4,
+			50,
+			distance,
+			(s) => fly(from, velocity(dir, s, angle), env).distance,
+		);
+		const v = velocity(dir, speed, angle);
+		return { v, clears: fly(from, v, env).clearance >= NET_MARGIN };
+	};
 
-	const [speedMin, speedMax] =
-		swing.kind === "serve"
-			? [SERVE_SPEED_MIN, SERVE_SPEED_MAX]
-			: [GROUND_SPEED_MIN, GROUND_SPEED_MAX];
-	const speed =
-		lerp(speedMin, speedMax, clamp(swing.power, 0, 1)) *
-		lerp(MISHIT_SPEED_FACTOR, 1, quality);
+	const start = lerp(ANGLE_SOFT, ANGLE_HARD, p);
+	const direct = launch(start);
+	if (direct.clears) return direct.v;
+	// A low ball struck flat finds the net: lift it by the least that clears,
+	// found by bisection so a harder swing is never lifted further than a
+	// softer one and never comes off the racket slower.
+	let lo = start;
+	let hi = 1;
+	for (let i = 0; i < 14; i++) {
+		const mid = (lo + hi) / 2;
+		if (launch(mid).clears) hi = mid;
+		else lo = mid;
+	}
+	return launch(hi).v;
+}
 
-	const heightDeficit = clamp(1 - contact.y / CONTACT_HEIGHT_REF, 0, 1);
-	const angle =
-		swing.kind === "serve"
-			? lerp(SERVE_ANGLE_SLOW, SERVE_ANGLE_FAST, clamp(swing.power, 0, 1))
-			: lerp(LAUNCH_ANGLE_MAX, LAUNCH_ANGLE_MIN, quality) +
-				heightDeficit * HEIGHT_ANGLE_BOOST;
+/**
+ * A serve struck at `from` by `side` toward `targetX` in the receiver's box.
+ * `quality` 0..1 is how close to the top of the toss it was hit.
+ */
+export function serveShot(
+	from: Vec3,
+	side: Side,
+	targetX: number,
+	power: number,
+	quality: number,
+	env: BallEnv,
+): Vec3 {
+	const p = clamp(power, 0, 1);
+	const target = {
+		x: targetX,
+		z: forwardOf(side) * lerp(SERVE_DEPTH_SOFT, SERVE_DEPTH_HARD, p),
+	};
+	const { dir, distance } = toward(from, target);
 
-	const forwardSpeed = speed * Math.cos(angle);
-	const verticalSpeed = speed * Math.sin(angle);
-
-	const forward = side === "near" ? -1 : 1;
-	// A right-hander pulls the ball across their body: the near player faces
-	// -z so their right side is +x and their forehand sweeps toward -x, and
-	// the far player, facing the other way, mirrors it. Both cases are
-	// `forward`'s own sign, which is why this is one multiply and not a
-	// per-side table. A serve has no stroke side and goes straight.
-	const strokeSign =
-		swing.kind === "serve" ? 0 : swing.kind === "forehand" ? forward : -forward;
-	// Quality pulls the aim back toward the middle: a scruffy contact is not
-	// finding the corner, and aiming it there would only send it out.
-	const targetX = strokeSign * CROSS_COURT_X * quality;
-	const aim = clamp(
-		(targetX - contact.x) / AIM_FLIGHT_TIME,
-		-LATERAL_SPEED_MAX,
-		LATERAL_SPEED_MAX,
-	);
-	// Outside the clean window the racket face is not where the player
-	// thought, and the ball leaves in the direction the timing erred.
-	const spray = Math.sign(timingError) * MISHIT_SPRAY_MAX * (1 - quality);
-
-	return { x: aim + spray, y: verticalSpeed, z: forward * forwardSpeed };
+	let speed =
+		lerp(SERVE_SPEED_MIN, SERVE_SPEED_MAX, p) *
+		lerp(SERVE_MISTIMED, 1, clamp(quality, 0, 1));
+	let v = velocity(dir, speed, 0);
+	for (let i = 0; i < 16; i++) {
+		const angle = solve(
+			-0.5,
+			0.5,
+			distance,
+			(a) => fly(from, velocity(dir, speed, a), env).distance,
+		);
+		v = velocity(dir, speed, angle);
+		// Hit down from overhead, a fast serve can only land short by skimming
+		// the band. Take pace off until it clears.
+		if (fly(from, v, env).clearance >= 0.05) return v;
+		speed *= 0.93;
+	}
+	return v;
 }

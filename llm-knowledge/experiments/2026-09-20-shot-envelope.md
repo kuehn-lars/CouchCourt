@@ -1,12 +1,13 @@
 ---
 title: The shot-feel constants, tuned against a measured playability envelope
-updated: 2026-09-20
+updated: 2026-09-22
 tags: [experiment, sim, tuning, phase-9]
-status: current
+status: superseded
 code:
   - `src/shared/sim/shot.ts`
-  - `src/shared/sim/playability.test.ts`
 ---
+
+**Superseded by [[2026-09-22-contact-model-feel]].** The constants tuned here (fixed speed ranges and launch angles) are gone, and `playability.test.ts` was deleted with them — its envelope is now a guarantee `shot.test.ts` asserts per shot: every launch is now solved through `stepBall` to land on an aimed target ([[0015-contact-model]]).
 
 # The shot-feel constants, tuned against a measured playability envelope
 

@@ -1,6 +1,6 @@
 ---
 title: Shot direction comes from swing timing, not phone aim
-updated: 2026-09-21
+updated: 2026-09-22
 tags: [decision, sim, input, core]
 status: current
 superseded-in-part-by: 0012-swing-kind-is-the-shot-direction
@@ -8,6 +8,8 @@ code:
   - `src/shared/sim/shot.ts`
   - `src/shared/protocol.ts`
 ---
+
+**Timing is the direction again as of [[0015-contact-model]] (2026-09-22)** — early pulls, late pushes, with stroke side from ball position. The refusal to read the `aim` stream still stands.
 
 # 0008 — Shot direction comes from swing timing, not phone aim
 

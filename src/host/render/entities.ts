@@ -76,10 +76,30 @@ function buildTrail(): THREE.InstancedMesh {
 }
 
 export interface BallVisual {
-	/** Updates the ball, its shadow and its trail; returns the interpolated
-	 * position so the camera can drift toward it. */
-	update(previous: Ball, current: Ball, alpha: number): Vec3;
+	/**
+	 * Updates the ball, its shadow and its trail; returns the drawn position
+	 * so the camera can drift toward it.
+	 *
+	 * `struckAt` is the contact point when a hit happened this frame. A late
+	 * swing is resolved by rewinding (`sim/rally.ts`): the ball the sim hands
+	 * back is already some way down the court, and drawing that as-is makes
+	 * it teleport. Instead the drawn ball starts on the racket and closes the
+	 * gap to the real one over ~0.1s, so it reads as leaving the strings fast.
+	 */
+	update(
+		previous: Ball,
+		current: Ball,
+		alpha: number,
+		dt: number,
+		struckAt: Vec3 | null,
+	): Vec3;
 }
+
+/** Seconds for the drawn ball to close most of the gap to the sim's. */
+const CATCH_UP = 0.06;
+
+/** A jump this far in one frame, with no hit, is a new point: snap. */
+const TELEPORT = 3;
 
 export function createBallVisual(scene: THREE.Scene): BallVisual {
 	const { mesh, shadow } = buildBall();
@@ -99,6 +119,7 @@ export function createBallVisual(scene: THREE.Scene): BallVisual {
 	const lastPos = { x: 0, y: 0, z: 0 };
 	let seeded = false;
 
+	const offset = { x: 0, y: 0, z: 0 };
 	const scratchPos = new THREE.Vector3();
 	const scratchScale = new THREE.Vector3();
 	const scratchQuat = new THREE.Quaternion();
@@ -129,8 +150,31 @@ export function createBallVisual(scene: THREE.Scene): BallVisual {
 	}
 
 	return {
-		update(previous, current, alpha) {
-			const p = lerpVec(previous.p, current.p, alpha);
+		update(previous, current, alpha, dt, struckAt) {
+			// The tick that struck the ball has a meaningless `previous`: it is
+			// the ball before contact, possibly metres behind the player.
+			const sim = struckAt ? current.p : lerpVec(previous.p, current.p, alpha);
+			if (struckAt) {
+				offset.x = struckAt.x - sim.x;
+				offset.y = struckAt.y - sim.y;
+				offset.z = struckAt.z - sim.z;
+			} else if (
+				seeded &&
+				Math.hypot(sim.x - lastPos.x, sim.y - lastPos.y, sim.z - lastPos.z) >
+					TELEPORT
+			) {
+				offset.x = offset.y = offset.z = 0;
+				filled = 0;
+			}
+			const keep = Math.exp(-dt / CATCH_UP);
+			offset.x *= keep;
+			offset.y *= keep;
+			offset.z *= keep;
+			const p = {
+				x: sim.x + offset.x,
+				y: sim.y + offset.y,
+				z: sim.z + offset.z,
+			};
 			mesh.position.set(p.x, p.y, p.z);
 
 			// Roll the ball along its own path: axis perpendicular to travel,
@@ -253,6 +297,35 @@ const SIDE_COLOR: Readonly<Record<Side, string>> = {
 	far: "#ffd166",
 };
 
+/** Racket-arm angles, as `SwingAnim` names them. */
+interface Pose {
+	pitch: number;
+	yaw: number;
+	roll: number;
+	twist: number;
+}
+
+const REST: Readonly<Pose> = {
+	pitch: RACKET_REST_ANGLE,
+	yaw: 0,
+	roll: 0,
+	twist: 0,
+};
+
+/** The coiled pose a stroke starts from: racket back, shoulders turned. The
+ * swing animation starts exactly here, so readying and swinging join up. */
+const coiled = (anim: SwingAnim): Pose => ({
+	pitch: anim.pitchFrom,
+	yaw: anim.yawFrom,
+	roll: 0,
+	twist: -anim.twist * 0.7,
+});
+
+/** Seconds before contact the player starts taking the racket back, and
+ * seconds before it they are fully coiled. */
+const READY_FROM = 0.65;
+const READY_BY = 0.2;
+
 /** A swing in progress. `undefined` on the rig means the player is at rest. */
 interface SwingPlay {
 	readonly anim: SwingAnim;
@@ -265,6 +338,14 @@ interface SwingPlay {
 interface PlayerRig {
 	readonly group: THREE.Group;
 	readonly racket: THREE.Object3D;
+	readonly legs: readonly THREE.Object3D[];
+	/** The arm's current angles, eased toward whatever it should be doing. */
+	readonly pose: Pose;
+	/** Run-cycle phase, radians, and how much of a run it is (0 standing). */
+	stride: number;
+	phase: number;
+	lastX: number;
+	lastZ: number;
 	/** The group's resting yaw, which the far player's is PI. A swing twists
 	 * the shoulders away from it and back. */
 	readonly baseYaw: number;
@@ -299,13 +380,19 @@ function buildPlayer(side: Side): PlayerRig {
 	const hipHeight = LEG_LENGTH + LEG_RADIUS;
 	const torsoCentre = hipHeight + PLAYER_LENGTH / 2;
 
+	// Each leg hangs from a hip pivot so it can swing when running.
+	const legs: THREE.Object3D[] = [];
 	for (const dx of [-0.13, 0.13]) {
+		const hip = new THREE.Group();
+		hip.position.set(dx, LEG_RADIUS + LEG_LENGTH, 0);
 		const leg = new THREE.Mesh(
 			new THREE.CapsuleGeometry(LEG_RADIUS, LEG_LENGTH, 3, 8),
 			skin,
 		);
-		leg.position.set(dx, LEG_RADIUS + LEG_LENGTH / 2, 0);
-		group.add(leg);
+		leg.position.y = -LEG_LENGTH / 2;
+		hip.add(leg);
+		group.add(hip);
+		legs.push(hip);
 	}
 
 	const skirt = new THREE.Mesh(
@@ -400,10 +487,29 @@ function buildPlayer(side: Side): PlayerRig {
 	return {
 		group,
 		racket: racketPivot,
+		legs,
+		pose: { ...REST },
+		stride: 0,
+		phase: 0,
+		lastX: 0,
+		lastZ: 0,
 		baseYaw: group.rotation.y,
 		play: undefined,
 		swings: 0,
 	};
+}
+
+/** What the players are doing this frame, beyond where they are. */
+export interface PlayersCue {
+	/** The side about to hit, the stroke they are set for, and how many
+	 * seconds until the ball reaches them. */
+	readonly ready: {
+		readonly side: Side;
+		readonly stroke: StrokeAnim;
+		readonly inSeconds: number;
+	} | null;
+	/** The server, while the ball is in the air on the toss. */
+	readonly tossing: Side | null;
 }
 
 export interface PlayersVisual {
@@ -412,6 +518,7 @@ export interface PlayersVisual {
 		current: Readonly<Record<Side, Player>>,
 		alpha: number,
 		dt: number,
+		cue: PlayersCue,
 	): void;
 	/** Starts the animation for `stroke` on `side`. */
 	swing(side: Side, stroke: StrokeAnim, power: number): void;
@@ -419,6 +526,15 @@ export interface PlayersVisual {
 
 /** Eased 0 to 1: fast out of the backswing, settling into the follow-through. */
 const easeOut = (t: number): number => 1 - (1 - t) ** 3;
+const smooth = (t: number): number => {
+	const c = clamp(t, 0, 1);
+	return c * c * (3 - 2 * c);
+};
+
+function applyPose(rig: PlayerRig): void {
+	rig.racket.rotation.set(rig.pose.pitch, rig.pose.yaw, rig.pose.roll);
+	rig.group.rotation.y = rig.baseYaw + rig.pose.twist;
+}
 
 export function createPlayersVisual(scene: THREE.Scene): PlayersVisual {
 	const rigs: Readonly<Record<Side, PlayerRig>> = {
@@ -427,41 +543,76 @@ export function createPlayersVisual(scene: THREE.Scene): PlayersVisual {
 	};
 	scene.add(rigs.near.group, rigs.far.group);
 
-	const rest = (rig: PlayerRig): void => {
-		rig.racket.rotation.set(RACKET_REST_ANGLE, 0, 0);
-		rig.group.rotation.y = rig.baseYaw;
+	/** Where the arm should be when no swing is playing. */
+	const target = (side: Side, cue: PlayersCue): Pose => {
+		if (cue.tossing === side) return coiled(SWING_ANIMS.serve);
+		const r = cue.ready;
+		if (r === null || r.side !== side) return REST;
+		const w = smooth((READY_FROM - r.inSeconds) / (READY_FROM - READY_BY));
+		const c = coiled(SWING_ANIMS[r.stroke]);
+		return {
+			pitch: lerp(REST.pitch, c.pitch, w),
+			yaw: lerp(REST.yaw, c.yaw, w),
+			roll: 0,
+			twist: lerp(0, c.twist, w),
+		};
 	};
 
 	return {
-		update(previous, current, alpha, dt) {
+		update(previous, current, alpha, dt, cue) {
 			for (const side of ["near", "far"] as const) {
 				const rig = rigs[side];
-				// Both axes now: a player runs in for a short ball, and `z` is
-				// real sim state rather than a constant baseline.
-				rig.group.position.x = lerp(previous[side].x, current[side].x, alpha);
-				rig.group.position.z = lerp(previous[side].z, current[side].z, alpha);
+				const x = lerp(previous[side].x, current[side].x, alpha);
+				const z = lerp(previous[side].z, current[side].z, alpha);
+				rig.group.position.x = x;
+				rig.group.position.z = z;
+
+				// Run cycle: legs swing with distance covered, so the feet
+				// never skate however fast the sim moves them.
+				const moved = Math.hypot(x - rig.lastX, z - rig.lastZ);
+				rig.lastX = x;
+				rig.lastZ = z;
+				const running = dt > 0 && moved < 1 ? Math.min(1, moved / dt / 4) : 0;
+				rig.stride = lerp(rig.stride, running, 1 - Math.exp(-dt * 12));
+				rig.phase += moved * 3.4;
+				const legSwing = Math.sin(rig.phase) * 0.75 * rig.stride;
+				const [left, right] = rig.legs;
+				if (left) left.rotation.x = legSwing;
+				if (right) right.rotation.x = -legSwing;
+				rig.group.position.y =
+					Math.abs(Math.sin(rig.phase)) * 0.06 * rig.stride;
 
 				const play = rig.play;
-				if (play === undefined) continue;
-
-				play.elapsed += dt;
-				const t = play.elapsed / play.duration;
-				if (t >= 1) {
+				if (play !== undefined) {
+					play.elapsed += dt;
+					const t = play.elapsed / play.duration;
+					if (t < 1) {
+						const { anim, amp } = play;
+						const sweep = easeOut(t);
+						const arc = Math.sin(t * Math.PI);
+						const pitch =
+							anim.pitchFrom + (anim.pitchTo - anim.pitchFrom) * sweep;
+						rig.pose.pitch =
+							RACKET_REST_ANGLE + (pitch - RACKET_REST_ANGLE) * amp;
+						rig.pose.yaw =
+							(anim.yawFrom + (anim.yawTo - anim.yawFrom) * sweep) * amp;
+						rig.pose.roll = anim.roll * arc * amp;
+						rig.pose.twist = anim.twist * (sweep * 2 - 1) * amp;
+						applyPose(rig);
+						continue;
+					}
+					// Finished: the ease below carries the arm home from the
+					// follow-through rather than snapping it.
 					rig.play = undefined;
-					rest(rig);
-					continue;
 				}
 
-				const { anim, amp } = play;
-				const sweep = easeOut(t);
-				const arc = Math.sin(t * Math.PI);
-				const pitch = anim.pitchFrom + (anim.pitchTo - anim.pitchFrom) * sweep;
-				rig.racket.rotation.x =
-					RACKET_REST_ANGLE + (pitch - RACKET_REST_ANGLE) * amp;
-				rig.racket.rotation.y =
-					(anim.yawFrom + (anim.yawTo - anim.yawFrom) * sweep) * amp;
-				rig.racket.rotation.z = anim.roll * arc * amp;
-				rig.group.rotation.y = rig.baseYaw + anim.twist * arc * amp;
+				const goal = target(side, cue);
+				const k = 1 - Math.exp(-dt * 10);
+				rig.pose.pitch = lerp(rig.pose.pitch, goal.pitch, k);
+				rig.pose.yaw = lerp(rig.pose.yaw, goal.yaw, k);
+				rig.pose.roll = lerp(rig.pose.roll, goal.roll, k);
+				rig.pose.twist = lerp(rig.pose.twist, goal.twist, k);
+				applyPose(rig);
 			}
 		},
 		swing(side, stroke, power) {
