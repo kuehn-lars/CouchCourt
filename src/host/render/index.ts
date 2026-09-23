@@ -10,12 +10,11 @@
  */
 
 import type { MatchState, Vec3 } from "../../shared/sim/index.ts";
-import type { CameraMode } from "./camera.ts";
 import { buildCourt } from "./court.ts";
 import { createEffects } from "./effects.ts";
 import { createBallVisual, createPlayersVisual } from "./entities.ts";
 import { type RenderEvent, strokeAnim } from "./events.ts";
-import { createScene } from "./scene.ts";
+import { type CameraShot, createScene } from "./scene.ts";
 import { buildStadium } from "./stadium.ts";
 import { createScoreUI } from "./ui.ts";
 
@@ -28,7 +27,9 @@ export interface Renderer {
 		alpha: number,
 		dt: number,
 		events: readonly RenderEvent[],
-		cameraMode: CameraMode,
+		/** `"attract"` is the lobby: the lobby's rally is drawn, and the
+		 * score overlay is hidden, because that score is nobody's. */
+		cameraMode: CameraShot,
 	): void;
 }
 
@@ -90,7 +91,9 @@ export function createRenderer(
 				tossing: current.toss !== null ? current.toHit : null,
 			});
 			effects.update(dt);
-			scoreUI.update(current.score);
+			const match = cameraMode !== "attract";
+			scoreUI.setVisible(match);
+			if (match) scoreUI.update(current.score);
 			updateCamera(cameraMode, ballPos);
 
 			renderer.render(scene, camera);

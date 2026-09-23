@@ -7,6 +7,7 @@
  * are pure and live elsewhere — `shared/swing/stream.ts` and `backoffMs`.
  */
 
+import { parsePrefs } from "../shared/prefs.ts";
 import type {
 	FeedbackKind,
 	MatchInfo,
@@ -15,6 +16,7 @@ import type {
 } from "../shared/protocol.ts";
 import { createSwingStream } from "../shared/swing/stream.ts";
 import { toSample } from "../shared/swing/trace.ts";
+import { fillIcons, ICON, type IconName } from "./icons.ts";
 import { requestMotionPermission } from "./motion.ts";
 import { createSession, type Session, type SessionState } from "./session.ts";
 import { keepAwake } from "./wake-lock.ts";
@@ -34,6 +36,13 @@ const play = requireElement("play", HTMLElement);
 const sideEl = requireElement("side", HTMLElement);
 const statusEl = requireElement("status", HTMLElement);
 const hintEl = requireElement("hint", HTMLElement);
+const hintIconEl = requireElement("hint-icon", HTMLElement);
+const hintTitleEl = requireElement("hint-title", HTMLElement);
+const hintDetailEl = requireElement("hint-detail", HTMLElement);
+const stageEl = requireElement("stage", HTMLElement);
+const cardsEl = requireElement("cards", HTMLElement);
+const dotsEl = requireElement("dots", HTMLElement);
+const settingsEl = requireElement("settings", HTMLDialogElement);
 const ringEl = requireElement("ring", HTMLElement);
 const powerEl = requireElement("power", HTMLElement);
 const toastEl = requireElement("toast", HTMLElement);
@@ -41,13 +50,125 @@ const moveNowEl = requireElement("move-now", HTMLElement);
 const moveLastEl = requireElement("move-last", HTMLElement);
 const hapticEl = requireElement("haptic-label", HTMLLabelElement);
 
+fillIcons();
+
 const STATUS_TEXT: Record<SessionState, string> = {
-	connecting: "Connecting…",
-	waiting: "Ready",
-	playing: "Ready",
-	reconnecting: "Reconnecting…",
+	connecting: "Connecting",
+	waiting: "Connected",
+	playing: "Connected",
+	reconnecting: "Reconnecting",
 	rejected: "",
 };
+
+// ------------------------------------------------------------- settings
+
+/** Kept on this phone. Stored JSON is untrusted (`shared/prefs.ts`). */
+const PREFS_KEY = "swingcourt.controller.prefs";
+const PREF_DEFAULTS = { flash: true, haptic: true, readout: true };
+type Prefs = typeof PREF_DEFAULTS;
+
+function loadPrefs(): Prefs {
+	try {
+		return parsePrefs(localStorage.getItem(PREFS_KEY), PREF_DEFAULTS, {
+			flash: [true, false],
+			haptic: [true, false],
+			readout: [true, false],
+		});
+	} catch {
+		return { ...PREF_DEFAULTS };
+	}
+}
+
+let prefs = loadPrefs();
+
+function renderPrefs(): void {
+	for (const key of Object.keys(prefs) as (keyof Prefs)[]) {
+		requireElement(`pref-${key}`, HTMLButtonElement).setAttribute(
+			"aria-checked",
+			String(prefs[key]),
+		);
+	}
+	document.body.classList.toggle("no-readout", !prefs.readout);
+}
+
+for (const key of Object.keys(prefs) as (keyof Prefs)[]) {
+	requireElement(`pref-${key}`, HTMLButtonElement).addEventListener(
+		"click",
+		() => {
+			prefs = { ...prefs, [key]: !prefs[key] };
+			try {
+				localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+			} catch {
+				// Applies for this visit; just not remembered.
+			}
+			renderPrefs();
+		},
+	);
+}
+renderPrefs();
+
+function closeSettings(): void {
+	if (!settingsEl.open || settingsEl.classList.contains("closing")) return;
+	settingsEl.classList.add("closing");
+	settingsEl.addEventListener(
+		"animationend",
+		() => {
+			settingsEl.classList.remove("closing");
+			settingsEl.close();
+		},
+		{ once: true },
+	);
+}
+requireElement("open-settings", HTMLButtonElement).addEventListener(
+	"click",
+	() => settingsEl.showModal(),
+);
+requireElement("close-settings", HTMLButtonElement).addEventListener(
+	"click",
+	closeSettings,
+);
+settingsEl.addEventListener("cancel", (event) => {
+	event.preventDefault();
+	closeSettings();
+});
+// A tap on the dimmed backdrop lands on the dialog element itself.
+settingsEl.addEventListener("click", (event) => {
+	if (event.target === settingsEl) closeSettings();
+});
+
+// ------------------------------------------------ the gate's how-to cards
+
+const cards = [...cardsEl.children];
+const dots = [...dotsEl.children];
+const cardSeen = new IntersectionObserver(
+	(entries) => {
+		for (const entry of entries) {
+			if (!entry.isIntersecting) continue;
+			const i = cards.indexOf(entry.target);
+			dots.forEach((dot, j) => {
+				dot.classList.toggle("on", j === i);
+			});
+		}
+	},
+	{ root: cardsEl, threshold: 0.6 },
+);
+for (const card of cards) cardSeen.observe(card);
+
+/** The cards turn over on their own until someone touches them. */
+let cardTimer = 0;
+if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+	let at = 0;
+	cardTimer = window.setInterval(() => {
+		at = (at + 1) % cards.length;
+		const card = cards[at];
+		if (card instanceof HTMLElement) {
+			cardsEl.scrollTo({ left: card.offsetLeft - 20, behavior: "smooth" });
+		}
+	}, 4200);
+	cardsEl.addEventListener("pointerdown", () => clearInterval(cardTimer), {
+		once: true,
+	});
+}
 
 /** What the phone says about the match. The host decides all of it; this is
  * presentation of a relayed fact and nothing more. */
@@ -61,47 +182,58 @@ const SIDE_NAME: Record<Side, string> = {
 
 /** The avatar colours on the host screen (`host/render/entities.ts`), so a
  * player can find themselves on the court at a glance. */
-const SIDE_COLOR: Record<Side, string> = { near: "#ff5d73", far: "#ffd166" };
+const SIDE_COLOR: Record<Side, string> = { near: "#ff5d73", far: "#5ac8fa" };
 
-function hint(text: string, detail?: string): void {
-	hintEl.replaceChildren(text);
-	if (detail) {
-		const small = document.createElement("small");
-		small.textContent = detail;
-		hintEl.append(small);
-	}
+/** The card under the gauge: what to do now. Animates only when it says
+ * something new. */
+function hint(glyph: IconName, title: string, detail: string): void {
+	if (hintTitleEl.textContent === title && hintDetailEl.textContent === detail)
+		return;
+	hintIconEl.innerHTML = ICON[glyph];
+	hintTitleEl.textContent = title;
+	hintDetailEl.textContent = detail;
+	hintEl.classList.remove("changed");
+	void hintEl.offsetWidth; // restart the animation
+	hintEl.classList.add("changed");
 }
 
 function renderMatch(): void {
 	if (!match) {
-		hint("Waiting for the host.");
+		hint("tennisBall", "Finding the host", "Keep this page open.");
 		return;
 	}
 	switch (match.phase) {
 		case "lobby":
-			hint("You\u2019re in!", "Waiting for the host to start the match.");
+			hint(
+				"check",
+				"You\u2019re in",
+				"Waiting for the host to start the match.",
+			);
 			return;
 		case "countdown":
-			hint("Get ready\u2026", "Racket up.");
+			hint("tennisBall", "Racket up", "The match is about to start.");
 			return;
 		case "playing":
 			if (match.server === mySide && mySide !== null) {
 				hint(
+					"tennisBall",
 					"Your serve",
 					"Swing once to toss the ball, then again to hit it at the top.",
 				);
 			} else {
 				hint(
-					"Forehand \u2190 \u00b7 Backhand \u2192 \u00b7 Overhead on a high ball",
-					"Swing as it reaches you. Early angles it wider; late and hard sails long.",
+					"arrowsLeftRight",
+					"Forehand left, backhand right",
+					"Swing as it reaches you. Early goes wide, late goes long.",
 				);
 			}
 			return;
 		case "over":
-			hint(
-				match.winner === mySide ? "You won! \ud83c\udfc6" : "Match over.",
-				"Good game.",
-			);
+			if (match.winner === mySide) {
+				hint("trophy", "You won", "Game, set and match.");
+			} else {
+				hint("tennisBall", "Good game", "The host can start another one.");
+			}
 			return;
 	}
 }
@@ -116,40 +248,55 @@ function renderMatch(): void {
  * lost.
  */
 const FEEDBACK: Record<FeedbackKind, { color: string; text: string }> = {
-	hit: { color: "#7fe0a4", text: "Nice hit!" },
-	miss: { color: "#ff6b6b", text: "Point lost" },
-	point: { color: "#ffd166", text: "Point!" },
+	hit: { color: "#dcff4a", text: "Hit" },
+	miss: { color: "#ff5a5f", text: "Point lost" },
+	point: { color: "#34d86a", text: "Point" },
 };
 
 let toastTimer = 0;
 
 function buzz(pattern: number | number[]): void {
+	if (!prefs.haptic) return;
 	navigator.vibrate?.(pattern);
 	hapticEl.click();
 }
 
 function flash(kind: FeedbackKind): void {
 	const { color, text } = FEEDBACK[kind];
-	document.body.style.setProperty("--flash", color);
-	document.body.classList.add("flash");
+	if (prefs.flash) {
+		document.body.style.setProperty("--flash", color);
+		document.body.classList.add("flash");
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => document.body.classList.remove("flash"));
+		});
+	}
 	toastEl.textContent = text;
 	toastEl.style.color = color;
+	toastEl.classList.remove("show");
+	void toastEl.offsetWidth; // restart the stamp
 	toastEl.classList.add("show");
+	stageEl.classList.add("stamped");
 	buzz(kind === "point" ? [40, 60, 40] : 30);
-	requestAnimationFrame(() => {
-		requestAnimationFrame(() => document.body.classList.remove("flash"));
-	});
 	clearTimeout(toastTimer);
-	toastTimer = window.setTimeout(() => toastEl.classList.remove("show"), 900);
+	toastTimer = window.setTimeout(() => {
+		toastEl.classList.remove("show");
+		stageEl.classList.remove("stamped");
+	}, 900);
 }
 
 /** What each stroke does, as the corner readout names it. The arrows are
  * where the ball goes on the screen (`sim/shot.ts`, `SCREEN_LEFT`). */
 const MOVE_NAME: Record<SwingKind, string> = {
-	forehand: "Forehand \u2190",
-	backhand: "Backhand \u2192",
-	overhead: "Overhead \u2191",
+	forehand: "Forehand",
+	backhand: "Backhand",
+	overhead: "Overhead",
 	serve: "Serve",
+};
+const MOVE_ICON: Record<SwingKind, IconName> = {
+	forehand: "arrowLeft",
+	backhand: "arrowRight",
+	overhead: "arrowUp",
+	serve: "tennisBall",
 };
 
 let shownPower = 0;
@@ -165,7 +312,8 @@ function showSwing(power: number, kind: SwingKind): void {
 	shownPower = power;
 	shownAt = now;
 	const pct = Math.round(power * 100);
-	moveLastEl.textContent = `${MOVE_NAME[kind]} \u00b7 ${pct}`;
+	moveLastEl.innerHTML = ICON[MOVE_ICON[kind]];
+	moveLastEl.append(MOVE_NAME[kind]);
 	ringEl.style.setProperty("--power", String(power));
 	powerEl.textContent = String(pct);
 	ringEl.classList.remove("pop");
@@ -190,7 +338,7 @@ function drawLevel(): void {
 	const now = stream.current;
 	if (now !== nowShown) {
 		nowShown = now;
-		moveNowEl.textContent = now === null ? "\u2014" : MOVE_NAME[now];
+		moveNowEl.textContent = now === null ? "nothing" : MOVE_NAME[now];
 		moveNowEl.classList.toggle("live", now !== null);
 	}
 	requestAnimationFrame(drawLevel);
@@ -225,10 +373,14 @@ function onMotion(event: DeviceMotionEvent): void {
 function startPlaying(): void {
 	gate.hidden = true;
 	play.hidden = false;
+	clearInterval(cardTimer);
+	cardSeen.disconnect();
+	document.documentElement.classList.add("playing");
 	keepAwake();
 	session = createSession({
 		onState: (state, detail) => {
 			statusEl.textContent = detail ?? STATUS_TEXT[state];
+			statusEl.dataset.state = state;
 		},
 		onMatch: (info) => {
 			match = info;
@@ -238,7 +390,8 @@ function startPlaying(): void {
 		onSide: (side) => {
 			mySide = side;
 			sideEl.textContent = SIDE_NAME[side];
-			document.documentElement.style.setProperty("--accent", SIDE_COLOR[side]);
+			document.documentElement.style.setProperty("--side", SIDE_COLOR[side]);
+			document.body.classList.remove("gated");
 			renderMatch();
 			// Sent HERE, not right after createSession: the socket is not open
 			// yet at that point and `send` would drop it silently. Being

@@ -13,7 +13,10 @@
  */
 
 import * as THREE from "three";
-import { type CameraMode, cameraPose } from "./camera.ts";
+import { attractPose, type CameraMode, cameraPose } from "./camera.ts";
+
+/** A match camera, or the lobby's slow crane (`attractPose`). */
+export type CameraShot = CameraMode | "attract";
 
 /** Exponential smoothing per frame. Higher eases faster; tuned by eye. Two
  * rates: the pose slides, but a mode change is a cut worth easing through
@@ -21,8 +24,8 @@ import { type CameraMode, cameraPose } from "./camera.ts";
 const EASE = 0.06;
 const EASE_MODE_CHANGE = 0.12;
 
-const SKY_TOP = "#071426";
-const SKY_HORIZON = "#2f5d7a";
+const SKY_TOP = "#03080f";
+const SKY_HORIZON = "#27526d";
 
 /** The camera now sits ~28m from the near player and ~50m from the far one
  * ([[camera]]), so fog that started at 20m would swallow the whole far
@@ -38,7 +41,7 @@ function gradientBackground(): THREE.Texture {
 	if (ctx) {
 		const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
 		gradient.addColorStop(0, SKY_TOP);
-		gradient.addColorStop(0.55, "#14304a");
+		gradient.addColorStop(0.55, "#0d2436");
 		gradient.addColorStop(1, SKY_HORIZON);
 		ctx.fillStyle = gradient;
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -54,7 +57,7 @@ export interface Scene {
 	readonly renderer: THREE.WebGLRenderer;
 	/** Eases the camera toward the pose `camera.ts` wants for `mode` and the
 	 * ball's current position. Call once per rendered frame. */
-	updateCamera(mode: CameraMode, ball: THREE.Vector3 | Ball3): void;
+	updateCamera(mode: CameraShot, ball: THREE.Vector3 | Ball3): void;
 	resize(): void;
 }
 
@@ -73,7 +76,11 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
 	const camera = new THREE.PerspectiveCamera(
 		start.fov,
 		window.innerWidth / window.innerHeight,
-		0.1,
+		// 1m, not 0.1: no camera comes within 6m of anything, and the court
+		// sits 1mm above the apron. At 0.1 the depth buffer's precision at
+		// the lobby crane's 45m was ~1.2mm and the two planes striped;
+		// depth precision scales with the near plane.
+		1,
 		// Far plane past the fog, or the stadium behind the far court would be
 		// clipped away before the fog ever got to fade it.
 		260,
@@ -85,7 +92,7 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
 		start.target.y,
 		start.target.z,
 	);
-	let lastMode: CameraMode = "broadcast";
+	let lastMode: CameraShot = "broadcast";
 
 	// The sky half of this lights the stands, which face upward and catch
 	// almost nothing from the sun. Raised from 1.0 with a much lighter ground
@@ -118,8 +125,11 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
 	resize();
 	window.addEventListener("resize", resize);
 
-	function updateCamera(mode: CameraMode, ball: Ball3): void {
-		const pose = cameraPose(mode, { ballX: ball.x, ballZ: ball.z });
+	function updateCamera(mode: CameraShot, ball: Ball3): void {
+		const pose =
+			mode === "attract"
+				? attractPose(performance.now() / 1000)
+				: cameraPose(mode, { ballX: ball.x, ballZ: ball.z });
 		const ease = mode === lastMode ? EASE : EASE_MODE_CHANGE;
 		lastMode = mode;
 

@@ -1,6 +1,6 @@
 ---
 title: Index
-updated: 2026-09-22
+updated: 2026-09-23
 tags: [meta]
 status: current
 ---
@@ -58,6 +58,7 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0014-players-run-to-the-ball]] | Players move in x and z, and one predictor says where they meet the ball and when. Amended by 0015 |
 | [[0015-contact-model]] | **Why returns whiffed, and the fix.** One frozen contact per ball; early swings wait, late ones rewind; hardest peak wins; launches solved to land; toss-then-hit serve; peak detector on the phone. Its "timing is direction" rule is superseded by 0016 |
 | [[0016-stroke-decides-direction]] | **Where the ball goes.** Forehand screen-left, backhand screen-right, overhead a smash only out of the air; timing is a trade (early wide, late long); bot skill is a timing spread |
+| [[0017-phosphor-icons-and-the-visual-system]] | The 2026-09-23 redesign: one icon dependency, system type, no UI framework, and the visual rules (dark, one accent, side colours) |
 
 ## Platform
 
@@ -74,6 +75,7 @@ around. **These are the ones that cost an afternoon if you skip them.**
 | [[vite-https-is-http2]] | Every Vite server with TLS is an `Http2SecureServer`. The relay has always been on one |
 | [[one-port-one-websocket-path]] | Sharing a port with Vite means sharing its upgrade handler, and `ws` does not decline politely |
 | [[relay-survives-a-broken-client]] | One malformed frame from one phone ended the whole server. Every `ws` socket needs an `error` listener |
+| [[touch-action-is-an-intersection]] | A child cannot re-allow a gesture an ancestor's `touch-action` refused. Why the controller's gate is `pan-x` and the match screen `none` |
 
 ## Reference
 

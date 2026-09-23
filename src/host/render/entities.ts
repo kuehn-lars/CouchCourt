@@ -292,9 +292,12 @@ const SWING_ANIMS: Readonly<Record<StrokeAnim, SwingAnim>> = {
  */
 const SWING_VARIATION: readonly number[] = [1, 0.92, 1.08, 0.96, 1.04, 0.88];
 
+/** Coral and ice. Mirrored in `host.css` (`--near`, `--far`) and the
+ * controller, so a player finds themselves on court by colour. Far was amber
+ * until 2026-09-23, too close to the ball's yellow (decision 0017). */
 const SIDE_COLOR: Readonly<Record<Side, string>> = {
 	near: "#ff5d73",
-	far: "#ffd166",
+	far: "#5ac8fa",
 };
 
 /** Racket-arm angles, as `SwingAnim` names them. */

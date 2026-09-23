@@ -1,0 +1,909 @@
+/*
+ * The racket. Same visual system as the host (decision 0017): dark, SF Pro,
+ * one accent in the ball's optic yellow for the one thing to press, and the
+ * player's own side colour (`--side`, set from main.ts) for everything that
+ * is about *them*: the gauge, the chip, the glow.
+ *
+ * Platform rules that are not style and must survive any restyle: a racket
+ * swing must never scroll, rubber-band or pinch-zoom the page
+ * (`touch-action`, `overscroll-behavior`, and the viewport meta), and
+ * nothing sits under the home indicator (`env(safe-area-inset-*)`).
+ */
+
+@property --power {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 0;
+}
+
+:root {
+	--bg: #05080c;
+	--ink: #f3f6ef;
+	--ink-2: rgba(243, 246, 239, 0.66);
+	--ink-3: rgba(243, 246, 239, 0.42);
+	--hairline: rgba(255, 255, 255, 0.08);
+	--hairline-2: rgba(255, 255, 255, 0.15);
+	--card: rgba(255, 255, 255, 0.05);
+	--accent: #dcff4a;
+	--accent-ink: #10150a;
+	--side: #dcff4a;
+	--ok: #34d86a;
+	--bad: #ff5a5f;
+	--warn: #ffb340;
+
+	--font: system-ui, -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+	--font-round:
+		ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif;
+
+	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--spring: linear(
+		0,
+		0.18 6%,
+		0.62 15%,
+		0.95 24%,
+		1.08 31%,
+		1.1 36%,
+		1.06 44%,
+		1 53%,
+		0.985 62%,
+		1 80%,
+		1
+	);
+
+	/* Live swing level 0..1 and last swing power 0..1, set from JS. */
+	--level: 0;
+	--power: 0;
+	color-scheme: dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	height: 100%;
+	color: var(--ink);
+	font: 16px / 1.45 var(--font);
+	-webkit-font-smoothing: antialiased;
+	/* A racket swing must never scroll or rubber-band the page. The gate
+	   allows horizontal pans and nothing else: touch-action is the
+	   intersection of every ancestor's, so `none` up here would also freeze
+	   the swipeable cards. Pinch zoom is out either way. main.ts adds
+	   `.playing` when the match screen takes over. */
+	overscroll-behavior: none;
+	touch-action: pan-x;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+body {
+	background:
+		radial-gradient(
+			120% 60% at 50% -10%,
+			color-mix(in srgb, var(--side) 16%, transparent),
+			transparent 60%
+		),
+		var(--bg);
+	overflow: hidden;
+	transition: background 800ms var(--ease);
+}
+body.gated {
+	background:
+		radial-gradient(
+			90% 50% at 50% 18%,
+			rgba(220, 255, 74, 0.1),
+			transparent 70%
+		),
+		var(--bg);
+}
+
+html.playing,
+html.playing body {
+	touch-action: none;
+}
+
+/* Full-screen colour wash for feedback: the only thing that works on iOS,
+   which has no navigator.vibrate. */
+body::after {
+	content: "";
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	background: radial-gradient(
+		circle at 50% 45%,
+		var(--flash, transparent),
+		color-mix(in srgb, var(--flash, transparent) 30%, transparent) 70%
+	);
+	opacity: 0;
+	transition: opacity 520ms var(--ease);
+}
+body.flash::after {
+	opacity: 0.5;
+	transition: none;
+}
+
+button {
+	font: inherit;
+	color: inherit;
+}
+
+[data-icon] {
+	display: inline-grid;
+	width: 1.25em;
+	height: 1.25em;
+	flex: none;
+}
+[data-icon] svg {
+	width: 100%;
+	height: 100%;
+}
+
+main {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	padding: max(14px, env(safe-area-inset-top)) 20px
+		max(18px, env(safe-area-inset-bottom));
+}
+#gate[hidden],
+#play[hidden] {
+	display: none;
+}
+
+/* ------------------------------------------------------------ the gate */
+
+#gate {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	width: 100%;
+	max-width: 440px;
+	margin: 0 auto;
+	min-height: 0;
+}
+/* Everything on the gate rises in, in order. */
+#gate > * {
+	animation: rise 900ms var(--ease) both;
+	animation-delay: calc(var(--i, 0) * 90ms + 80ms);
+}
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(18px);
+		filter: blur(6px);
+	}
+}
+
+.brand {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 17px;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+.brand [data-icon] {
+	color: var(--accent);
+	width: 22px;
+	height: 22px;
+}
+
+/* The swing, drawn: a phone on an arm swinging through an arc round a
+   shoulder at the bottom, meeting a ball at the top and sending it away. It
+   teaches the one motion the whole game is before anyone has read a word.
+   Geometry: the pivot is the bottom-centre of .swing-box, the radius is
+   --r, and every piece turns about that one point. */
+.swing {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: grid;
+	place-items: center;
+}
+.swing-box {
+	--r: min(40vw, 150px);
+	position: relative;
+	width: calc(var(--r) * 2.2);
+	height: calc(var(--r) * 1.25);
+}
+.swing-arc,
+.swing-arm {
+	position: absolute;
+	left: 50%;
+	bottom: 0;
+}
+/* The trail: a ring centred on the pivot, lit only across the swing. */
+.swing-arc {
+	width: calc(var(--r) * 2);
+	height: calc(var(--r) * 2);
+	margin: 0 0 calc(var(--r) * -1) calc(var(--r) * -1);
+	border-radius: 50%;
+	background: conic-gradient(
+		from -64deg,
+		rgba(220, 255, 74, 0) 0deg,
+		rgba(220, 255, 74, 0.7) 64deg,
+		rgba(220, 255, 74, 0) 66deg
+	);
+	-webkit-mask: radial-gradient(
+		farthest-side,
+		transparent calc(100% - 4px),
+		#000 calc(100% - 3px)
+	);
+	mask: radial-gradient(
+		farthest-side,
+		transparent calc(100% - 4px),
+		#000 calc(100% - 3px)
+	);
+	animation: arc 2.8s var(--ease) infinite;
+}
+.swing-arm {
+	width: 0;
+	height: var(--r);
+	transform-origin: 50% 100%;
+	animation: sweep 2.8s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+}
+.swing-arm [data-icon] {
+	position: absolute;
+	top: -30px;
+	left: -30px;
+	width: 60px;
+	height: 60px;
+	color: var(--ink);
+	filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.6));
+}
+.swing-ball {
+	position: absolute;
+	left: 50%;
+	bottom: var(--r);
+	width: 24px;
+	height: 24px;
+	margin: 0 0 16px -12px;
+	color: var(--accent);
+	animation: ball 2.8s var(--ease) infinite;
+}
+@keyframes sweep {
+	0%,
+	14% {
+		transform: rotate(-64deg);
+	}
+	44% {
+		transform: rotate(0deg);
+	}
+	60%,
+	100% {
+		transform: rotate(52deg);
+	}
+}
+@keyframes arc {
+	0%,
+	24% {
+		opacity: 0;
+	}
+	44% {
+		opacity: 1;
+	}
+	78%,
+	100% {
+		opacity: 0;
+	}
+}
+/* Waits at the top of the arc, is struck at 44%, and leaves. */
+@keyframes ball {
+	0%,
+	8% {
+		opacity: 0;
+		transform: translateY(-12px) scale(0.6);
+	}
+	18%,
+	43% {
+		opacity: 1;
+		transform: none;
+	}
+	76%,
+	100% {
+		opacity: 0;
+		transform: translate(-40vw, -60px) scale(0.3);
+	}
+}
+
+h1 {
+	margin: 0;
+	font-size: 38px;
+	line-height: 1.02;
+	font-weight: 700;
+	letter-spacing: -0.04em;
+	text-wrap: balance;
+}
+h1 .hl {
+	color: var(--accent);
+}
+
+/* How to play, as cards you can swipe — the one part of this page that
+   may move under a finger, so it gets its own touch-action. */
+.cards {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 86%;
+	gap: 10px;
+	margin: 0 -20px;
+	padding: 0 20px;
+	overflow-x: auto;
+	scroll-snap-type: x mandatory;
+	scroll-padding: 0 20px;
+	scrollbar-width: none;
+	touch-action: pan-x;
+	overscroll-behavior-x: contain;
+}
+.cards::-webkit-scrollbar {
+	display: none;
+}
+.card {
+	scroll-snap-align: start;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 2px 14px;
+	align-items: start;
+	padding: 16px;
+	border-radius: 20px;
+	background: var(--card);
+	box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.card > [data-icon] {
+	grid-row: span 2;
+	width: 44px;
+	height: 44px;
+	padding: 10px;
+	border-radius: 14px;
+	color: var(--accent);
+	background: rgba(220, 255, 74, 0.1);
+}
+.card b {
+	font-size: 16px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+.card span {
+	font-size: 14px;
+	line-height: 1.4;
+	color: var(--ink-2);
+}
+.dots {
+	display: flex;
+	justify-content: center;
+	gap: 6px;
+	margin-top: -6px;
+}
+.dots i {
+	width: 6px;
+	height: 6px;
+	border-radius: 3px;
+	background: var(--hairline-2);
+	transition:
+		width 400ms var(--spring),
+		background-color 300ms var(--ease);
+}
+.dots i.on {
+	width: 18px;
+	background: var(--ink);
+}
+
+.cta {
+	display: grid;
+	gap: 10px;
+	margin-top: auto;
+}
+.primary {
+	height: 58px;
+	border: 0;
+	border-radius: 999px;
+	font-size: 18px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+	background: var(--accent);
+	color: var(--accent-ink);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.6),
+		0 14px 36px -12px rgba(220, 255, 74, 0.6);
+	transition: transform 160ms var(--ease);
+}
+.primary:active {
+	transform: scale(0.97);
+}
+.fine {
+	margin: 0;
+	text-align: center;
+	font-size: 13px;
+	color: var(--ink-3);
+}
+#gate-status {
+	margin: 0;
+	text-align: center;
+	font-size: 14px;
+	line-height: 1.45;
+	color: var(--warn);
+}
+#gate-status:empty {
+	display: none;
+}
+
+/* ------------------------------------------------------ the match screen */
+
+#play {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-height: 0;
+	animation: rise 700ms var(--ease) both;
+}
+.bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	height: 34px;
+	padding: 0 14px 0 12px;
+	border-radius: 999px;
+	font-size: 14px;
+	font-weight: 650;
+	white-space: nowrap;
+	color: var(--side);
+	background: color-mix(in srgb, var(--side) 16%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--side) 35%, transparent);
+}
+.chip::before {
+	content: "";
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--side);
+}
+.pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	height: 34px;
+	padding: 0 13px;
+	margin-left: auto;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 550;
+	color: var(--ink-2);
+	box-shadow: inset 0 0 0 1px var(--hairline-2);
+	white-space: nowrap;
+}
+/* The connection's real state: the one dot on this page that means
+   something. */
+.pill::before {
+	content: "";
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--ink-3);
+}
+.pill[data-state="waiting"]::before,
+.pill[data-state="playing"]::before {
+	background: var(--ok);
+}
+.pill[data-state="connecting"]::before,
+.pill[data-state="reconnecting"]::before {
+	background: var(--warn);
+	animation: blink 1s ease-in-out infinite;
+}
+.pill[data-state="rejected"]::before {
+	background: var(--bad);
+}
+@keyframes blink {
+	50% {
+		opacity: 0.3;
+	}
+}
+.round {
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: none;
+	color: var(--ink-2);
+	box-shadow: inset 0 0 0 1px var(--hairline-2);
+}
+.round [data-icon] {
+	width: 18px;
+	height: 18px;
+}
+
+.stage {
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	place-items: center;
+	position: relative;
+}
+
+/* The gauge: 270 degrees of arc, open at the bottom like a dial. */
+.gauge {
+	--size: min(80vw, 42vh, 340px);
+	--ring: calc(var(--size) * 0.055);
+	position: relative;
+	width: var(--size);
+	height: var(--size);
+	display: grid;
+	place-items: center;
+}
+.gauge > i {
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+}
+.gauge-track,
+.gauge-fill {
+	-webkit-mask: radial-gradient(
+		farthest-side,
+		transparent calc(100% - var(--ring)),
+		#000 calc(100% - var(--ring) + 1px)
+	);
+	mask: radial-gradient(
+		farthest-side,
+		transparent calc(100% - var(--ring)),
+		#000 calc(100% - var(--ring) + 1px)
+	);
+}
+.gauge-track {
+	background: conic-gradient(
+		from 225deg,
+		rgba(255, 255, 255, 0.08) 0 270deg,
+		transparent 0
+	);
+}
+.gauge-fill {
+	background: conic-gradient(
+		from 225deg,
+		color-mix(in srgb, var(--side) 70%, #fff) 0,
+		var(--side) calc(var(--power) * 270deg),
+		transparent 0
+	);
+	transition: --power 380ms var(--ease);
+}
+/* Minor ticks round the inside of the arc, like an instrument. */
+.gauge > .gauge-ticks {
+	inset: calc(var(--ring) + 8px);
+	background: repeating-conic-gradient(
+		from 225deg,
+		rgba(255, 255, 255, 0.22) 0 0.8deg,
+		transparent 0.8deg 13.5deg
+	);
+	-webkit-mask:
+		radial-gradient(
+			farthest-side,
+			transparent calc(100% - 7px),
+			#000 calc(100% - 6px)
+		),
+		conic-gradient(from 225deg, #000 0 271deg, transparent 0);
+	-webkit-mask-composite: source-in;
+	mask:
+		radial-gradient(
+			farthest-side,
+			transparent calc(100% - 7px),
+			#000 calc(100% - 6px)
+		),
+		conic-gradient(from 225deg, #000 0 271deg, transparent 0);
+	mask-composite: intersect;
+}
+/* Live rotation: a glow that swells as the phone swings. */
+.gauge > .gauge-glow {
+	inset: 8%;
+	background: radial-gradient(
+		circle,
+		color-mix(in srgb, var(--side) 38%, transparent) 0,
+		transparent 68%
+	);
+	opacity: var(--level);
+	transform: scale(calc(0.8 + var(--level) * 0.35));
+}
+.face {
+	position: relative;
+	transition: opacity 500ms var(--ease);
+	display: grid;
+	justify-items: center;
+	text-align: center;
+}
+.power {
+	font: 700 calc(var(--size) * 0.3) / 0.9 var(--font-round);
+	letter-spacing: -0.05em;
+	font-variant-numeric: tabular-nums;
+}
+.unit {
+	margin-top: 6px;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+.last {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 14px;
+	height: 30px;
+	padding: 0 12px;
+	border-radius: 999px;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--ink-2);
+	background: rgba(255, 255, 255, 0.06);
+}
+.last:empty {
+	visibility: hidden;
+}
+.last svg {
+	width: 16px;
+	height: 16px;
+}
+.gauge.pop {
+	animation: pop 300ms var(--ease);
+}
+@keyframes pop {
+	35% {
+		transform: scale(1.045);
+	}
+}
+
+/* What the phone reads right now, for checking the classifier with a
+   phone in hand. A setting; on by default. */
+.live {
+	position: absolute;
+	top: 0;
+	left: 50%;
+	transform: translateX(-50%);
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	color: var(--ink-3);
+	white-space: nowrap;
+}
+.live b {
+	font-weight: 650;
+	color: var(--ink-2);
+	transition: color 150ms;
+}
+.live b.on {
+	color: var(--side);
+}
+body.no-readout .live {
+	display: none;
+}
+
+.toast {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 50%;
+	margin: -40px 0 0;
+	text-align: center;
+	font: 800 56px / 1 var(--font-round);
+	letter-spacing: -0.04em;
+	pointer-events: none;
+	opacity: 0;
+}
+.toast.show {
+	animation: stamp 900ms var(--ease) both;
+}
+@keyframes stamp {
+	0% {
+		opacity: 0;
+		transform: scale(0.6);
+		filter: blur(10px);
+	}
+	22% {
+		opacity: 1;
+		transform: scale(1.06);
+		filter: blur(0);
+	}
+	34% {
+		transform: scale(1);
+	}
+	75% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: scale(1.02) translateY(-10px);
+	}
+}
+/* The number steps back while a word is stamped over it. */
+.stage.stamped .face {
+	opacity: 0;
+	transition: opacity 120ms;
+}
+
+.hint {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 2px 14px;
+	align-items: center;
+	margin: 0;
+	padding: 16px;
+	border-radius: 22px;
+	background: var(--card);
+	box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.hint > [data-icon] {
+	grid-row: span 2;
+	width: 44px;
+	height: 44px;
+	padding: 10px;
+	border-radius: 14px;
+	color: var(--side);
+	background: color-mix(in srgb, var(--side) 14%, transparent);
+}
+.hint b {
+	font-size: 17px;
+	font-weight: 650;
+	letter-spacing: -0.015em;
+}
+.hint small {
+	font-size: 14px;
+	line-height: 1.4;
+	color: var(--ink-2);
+}
+.hint.changed {
+	animation: rise 500ms var(--ease);
+}
+
+/* --------------------------------------------------------- the sheet */
+
+.sheet {
+	position: fixed;
+	inset: auto 0 0;
+	width: 100%;
+	max-width: 520px;
+	margin: 0 auto;
+	padding: 10px 20px max(22px, env(safe-area-inset-bottom));
+	border: 0;
+	border-radius: 28px 28px 0 0;
+	color: var(--ink);
+	background: rgba(22, 27, 34, 0.92);
+	backdrop-filter: blur(30px) saturate(180%);
+	-webkit-backdrop-filter: blur(30px) saturate(180%);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.sheet[open] {
+	animation: up 460ms var(--ease) both;
+}
+.sheet.closing {
+	animation: down 240ms cubic-bezier(0.5, 0, 0.75, 0) both;
+}
+.sheet::backdrop {
+	background: rgba(0, 0, 0, 0.45);
+}
+@keyframes up {
+	from {
+		transform: translateY(100%);
+	}
+}
+@keyframes down {
+	to {
+		transform: translateY(100%);
+	}
+}
+.grabber {
+	width: 38px;
+	height: 5px;
+	margin: 0 auto 14px;
+	border-radius: 3px;
+	background: var(--hairline-2);
+}
+.sheet h2 {
+	margin: 0 0 6px;
+	font-size: 24px;
+	font-weight: 700;
+	letter-spacing: -0.03em;
+}
+.row {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 0;
+}
+.row + .row {
+	border-top: 1px solid var(--hairline);
+}
+.row b {
+	display: block;
+	font-size: 16px;
+	font-weight: 600;
+}
+.row small {
+	display: block;
+	margin-top: 2px;
+	font-size: 13px;
+	line-height: 1.35;
+	color: var(--ink-3);
+}
+.switch {
+	position: relative;
+	width: 51px;
+	height: 31px;
+	padding: 0;
+	border: 0;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.16);
+	transition: background-color 300ms var(--ease);
+}
+.switch::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 27px;
+	height: 27px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+	transition: transform 460ms var(--spring);
+}
+.switch[aria-checked="true"] {
+	background: var(--ok);
+}
+.switch[aria-checked="true"]::after {
+	transform: translateX(20px);
+}
+.done {
+	width: 100%;
+	height: 52px;
+	margin-top: 12px;
+	border: 0;
+	border-radius: 999px;
+	font-size: 17px;
+	font-weight: 650;
+	background: rgba(255, 255, 255, 0.1);
+}
+
+/* The iOS 18 haptic trick needs a real switch in the page. */
+.haptic {
+	position: fixed;
+	left: -9999px;
+	opacity: 0;
+}
+
+/* Short phones (SE, landscape-ish): the drawing is the first thing to go. */
+@media (max-height: 640px) {
+	.swing {
+		display: none;
+	}
+	h1 {
+		font-size: 32px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* The one override that has to beat every animation and transition
+	   rule on the page, hence the only !important in the file. */
+	/* biome-ignore-start lint/complexity/noImportantStyles: see above */
+	*,
+	*::before,
+	*::after {
+		animation-duration: 1ms !important;
+		animation-delay: 0ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+	}
+	/* biome-ignore-end lint/complexity/noImportantStyles: see above */
+
+	/* A frozen mid-swing drawing still teaches the grip. */
+	.swing-arm {
+		transform: rotate(-30deg);
+	}
+}

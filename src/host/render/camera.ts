@@ -172,6 +172,53 @@ export function cameraPose(mode: CameraMode, input: CameraInput): CameraPose {
 	};
 }
 
+/**
+ * Attract: the lobby's title-screen camera. The court plays itself behind
+ * the join panel, so this is a slow crane round the corner of the court —
+ * swinging gently either side of a high three-quarter view — rather than any
+ * of the match cameras. The target is pushed off to the camera's left by
+ * `ATTRACT_OFFSET`, which puts the court in the right of the frame and leaves
+ * the left to the panel (`ui/lobby.ts`).
+ *
+ * Seconds in, pose out, and a whole number of loops per `ATTRACT_PERIOD`, so
+ * the lobby can sit for an hour without the move ever snapping back.
+ */
+export const ATTRACT_PERIOD = 64;
+const ATTRACT_RADIUS = 44;
+const ATTRACT_HEIGHT = 22;
+const ATTRACT_FOV = 40;
+/** Centre of the swing and how far it goes either way, radians from
+ * straight behind the near baseline. */
+const ATTRACT_MID = (30 * Math.PI) / 180;
+const ATTRACT_SWING = (14 * Math.PI) / 180;
+const ATTRACT_OFFSET = 15;
+/** Looking at a point below the floor lifts the court to the middle of the
+ * frame instead of the bottom third. All seven numbers were swept together
+ * against the same projection `camera.test.ts` uses, then picked by eye. */
+const ATTRACT_LOOK_Y = -3;
+
+export function attractPose(seconds: number): CameraPose {
+	const phase = (seconds / ATTRACT_PERIOD) * Math.PI * 2;
+	const angle = ATTRACT_MID + ATTRACT_SWING * Math.sin(phase);
+	const sin = Math.sin(angle);
+	const cos = Math.cos(angle);
+	// The camera's own right, level with the ground, while it looks at the
+	// middle of the court.
+	return {
+		position: {
+			x: ATTRACT_RADIUS * sin,
+			y: ATTRACT_HEIGHT,
+			z: ATTRACT_RADIUS * cos,
+		},
+		target: {
+			x: -ATTRACT_OFFSET * cos,
+			y: ATTRACT_LOOK_Y,
+			z: ATTRACT_OFFSET * sin,
+		},
+		fov: ATTRACT_FOV,
+	};
+}
+
 /** The next mode in the cycle, for the key handler in `main.ts`. */
 export function nextMode(mode: CameraMode): CameraMode {
 	const i = CAMERA_MODES.indexOf(mode);

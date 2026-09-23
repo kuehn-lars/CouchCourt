@@ -1,6 +1,6 @@
 ---
 title: Project log
-updated: 2026-09-22
+updated: 2026-09-23
 tags: [meta]
 status: current
 ---
@@ -389,3 +389,20 @@ width and pace together. Shipped: decent player wins 57% of points against the
 phone sending mixed strokes against the bot, and the controller's readout
 driven by synthetic `devicemotion` — no console errors. **Not verified: a real
 phone, a real person, recorded smashes (only serves back the overhead rule).**
+
+## [2026-09-23] build | The host and the phone, redesigned
+
+Lobby as a title screen: headline, join QR, two animated seats, how-to
+slides, and two machines rallying behind it under a slow crane camera
+(`attractPose`, tested at 16:9 and 16:10). Broadcast scorebug, wipe-in
+umpire's call ("Game, Near", no dashes), cinematic countdown, pause and
+result screens, a settings sheet (camera, machine level, sound, lobby rally,
+full screen). Phone: animated swing on the gate, swipeable cards, a 270°
+power dial in the player's colour, stamped feedback, a settings sheet.
+Far player amber → ice. Near plane 0.1 → 1 (court striped against the
+apron from the crane). 408 tests.
+
+Promoted: [[0017-phosphor-icons-and-the-visual-system]],
+[[touch-action-is-an-intersection]]; [[modules/host]] and
+[[modules/controller]] updated. Seen in headless Chrome only; nothing on a
+phone.

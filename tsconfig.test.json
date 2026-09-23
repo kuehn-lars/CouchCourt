@@ -10,5 +10,8 @@
 		"lib": ["ES2023", "DOM", "DOM.Iterable"],
 		"types": ["node"]
 	},
-	"include": ["src/**/*.test.ts", "tests/**/*.ts"]
+	// raw.d.ts: tests reach the Phosphor `?raw` imports through the score
+	// overlay (render/ui.ts), and an ambient declaration is never pulled in by
+	// an import.
+	"include": ["src/**/*.test.ts", "tests/**/*.ts", "src/host/raw.d.ts"]
 }

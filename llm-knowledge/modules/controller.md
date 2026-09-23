@@ -1,6 +1,6 @@
 ---
 title: "Module: src/controller — the iPhone racket"
-updated: 2026-09-22
+updated: 2026-09-23
 tags: [module, controller, ios]
 status: current
 code:
@@ -10,6 +10,8 @@ code:
   - `src/controller/wake-lock.ts`
   - `src/controller/motion.ts`
   - `src/controller/index.html`
+  - `src/controller/controller.css`
+  - `src/controller/icons.ts`
   - `src/controller/record.ts`
   - `src/controller/record.html`
   - `scripts/trace-endpoint.ts`
@@ -30,7 +32,9 @@ verified" below before trusting this page over your own hands.
 | `src/controller/session.ts` | Socket identity, resume, reconnect backoff | `backoffMs` tested; socket wiring untested by design (DOM/WebSocket wiring) |
 | `src/controller/wake-lock.ts` | `keepAwake()` — screen wake lock with re-acquire on visibility | untested by design (browser API wiring, no logic to assert) |
 | `src/controller/motion.ts` | `requestMotionPermission()` — the iOS permission gate | working, now used by both the controller and the recorder |
-| `src/controller/index.html` | The controller page | built — permission gate + play screen, replaces the old placeholder |
+| `src/controller/index.html` | The controller page | built — permission gate + play screen + settings sheet; redesigned 2026-09-23 |
+| `src/controller/controller.css` | Every controller style, including the platform rules (touch-action, safe areas) | — |
+| `src/controller/icons.ts` | Phosphor glyphs; fills `[data-icon]` placeholders | no |
 | `src/controller/record.html` | The trace recorder UI | working, dev tool, unchanged |
 | `src/controller/record.ts` | The recorder: capture, countdown, live readout, save | working, dev tool; now imports `keepAwake` from `wake-lock.ts` instead of holding its own copy |
 
@@ -188,6 +192,29 @@ Seen in headless Chrome with synthetic `devicemotion`; not on a phone.
   **iOS Safari has no `navigator.vibrate`**. It also clicks a hidden
   `<input switch>` label, which on iOS 18+ is reported to play a system haptic
   tick — **unverified on a phone**; if it does nothing, nothing is lost.
+
+## Redesigned 2026-09-23
+
+Same wiring, new presentation ([[0017-phosphor-icons-and-the-visual-system]]):
+
+- **Gate:** an animated swing (a phone on an arm meeting a ball at the top of
+  its arc), "This phone is your racket.", four swipeable how-to cards that
+  turn over on their own until touched, and one button. The permission rules
+  above are untouched: the button's handler is byte-for-byte the same.
+  **The cards needed a `touch-action` change** —
+  [[touch-action-is-an-intersection]].
+- **Match screen:** a 270° dial for the last swing's power in the player's
+  side colour (`--side`), the stroke under it with its direction arrow, a
+  live "Reading ..." line (`stream.current`, the old corner readout), a
+  status pill whose dot is the connection state, and a hint card per phase.
+  Feedback stamps a word over the dial and washes the screen.
+- **Settings sheet** (gear): screen flash, haptic tick, stroke readout, all
+  on by default, kept in `localStorage` through `shared/prefs.ts`.
+- Far is ice `#5ac8fa`, not amber, to match the host.
+
+Seen in headless Chrome at 390x844 with synthetic `devicemotion` through the
+real detector (a 67-power overhead filled the dial), the serve hint during a
+real solo match, and the production build. Not on a phone.
 
 ## What is and is not verified
 

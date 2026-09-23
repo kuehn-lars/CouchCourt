@@ -35,12 +35,16 @@ export interface Audio {
 	/** Call from a user gesture. Safe to call repeatedly. */
 	resume(): void;
 	play(events: readonly RenderEvent[]): void;
+	/** The settings sheet's sound switch. Holds across `resume`. */
+	setMuted(muted: boolean): void;
 }
 
 export function createAudio(): Audio {
 	let ctx: AudioContext | null = null;
 	let noise: AudioBuffer | null = null;
 	let master: GainNode | null = null;
+	let muted = false;
+	const LEVEL = 0.5;
 
 	function ensure(): AudioContext | null {
 		if (ctx) return ctx;
@@ -53,7 +57,7 @@ export function createAudio(): Audio {
 		ctx = new Ctor();
 		noise = noiseBuffer(ctx);
 		master = ctx.createGain();
-		master.gain.value = 0.5;
+		master.gain.value = muted ? 0 : LEVEL;
 		master.connect(ctx.destination);
 		return ctx;
 	}
@@ -103,6 +107,13 @@ export function createAudio(): Audio {
 	}
 
 	return {
+		setMuted(value) {
+			muted = value;
+			if (ctx && master) {
+				master.gain.setTargetAtTime(muted ? 0 : LEVEL, ctx.currentTime, 0.05);
+			}
+		},
+
 		resume() {
 			const context = ensure();
 			if (context && context.state === "suspended") void context.resume();

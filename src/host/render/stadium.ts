@@ -38,21 +38,26 @@ const CROWD_PER_TIER_END = 62;
 
 const GROUND_RADIUS = 110;
 
-const CONCRETE = "#2b3d4d";
-const CONCRETE_EDGE = "#3a4f61";
+const CONCRETE = "#223342";
+const CONCRETE_EDGE = "#314658";
 const GROUND = "#0c1c28";
 
 /** Crowd colours: muted, varied, never saturated enough to pull the eye off
- * the ball. A crowd that reads as texture, not as confetti. */
+ * the ball. A crowd that reads as texture, not as confetti. Darkened on
+ * 2026-09-23 when the lobby's crane put the stands in the foreground: at the
+ * old values they read as coloured shelving. The two light swatches are
+ * white shirts catching the floodlights, and they are what make it a crowd. */
 const CROWD_COLORS = [
-	"#5b7fa0",
-	"#6f8fae",
-	"#7d7f96",
-	"#8d7684",
-	"#5f8189",
-	"#7688a0",
-	"#95839f",
-	"#4f6d8a",
+	"#34495d",
+	"#3d5268",
+	"#454a5e",
+	"#553f4f",
+	"#35505a",
+	"#41516a",
+	"#514a63",
+	"#2e4459",
+	"#8796a8",
+	"#6d7f93",
 ];
 
 /** Height of a tier slab. Its top surface — where the seats go — is at

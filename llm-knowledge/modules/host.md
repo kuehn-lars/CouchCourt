@@ -1,6 +1,6 @@
 ---
 title: "Module: src/host — the Mac display"
-updated: 2026-09-22
+updated: 2026-09-23
 tags: [module, host, rendering]
 status: current
 code:
@@ -9,6 +9,11 @@ code:
   - `src/host/loop.test.ts`
   - `src/host/render/`
   - `src/host/ui/lobby.ts`
+  - `src/host/ui/settings.ts`
+  - `src/host/ui/dom.ts`
+  - `src/host/ui/icons.ts`
+  - `src/host/host.css`
+  - `src/host/raw.d.ts`
   - `src/host/audio/index.ts`
   - `src/host/index.html`
 ---
@@ -26,14 +31,18 @@ currently wired end to end.
 | `src/host/loop.ts` | `advance(accumulator, frameDt)` — the fixed-timestep accumulator | yes, `src/host/loop.test.ts` |
 | `src/host/render/index.ts` | `createRenderer` — wires scene, court, entities, effects, UI | no |
 | `src/host/render/events.ts` | `detectEvents`, `strokeAnim` — the one pure file in the renderer | **yes**, `src/host/render/events.test.ts` |
-| `src/host/render/camera.ts` | `cameraPose(mode, ball)` — pose and FOV per mode, as plain numbers | **yes**, `src/host/render/camera.test.ts` |
+| `src/host/render/camera.ts` | `cameraPose(mode, ball)` — pose and FOV per mode — and `attractPose(seconds)`, the lobby's crane, as plain numbers | **yes**, `src/host/render/camera.test.ts` |
 | `src/host/render/scene.ts` | Renderer, lights, gradient background, fog; eases toward `cameraPose` | no |
 | `src/host/render/court.ts` | Static ground, lines, sagging net, posts | no |
 | `src/host/render/stadium.ts` | Ground disc, tiered bowl, instanced crowd, floodlights | no |
 | `src/host/render/entities.ts` | Ball + blob shadow + trail; the two player rigs and their four swing animations | no |
 | `src/host/render/effects.ts` | Particle pool and shockwave rings | no |
-| `src/host/render/ui.ts` | DOM score overlay in the top corners, and the umpire's call | `callFor` only, `src/host/render/ui.test.ts` |
-| `src/host/ui/lobby.ts` | Join QR, roster, start/solo/rematch, countdown, winner | no |
+| `src/host/render/ui.ts` | Broadcast scorebug (top-left), the umpire's call, the bottom note. `setVisible` hides it over the lobby rally | `callFor` only, `src/host/render/ui.test.ts` |
+| `src/host/ui/lobby.ts` | Title screen (join QR, two seats, how-to slides), countdown, "Play", pause, result | no |
+| `src/host/ui/settings.ts` | `<dialog>` settings sheet and the two corner buttons; prefs in `localStorage` through `shared/prefs.ts` | parsing only, `src/shared/prefs.test.ts` |
+| `src/host/ui/dom.ts` | `el`, write-on-change `setText`, reduced-motion-aware `play` | no |
+| `src/host/ui/icons.ts` | Phosphor glyphs as `?raw` strings ([[0017-phosphor-icons-and-the-visual-system]]) | no |
+| `src/host/host.css` | Every style on the host page: tokens, lobby, scorebug, sheet | — |
 | `src/host/audio/index.ts` | Synthesised hit / bounce / point. No asset files | no |
 | `src/host/index.html` | `#scene` canvas, `#ui` div, loads `main.ts` | — |
 
@@ -61,12 +70,45 @@ the first player to announce themselves ready serves. In solo, that player is
 by definition the human. No coin toss (nobody can see one) and no toggle
 (nobody is standing at the host screen).
 
-**Solo mode** builds a `createBot(otherSide, 0.65)` — a decent player wins
+**Solo mode** builds a `createBot(otherSide, skill)`, where skill comes from the
+settings sheet and defaults to 0.65 ("Match") — a decent player wins
 ~57% of points against it, a newcomer ~43%
 ([[2026-09-22-stroke-direction-balance]]) — and calls it once per
 tick. Its swing is pushed onto the same `pending` queue a phone's swing lands
 in, so there is exactly one path into the simulation — see
 [[modules/shared-sim]].
+
+## The lobby is a title screen (2026-09-23)
+
+While `phase === "lobby"` the court is not empty: **two bots rally on their
+own `MatchState`** (`demo` in `main.ts`), rendered with the `"attract"`
+camera shot. Nothing about it can leak into a match — separate state, no
+audio, no feedback to phones, score overlay hidden (`ScoreUI.setVisible`,
+which also forgets the last score so a new match's first score is not
+"called"). A finished demo set starts another. Off in settings for laptops
+on battery.
+
+`attractPose(seconds)` is a slow crane swinging ±10° round a high
+three-quarter view, with the look-at point pushed to the camera's left so
+the court sits in the right of the frame and the join panel owns the left.
+Its seven constants were **swept together** against the same projection the
+tests use, then picked by eye. Two things the sweep had to be told:
+
+- **MacBooks are 16:10, not 16:9.** The court's far corner went off the
+  right edge in a 16:10 screenshot while a 16:9-only test passed. Every
+  attract test now runs at both.
+- **The panel edge is at -0.04 in NDC** (43.5rem of a 16:9 frame at the
+  lobby's rem scale). A looser bound let the near player stand behind the
+  seat cards.
+
+Starting a match resets `current` to a fresh match *at the countdown*, so
+the camera flies from the crane to the broadcast pose over a court that is
+about to be played on.
+
+**Settings** (`S`, or the gear): camera mode, the machine's level (Relaxed
+0.4 / Match 0.65 / Tough 0.85 skill — only Match is measured,
+[[2026-09-22-stroke-direction-balance]]), sound, lobby rally, full screen.
+Keys ignore Cmd/Ctrl/Alt, so Cmd-F is still the browser's find.
 
 ## The frame
 
@@ -211,6 +253,11 @@ not as an error.
 The net mesh's top edge literally calls `netHeightAt(x)` per vertex, so the
 sag on screen is the same sag the physics uses rather than a decoration.
 
+**The near plane is 1m, not 0.1** (2026-09-23). The court sits 1mm above
+the apron, and from the lobby crane at ~45m the depth buffer's precision at
+0.1 was about 1.2mm, so the two planes striped. Precision scales with the
+near plane and no camera comes within 6m of anything.
+
 The ball is drawn at **2.6× its physical radius** — a real 3.35cm ball is
 invisible from this camera. "Feel beats fidelity."
 
@@ -238,6 +285,14 @@ ticking 0 all / 15 / 30 / 40 / Game, players running to the ball, and no
 console errors on either page. Screenshots are what found the skewing
 broadcast camera, the 0.25x far player, and the player framed with their legs
 off the bottom of the screen.
+
+**Watched 2026-09-23** after the redesign, in headless Chrome over CDP with a
+scripted phone: the lobby with its rally, seat states, solo start, countdown
+and camera fly-in, the scorebug and auto-hiding corner buttons, the pause
+screen on a dropped phone, and — through a throwaway harness page, deleted —
+the result, settings and call states. Also the production build via
+`vite preview`. No console errors. One unexplained run (a solo start that was
+back in the lobby 9s later) did not reproduce in three attempts.
 
 **Not watched:** anything on real hardware. Headless Chrome has no motion
 sensors and renders through SwiftShader, so frame rate, the wake lock, and
