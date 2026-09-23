@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 import { BASELINE_Z, SINGLES_HALF_WIDTH } from "../../shared/sim/court.ts";
-import { NET_KEEP_OUT, RUN_BACK } from "../../shared/sim/players.ts";
+import { NET_KEEP_OUT, RUN_BACK, RUN_WIDE } from "../../shared/sim/players.ts";
 import {
 	ATTRACT_PERIOD,
 	attractPose,
@@ -18,7 +18,9 @@ import {
 	type CameraPose,
 	cameraPose,
 	nextMode,
+	splitPose,
 	type Vec3Mutable,
+	victoryPose,
 } from "./camera.ts";
 
 /** Where a player stands, at chest height — the point that has to be on
@@ -273,6 +275,119 @@ describe("attractPose", () => {
 			const a = attractPose(t).position;
 			const b = attractPose(t + 0.1).position;
 			expect(len(sub(b, a)) / 0.1).toBeLessThan(1.6);
+		}
+	});
+});
+
+describe("splitPose", () => {
+	// Each half of a split screen is a portrait-ish slice: half of 16:10 or
+	// half of 16:9.
+	const HALVES = [
+		["half of 16:10", 8 / 10],
+		["half of 16:9", 8 / 9],
+	] as const;
+	const WIDE = SINGLES_HALF_WIDTH + RUN_WIDE;
+	const sign = (side: "near" | "far") => (side === "near" ? 1 : -1);
+
+	// From behind your own player, the one thing that must never happen is
+	// losing them: wherever the sim can put them, feet and head.
+	it.each(HALVES)(
+		"frames your own player whole wherever they stand, %s",
+		(_, aspect) => {
+			for (const side of ["near", "far"] as const) {
+				for (const depth of [
+					NET_KEEP_OUT,
+					4,
+					8,
+					BASELINE_Z,
+					BASELINE_Z + RUN_BACK,
+				]) {
+					for (const x of [-WIDE, -2, 0, 2, WIDE]) {
+						const pose = splitPose(side, x);
+						for (const y of [PLAYER_FEET, PLAYER_HEAD]) {
+							const at = { x, y, z: sign(side) * depth };
+							expect(
+								isVisible(pose, at, aspect),
+								`${side} x=${x} z=${at.z} y=${y}`,
+							).toBe(true);
+						}
+					}
+				}
+			}
+		},
+	);
+
+	it.each(HALVES)("shows the opponent at their baseline, %s", (_, aspect) => {
+		for (const side of ["near", "far"] as const) {
+			for (const self of [-WIDE, 0, WIDE]) {
+				const pose = splitPose(side, self);
+				for (const x of [-SINGLES_HALF_WIDTH, 0, SINGLES_HALF_WIDTH]) {
+					for (const y of [PLAYER_FEET, PLAYER_HEAD]) {
+						const at = { x, y, z: -sign(side) * BASELINE_Z };
+						expect(isVisible(pose, at, aspect), `${side} sees x=${x}`).toBe(
+							true,
+						);
+					}
+				}
+			}
+		}
+	});
+
+	// The sim's per-side "screen-left" (shot.ts, screenLeftOf) is only right
+	// if the far half really is looking back up the court: its left is +x.
+	it("puts world -x on the near half's left and +x on the far half's left", () => {
+		const near = splitPose("near", 0);
+		const far = splitPose("far", 0);
+		expect(screenX(near, { x: -3, y: 0, z: 0 }, 0.8)).toBeLessThan(0);
+		expect(screenX(far, { x: 3, y: 0, z: 0 }, 0.8)).toBeLessThan(0);
+	});
+
+	it("is the near half turned round through the net", () => {
+		const near = splitPose("near", 2);
+		const far = splitPose("far", -2);
+		expect(far.position.x).toBeCloseTo(-near.position.x);
+		expect(far.position.y).toBeCloseTo(near.position.y);
+		expect(far.position.z).toBeCloseTo(-near.position.z);
+		expect(far.target.z).toBeCloseTo(-near.target.z);
+		expect(far.fov).toBe(near.fov);
+	});
+});
+
+describe("victoryPose", () => {
+	const SAMPLES = Array.from({ length: 60 }, (_, i) => i * 0.5);
+	const spots = [
+		{ side: "near", x: 0, z: BASELINE_Z },
+		{ side: "near", x: 4, z: BASELINE_Z + RUN_BACK },
+		{ side: "far", x: -3, z: -BASELINE_Z },
+		{ side: "far", x: 0, z: -2 },
+	] as const;
+
+	// The whole point of the shot: the winner, head to toe, the whole time.
+	it("keeps the winner whole in frame while it orbits", () => {
+		for (const s of spots) {
+			for (const t of SAMPLES) {
+				const pose = victoryPose(s.side, s, t);
+				for (const y of [PLAYER_FEET, PLAYER_HEAD]) {
+					expect(
+						isVisible(pose, { x: s.x, y, z: s.z }),
+						`${s.side} t=${t}`,
+					).toBe(true);
+				}
+			}
+		}
+	});
+
+	// From the net side, so it is their face and not their back. A winner
+	// who finished at the net puts the camera over the other half, so it has
+	// to stay well above the net cord, never pass through it.
+	it("watches from in front of the winner, above the net", () => {
+		for (const s of spots) {
+			for (const t of SAMPLES) {
+				const pose = victoryPose(s.side, s, t);
+				const toward = s.side === "near" ? -1 : 1;
+				expect((pose.position.z - s.z) * toward).toBeGreaterThan(0);
+				expect(pose.position.y).toBeGreaterThan(1.8);
+			}
 		}
 	});
 });

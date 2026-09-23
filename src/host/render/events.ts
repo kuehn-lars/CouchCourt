@@ -11,7 +11,7 @@
 import type { Side } from "../../shared/protocol.ts";
 import type { MatchState, Stroke } from "../../shared/sim/index.ts";
 import type { Vec3 } from "../../shared/sim/state.ts";
-import type { StrokeAnim } from "./entities.ts";
+import type { StrokeAnim } from "./poses.ts";
 
 export type RenderEvent =
 	| {
@@ -35,10 +35,12 @@ export type RenderEvent =
  * A heuristic on the ball state, not a sim event — cosmetic only. */
 export const BOUNCE_HEIGHT = 0.2;
 
-/** A serve and a smash are the same overhead swing; anything else taken
- * before the ball bounced is a volley, and is blocked rather than swung at. */
+/** A serve and a smash are the same overhead swing, and the smash is jumped;
+ * anything else taken before the ball bounced is a volley, and is blocked
+ * rather than swung at. */
 export function strokeAnim(stroke: Pick<Stroke, "kind" | "air">): StrokeAnim {
-	if (stroke.kind === "serve" || stroke.kind === "overhead") return "serve";
+	if (stroke.kind === "serve") return "serve";
+	if (stroke.kind === "overhead") return "smash";
 	return stroke.air ? "volley" : stroke.kind;
 }
 

@@ -719,35 +719,44 @@ kbd {
 
 /* ------------------------------------------------------- the result */
 
+/* A lower third over the winner's celebration, not a curtain in front of
+   it: the camera is orbiting the winner (render/camera.ts, victoryPose), so
+   the card sits bottom-left and the scene stays unblurred. */
 .result {
 	--side: var(--accent);
 	display: grid;
-	place-items: center;
+	align-items: end;
+	justify-items: start;
+	padding: 0 0 4.5rem 4rem;
 	pointer-events: none;
 	background:
 		radial-gradient(
-			ellipse 70% 60% at 50% 42%,
-			color-mix(in srgb, var(--side) 24%, transparent),
+			ellipse 60% 70% at 0% 100%,
+			color-mix(in srgb, var(--side) 22%, rgba(5, 8, 12, 0.9)),
 			transparent 70%
 		),
-		rgba(5, 8, 12, 0.72);
-	backdrop-filter: blur(10px);
-	-webkit-backdrop-filter: blur(10px);
+		linear-gradient(0deg, rgba(5, 8, 12, 0.75), transparent 45%);
 }
 .result.on {
 	pointer-events: auto;
 }
 .result-card {
 	display: grid;
-	justify-items: center;
-	gap: 0.6rem;
-	text-align: center;
+	justify-items: start;
+	gap: 0.5rem;
+	text-align: left;
 }
 .result-card > .icon {
-	width: 4.5rem;
-	height: 4.5rem;
+	width: 3.6rem;
+	height: 3.6rem;
 	color: var(--side);
-	margin-bottom: 0.4rem;
+	margin-bottom: 0.2rem;
+	filter: drop-shadow(
+		0 0 1.2rem color-mix(in srgb, var(--side) 60%, transparent)
+	);
+}
+.result h2 {
+	font-size: 3.6rem;
 }
 .result .winner {
 	color: var(--side);
@@ -755,10 +764,10 @@ kbd {
 .result .final {
 	display: flex;
 	align-items: baseline;
-	gap: 2.2rem;
-	margin: 0.4rem 0 1.4rem;
+	gap: 1.4rem;
+	margin: 0.2rem 0 0.6rem;
 	color: var(--ink);
-	font: 700 10rem / 1 var(--font-round);
+	font: 700 6.5rem / 1 var(--font-round);
 	letter-spacing: -0.05em;
 	font-variant-numeric: tabular-nums;
 }
@@ -766,14 +775,14 @@ kbd {
 	color: var(--ink-3);
 }
 .final .sep {
-	width: 3.2rem;
-	height: 0.45rem;
+	width: 2.2rem;
+	height: 0.4rem;
 	border-radius: 1rem;
 	align-self: center;
 	background: var(--hairline-2);
 }
 .result .btn {
-	margin-top: 0.6rem;
+	margin-top: 0.8rem;
 }
 
 /* --------------------------------------------------------- scorebug */
@@ -802,6 +811,56 @@ kbd {
 .bug.on {
 	opacity: 1;
 	transform: none;
+}
+
+/* Split screen: one half per player. The scorebug moves to the top centre,
+   over the seam, where it belongs to neither half. */
+.divider {
+	position: fixed;
+	inset: 0 auto 0 50%;
+	width: 0.25rem;
+	margin-left: -0.125rem;
+	background: linear-gradient(
+		180deg,
+		var(--near) 0%,
+		rgba(5, 8, 12, 0.95) 30%,
+		rgba(5, 8, 12, 0.95) 70%,
+		var(--far) 100%
+	);
+	box-shadow:
+		0 0 0 1px rgba(255, 255, 255, 0.06),
+		0 0 2rem rgba(0, 0, 0, 0.6);
+	opacity: 0;
+	transition: opacity 500ms var(--ease);
+}
+#ui.split .divider {
+	opacity: 1;
+}
+.half-tag {
+	position: absolute;
+	bottom: 1.5rem;
+	display: inline-flex;
+	align-items: center;
+	height: 2.2rem;
+	padding: 0 1rem;
+	border-radius: 999px;
+	font-size: 0.95rem;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	white-space: nowrap;
+	color: var(--accent-ink);
+}
+.half-tag:first-child {
+	right: 1.5rem;
+	background: var(--near);
+}
+.half-tag:last-child {
+	left: 1.5rem;
+	background: var(--far);
+}
+#ui.split .bug {
+	left: 50%;
+	translate: -50% 0;
 }
 .bug-row {
 	display: grid;

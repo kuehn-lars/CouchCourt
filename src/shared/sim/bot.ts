@@ -21,7 +21,7 @@ import type { Side, Swing, SwingKind } from "../protocol.ts";
 import { SMASH_HEIGHT } from "./players.ts";
 import type { MatchState } from "./rally.ts";
 import { TOSS_APEX } from "./serve.ts";
-import { SCREEN_LEFT, TIMING_IDEAL } from "./shot.ts";
+import { screenLeftOf, TIMING_IDEAL } from "./shot.ts";
 
 /** Seconds the bot waits before tossing. A bot that serves the instant the
  * point starts reads as a glitch, not as an opponent. */
@@ -100,7 +100,7 @@ export function createBot(side: Side, skill = 0.75): Bot {
 		// they are dead centre.
 		const away =
 			Math.abs(opponent.x) > 0.4 ? -Math.sign(opponent.x) : shot % 2 ? 1 : -1;
-		return away === SCREEN_LEFT ? "forehand" : "backhand";
+		return away === screenLeftOf(side, state.split) ? "forehand" : "backhand";
 	};
 
 	/** Timing error, seconds: roughly normal (the sum of three hashes),

@@ -1,6 +1,6 @@
 ---
 title: Three.js over Phaser
-updated: 2026-09-19
+updated: 2026-09-24
 tags: [decision, rendering]
 status: current
 code:
@@ -73,8 +73,10 @@ A small eased lateral drift toward the ball is allowed. Ease it, never cut.
 - Rendering is not unit-tested. If the host page grows enough to be worth a
   smoke test, that is one Playwright check for "boots, canvas present, no
   console errors" — not a visual regression suite.
-- **The seven rules that keep it fast** — interpolate, zero allocation in the
-  frame loop, blob shadow over shadow map, ring-buffer trail, procedural
-  primitives, no post-processing, fixed camera — live in [[modules/host]],
+- **The rules that keep it fast** live in [[modules/host]]. Three of the
+  original seven (blob shadow only, procedural primitives only, no
+  post-processing) were overturned on 2026-09-24 by
+  [[0018-stylised-stadium-renderer]]; interpolate and zero allocation stand.
+  They live
   next to the files that have to obey them. Breaking one shows up as periodic
   hitching rather than as an error, which is why they are written down at all.

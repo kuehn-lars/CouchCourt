@@ -1,6 +1,6 @@
 ---
 title: Index
-updated: 2026-09-23
+updated: 2026-09-24
 tags: [meta]
 status: current
 ---
@@ -32,8 +32,8 @@ notes that constrain it. **Start at the row for the thing you are changing.**
 | [[modules/shared-swing]] | `src/shared/swing/` | Trace format and swing detection. Tuned offline against 20 committed captures |
 | [[modules/shared-sim]] | `src/shared/sim/` | The game: `tick`, ball flight, shot feel, scoring, court geometry |
 | [[modules/server]] | `src/server/` | The relay: slots, resume, liveness. No game state |
-| [[modules/host]] | `src/host/` | Match state machine, lobby, fixed-timestep loop, camera, Three.js renderer, audio |
-| [[modules/controller]] | `src/controller/` | The iOS permission gate, the swing stream, the socket and the match screen |
+| [[modules/host]] | `src/host/` | Match state machine, lobby, fixed-timestep loop, cameras (incl. split and victory), the stylised renderer, audio |
+| [[modules/controller]] | `src/controller/` | The iOS permission gate, the swing stream, the socket, and the racket the match screen is drawn as |
 | [[modules/tooling]] | `vite.config.ts`, `scripts/`, `.github/workflows/ci.yml` | Build, the three tsconfig projects, CI, the vault checker |
 
 ## Decisions
@@ -57,8 +57,11 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0013-detector-latency-is-compensated]] | The phone reports how late its detector was and the host subtracts it. Every swing had been reading late |
 | [[0014-players-run-to-the-ball]] | Players move in x and z, and one predictor says where they meet the ball and when. Amended by 0015 |
 | [[0015-contact-model]] | **Why returns whiffed, and the fix.** One frozen contact per ball; early swings wait, late ones rewind; hardest peak wins; launches solved to land; toss-then-hit serve; peak detector on the phone. Its "timing is direction" rule is superseded by 0016 |
-| [[0016-stroke-decides-direction]] | **Where the ball goes.** Forehand screen-left, backhand screen-right, overhead a smash only out of the air; timing is a trade (early wide, late long); bot skill is a timing spread |
+| [[0016-stroke-decides-direction]] | **Where the ball goes.** Forehand screen-left, backhand screen-right, overhead a smash only out of the air; timing is a trade (early wide, late long); bot skill is a timing spread. "Screen" amended by 0019 |
 | [[0017-phosphor-icons-and-the-visual-system]] | The 2026-09-23 redesign: one icon dependency, system type, no UI framework, and the visual rules (dark, one accent, side colours) |
+| [[0018-stylised-stadium-renderer]] | **The look.** Cel-shaded outlined athletes under real light, bloom and a grade, real player shadows, articulated rigs with layered poses, a living stadium. Overturns renderer rules 3, 5, 6 |
+| [[0019-split-screen]] | Two people, two halves, each from behind their own player — and why the sim needed a per-side "screen-left" |
+| [[0020-the-phone-is-the-string-bed]] | The match screen is a racket: stencil on the strings, ripples, a charging frame, a ball you toss. The score line on the wire |
 
 ## Platform
 
@@ -120,6 +123,12 @@ folders above and recorded in [[log]]. See `llm-knowledge/sessions/README.md`.
 ## Known gaps
 
 Things that are true today and that a session should not be surprised by.
+
+- **The renderer's frame time is unmeasured on a real GPU**
+  ([[0018-stylised-stadium-renderer]]). ~600 draws plus a shadow pass and
+  bloom, doubled on a split screen, seen only through SwiftShader. The
+  adaptive pixel ratio is a safety net, not a measurement. Likewise the
+  phone's racket canvas has never run on a phone.
 
 - **Stroke classification is measured on multi-rep captures only**, and the
   overhead rule rests on eight serve swings — no recorded smash exists. The

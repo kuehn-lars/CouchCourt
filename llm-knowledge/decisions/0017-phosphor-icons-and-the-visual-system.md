@@ -68,5 +68,8 @@ Recorded so the next change does not drift from them:
 
 ## See also
 
+The phone's match screen described here was replaced on 2026-09-24 by
+[[0020-the-phone-is-the-string-bed]]; the visual rules above still hold.
+
 [[0011-qrcode-generator-dependency]] · [[modules/host]] ·
 [[modules/controller]]

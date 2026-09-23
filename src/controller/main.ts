@@ -16,9 +16,11 @@ import type {
 } from "../shared/protocol.ts";
 import { createSwingStream } from "../shared/swing/stream.ts";
 import { toSample } from "../shared/swing/trace.ts";
-import { fillIcons, ICON, type IconName } from "./icons.ts";
+import { fillIcons } from "./icons.ts";
 import { requestMotionPermission } from "./motion.ts";
+import { createRacket, type Racket } from "./racket.ts";
 import { createSession, type Session, type SessionState } from "./session.ts";
+import { racketView } from "./view.ts";
 import { keepAwake } from "./wake-lock.ts";
 
 function requireElement<T extends Element>(id: string, ctor: new () => T): T {
@@ -33,31 +35,23 @@ const gate = requireElement("gate", HTMLElement);
 const gateStatus = requireElement("gate-status", HTMLElement);
 const enableButton = requireElement("enable", HTMLButtonElement);
 const play = requireElement("play", HTMLElement);
-const sideEl = requireElement("side", HTMLElement);
+const racketCanvas = requireElement("racket", HTMLCanvasElement);
 const statusEl = requireElement("status", HTMLElement);
-const hintEl = requireElement("hint", HTMLElement);
-const hintIconEl = requireElement("hint-icon", HTMLElement);
-const hintTitleEl = requireElement("hint-title", HTMLElement);
-const hintDetailEl = requireElement("hint-detail", HTMLElement);
-const stageEl = requireElement("stage", HTMLElement);
 const cardsEl = requireElement("cards", HTMLElement);
 const dotsEl = requireElement("dots", HTMLElement);
 const settingsEl = requireElement("settings", HTMLDialogElement);
-const ringEl = requireElement("ring", HTMLElement);
-const powerEl = requireElement("power", HTMLElement);
-const toastEl = requireElement("toast", HTMLElement);
-const moveNowEl = requireElement("move-now", HTMLElement);
-const moveLastEl = requireElement("move-last", HTMLElement);
 const hapticEl = requireElement("haptic-label", HTMLLabelElement);
 
 fillIcons();
 
-const STATUS_TEXT: Record<SessionState, string> = {
-	connecting: "Connecting",
-	waiting: "Connected",
-	playing: "Connected",
-	reconnecting: "Reconnecting",
-	rejected: "",
+/** What the frame says instead of the side's name while the connection is
+ * not right. `null` is connected. */
+const CONNECTION_RIM: Record<SessionState, string | null> = {
+	connecting: "CONNECTING",
+	waiting: null,
+	playing: null,
+	reconnecting: "RECONNECTING",
+	rejected: "NOT CONNECTED",
 };
 
 // ------------------------------------------------------------- settings
@@ -174,68 +168,33 @@ if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
  * presentation of a relayed fact and nothing more. */
 let match: MatchInfo | null = null;
 let mySide: Side | null = null;
+let connection: SessionState = "connecting";
+/** `performance.now()` when the countdown was announced: the host sends the
+ * phase, not a clock. */
+let countdownFrom = 0;
 
-const SIDE_NAME: Record<Side, string> = {
-	near: "Near court",
-	far: "Far court",
-};
-
-/** The avatar colours on the host screen (`host/render/entities.ts`), so a
+/** The avatar colours on the host screen (`host/render/players.ts`), so a
  * player can find themselves on the court at a glance. */
 const SIDE_COLOR: Record<Side, string> = { near: "#ff5d73", far: "#5ac8fa" };
 
-/** The card under the gauge: what to do now. Animates only when it says
- * something new. */
-function hint(glyph: IconName, title: string, detail: string): void {
-	if (hintTitleEl.textContent === title && hintDetailEl.textContent === detail)
-		return;
-	hintIconEl.innerHTML = ICON[glyph];
-	hintTitleEl.textContent = title;
-	hintDetailEl.textContent = detail;
-	hintEl.classList.remove("changed");
-	void hintEl.offsetWidth; // restart the animation
-	hintEl.classList.add("changed");
+/** Drawn once the gate is passed; the canvas is hidden until then. */
+let racket: Racket | null = null;
+
+function currentView() {
+	const view = racketView(
+		match,
+		mySide,
+		(performance.now() - countdownFrom) / 1000,
+	);
+	const trouble = CONNECTION_RIM[connection];
+	return trouble === null ? view : { ...view, rim: trouble };
 }
 
-function renderMatch(): void {
-	if (!match) {
-		hint("tennisBall", "Finding the host", "Keep this page open.");
-		return;
-	}
-	switch (match.phase) {
-		case "lobby":
-			hint(
-				"check",
-				"You\u2019re in",
-				"Waiting for the host to start the match.",
-			);
-			return;
-		case "countdown":
-			hint("tennisBall", "Racket up", "The match is about to start.");
-			return;
-		case "playing":
-			if (match.server === mySide && mySide !== null) {
-				hint(
-					"tennisBall",
-					"Your serve",
-					"Swing once to toss the ball, then again to hit it at the top.",
-				);
-			} else {
-				hint(
-					"arrowsLeftRight",
-					"Forehand left, backhand right",
-					"Swing as it reaches you. Early goes wide, late goes long.",
-				);
-			}
-			return;
-		case "over":
-			if (match.winner === mySide) {
-				hint("trophy", "You won", "Game, set and match.");
-			} else {
-				hint("tennisBall", "Good game", "The host can start another one.");
-			}
-			return;
-	}
+/** The status line a screen reader hears: the same words the strings say. */
+function announce(): void {
+	const view = currentView();
+	const words = `${view.headline.map((i) => i.text).join("")}. ${view.caption}`;
+	if (statusEl.textContent !== words) statusEl.textContent = words;
 }
 
 /**
@@ -247,13 +206,11 @@ function renderMatch(): void {
  * tried as well. **Unverified on a phone** — if it does nothing, nothing is
  * lost.
  */
-const FEEDBACK: Record<FeedbackKind, { color: string; text: string }> = {
-	hit: { color: "#dcff4a", text: "Hit" },
-	miss: { color: "#ff5a5f", text: "Point lost" },
-	point: { color: "#34d86a", text: "Point" },
+const FLASH: Record<FeedbackKind, string> = {
+	hit: "#dcff4a",
+	miss: "#ff5a5f",
+	point: "#34d86a",
 };
-
-let toastTimer = 0;
 
 function buzz(pattern: number | number[]): void {
 	if (!prefs.haptic) return;
@@ -262,85 +219,54 @@ function buzz(pattern: number | number[]): void {
 }
 
 function flash(kind: FeedbackKind): void {
-	const { color, text } = FEEDBACK[kind];
 	if (prefs.flash) {
-		document.body.style.setProperty("--flash", color);
+		document.body.style.setProperty("--flash", FLASH[kind]);
 		document.body.classList.add("flash");
 		requestAnimationFrame(() => {
 			requestAnimationFrame(() => document.body.classList.remove("flash"));
 		});
 	}
-	toastEl.textContent = text;
-	toastEl.style.color = color;
-	toastEl.classList.remove("show");
-	void toastEl.offsetWidth; // restart the stamp
-	toastEl.classList.add("show");
-	stageEl.classList.add("stamped");
+	if (kind === "hit") racket?.hit(shownPower);
+	else if (kind === "point") racket?.point();
+	else racket?.miss();
 	buzz(kind === "point" ? [40, 60, 40] : 30);
-	clearTimeout(toastTimer);
-	toastTimer = window.setTimeout(() => {
-		toastEl.classList.remove("show");
-		stageEl.classList.remove("stamped");
-	}, 900);
 }
 
-/** What each stroke does, as the corner readout names it. The arrows are
- * where the ball goes on the screen (`sim/shot.ts`, `SCREEN_LEFT`). */
+/** How the readout names each stroke, with the way it sends the ball on
+ * the screen (`sim/shot.ts`, `screenLeftOf`). */
 const MOVE_NAME: Record<SwingKind, string> = {
-	forehand: "Forehand",
-	backhand: "Backhand",
-	overhead: "Overhead",
-	serve: "Serve",
-};
-const MOVE_ICON: Record<SwingKind, IconName> = {
-	forehand: "arrowLeft",
-	backhand: "arrowRight",
-	overhead: "arrowUp",
-	serve: "tennisBall",
+	forehand: "FOREHAND \u2190",
+	backhand: "BACKHAND \u2192",
+	overhead: "SMASH \u2191",
+	serve: "SERVE",
 };
 
 let shownPower = 0;
 let shownAt = 0;
 
-/** The ring: the last swing's power as an arc and a number, and the corner
- * readout's "last" move. One swing is several peaks (backswing, swing,
- * follow-through), so a weaker peak right after a stronger one is the same
- * swing and does not replace it — which is also the one the host plays. */
-function showSwing(power: number, kind: SwingKind): void {
+/** One swing is several peaks (backswing, swing, follow-through), so a
+ * weaker peak right after a stronger one is the same swing and does not
+ * replace it — which is also the one the host plays. */
+function showSwing(power: number, lag: number): void {
 	const now = performance.now();
 	if (now - shownAt < 400 && power <= shownPower) return;
 	shownPower = power;
 	shownAt = now;
-	const pct = Math.round(power * 100);
-	moveLastEl.innerHTML = ICON[MOVE_ICON[kind]];
-	moveLastEl.append(MOVE_NAME[kind]);
-	ringEl.style.setProperty("--power", String(power));
-	powerEl.textContent = String(pct);
-	ringEl.classList.remove("pop");
-	void ringEl.offsetWidth; // restart the animation
-	ringEl.classList.add("pop");
+	racket?.swing(power, lag / 1000);
 }
 
 /** Rotation that reads as a full-strength swing on the live glow, deg/s. */
 const LEVEL_FULL = 1100;
-let levelShown = 0;
 
-let nowShown: SwingKind | null = null;
-
-/** Live rotation as a glow, eased and drawn once a frame rather than at the
- * sensor's 60Hz straight into style. */
+/** Once a frame: the live swing, the readout, and what the strings say. */
 function drawLevel(): void {
-	const target = Math.min(1, stream.level / LEVEL_FULL);
-	levelShown += (target - levelShown) * (target > levelShown ? 0.6 : 0.15);
-	ringEl.style.setProperty("--level", levelShown.toFixed(3));
-	// The move in progress, for debugging the classifier with a phone in
-	// hand: which way does the phone think this swing is going?
 	const now = stream.current;
-	if (now !== nowShown) {
-		nowShown = now;
-		moveNowEl.textContent = now === null ? "nothing" : MOVE_NAME[now];
-		moveNowEl.classList.toggle("live", now !== null);
-	}
+	racket?.level(Math.min(1, stream.level / LEVEL_FULL), now);
+	racket?.reading(
+		prefs.readout && now !== null ? `READING ${MOVE_NAME[now]}` : null,
+	);
+	racket?.show(currentView());
+	announce();
 	requestAnimationFrame(drawLevel);
 }
 
@@ -363,9 +289,11 @@ function onMotion(event: DeviceMotionEvent): void {
 	// Never substitute zeros: a fabricated at-rest sample is fed straight to
 	// the one algorithm whose job is telling rest from a swing.
 	if (sample === null) return;
+	const g = event.accelerationIncludingGravity;
+	if (g?.x != null && g.y != null) racket?.tilt(g.x / 9.81, -g.y / 9.81);
 	const swing = stream.push(sample);
 	if (swing === null) return;
-	showSwing(swing.power, swing.kind);
+	showSwing(swing.power, swing.lag ?? 0);
 	// Only while a point can be played: a gesture in the lobby is not a shot.
 	if (match?.phase === "playing") session?.send({ t: "swing", ...swing });
 }
@@ -376,23 +304,24 @@ function startPlaying(): void {
 	clearInterval(cardTimer);
 	cardSeen.disconnect();
 	document.documentElement.classList.add("playing");
+	racket = createRacket(racketCanvas);
 	keepAwake();
 	session = createSession({
-		onState: (state, detail) => {
-			statusEl.textContent = detail ?? STATUS_TEXT[state];
-			statusEl.dataset.state = state;
+		onState: (state) => {
+			connection = state;
 		},
 		onMatch: (info) => {
+			if (info.phase === "countdown" && match?.phase !== "countdown") {
+				countdownFrom = performance.now();
+			}
 			match = info;
-			renderMatch();
 		},
 		onFeedback: flash,
 		onSide: (side) => {
 			mySide = side;
-			sideEl.textContent = SIDE_NAME[side];
 			document.documentElement.style.setProperty("--side", SIDE_COLOR[side]);
+			racket?.setSide(SIDE_COLOR[side]);
 			document.body.classList.remove("gated");
-			renderMatch();
 			// Sent HERE, not right after createSession: the socket is not open
 			// yet at that point and `send` would drop it silently. Being
 			// assigned a side is the first moment there is a session to be

@@ -25,6 +25,7 @@ import {
 	type HostMessage,
 	type LobbyPlayer,
 	type MatchPhase,
+	type MatchScore,
 	type PlayerId,
 	PROTOCOL_VERSION,
 	RELAY_PATH,
@@ -43,6 +44,7 @@ import { advance, FIXED_DT } from "./loop.ts";
 import { nextMode } from "./render/camera.ts";
 import { detectEvents, type RenderEvent } from "./render/events.ts";
 import { createRenderer } from "./render/index.ts";
+import { sameScoreLine, scoreLine } from "./score-line.ts";
 import { createLobbyUI } from "./ui/lobby.ts";
 import {
 	CAMERA_LABEL,
@@ -83,6 +85,9 @@ let winner: Side | null = null;
 let bot: Bot | null = null;
 let botSide: Side | null = null;
 let countdownUntil = 0;
+/** This match is played on a split screen. Fixed at the start, because the
+ * sim's idea of "screen-left" is fixed with it (`shot.ts`, `screenLeftOf`). */
+let split = false;
 
 const pending: RallyInput[] = [];
 let previous: MatchState = createMatch("near");
@@ -171,12 +176,19 @@ function waitingFor(): Side | null {
 	return null;
 }
 
+/** The score line the phones were last told, so it is only re-sent when
+ * something on it changed — a handful of times a point. */
+let announced: MatchScore | null = null;
+
 function announce(): void {
+	const score = phase === "lobby" ? null : scoreLine(current);
+	announced = score;
 	send({
 		t: "match",
 		phase,
 		server: serverSide,
 		...(winner !== null ? { winner } : {}),
+		...(score !== null ? { score } : {}),
 	});
 }
 
@@ -200,12 +212,13 @@ const lobbyUI = createLobbyUI(uiRoot, {
 			bot = null;
 		}
 		serverSide = first.side;
+		split = !solo && settings.get().split;
 		winner = null;
 		phase = "countdown";
 		countdownUntil = performance.now() + 3000;
 		// The court the countdown shows is the one about to be played on:
 		// the camera flies in from the lobby's crane to a fresh match.
-		previous = createMatch(serverSide);
+		previous = createMatch(serverSide, split);
 		current = previous;
 		announce();
 	},
@@ -248,6 +261,8 @@ window.addEventListener("keydown", (event) => {
 	if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
 	switch (event.key.toLowerCase()) {
 		case "c":
+			// Each half of a split screen is already its player's camera.
+			if (split && phase !== "lobby") return;
 			settings.set({ camera: nextMode(settings.get().camera) });
 			return;
 		case "f":
@@ -296,6 +311,15 @@ function runTick(inputs: readonly RallyInput[]): void {
 		phase = "over";
 		winner = current.score.setWinner;
 		announce();
+	} else if (
+		// The only three things a score line is read from: checked first so a
+		// tick that changed none of them builds nothing.
+		(current.score !== before.score ||
+			current.phase !== before.phase ||
+			current.toss !== before.toss) &&
+		!sameScoreLine(announced, scoreLine(current))
+	) {
+		announce();
 	}
 }
 
@@ -314,7 +338,7 @@ function frame(now: number): void {
 
 		if (phase === "countdown" && now >= countdownUntil) {
 			phase = "playing";
-			previous = createMatch(serverSide);
+			previous = createMatch(serverSide, split);
 			current = previous;
 			pending.length = 0;
 			accumulator = 0;
@@ -364,7 +388,7 @@ function frame(now: number): void {
 				result.alpha,
 				frameDt,
 				frameEvents,
-				settings.get().camera,
+				phase === "over" ? "victory" : split ? "split" : settings.get().camera,
 			);
 		}
 		frameEvents.length = 0;

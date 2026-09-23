@@ -131,6 +131,14 @@ export function timingOf(error: number): number | undefined {
  */
 export const SCREEN_LEFT = -1;
 
+/** World `x` sign of the left of `side`'s screen. On one shared screen that
+ * is `SCREEN_LEFT` for both. On a split screen each player watches from
+ * behind their own baseline, so the far player's screen-left is their own
+ * left, +x — and a forehand still goes left on the screen they are looking
+ * at. */
+export const screenLeftOf = (side: Side, split: boolean): number =>
+	split && side === "far" ? -SCREEN_LEFT : SCREEN_LEFT;
+
 /** Which way `side` hits: -1 toward -z (the near player), +1 toward +z. */
 export const forwardOf = (side: Side): number => (side === "near" ? -1 : 1);
 
@@ -221,6 +229,7 @@ export function groundstroke(
 	u: number,
 	power: number,
 	env: BallEnv,
+	screenLeft = SCREEN_LEFT,
 ): Vec3 {
 	const p = clamp(power, 0, 1);
 	const t = clamp(u, -1, 1);
@@ -229,7 +238,7 @@ export function groundstroke(
 	const wide =
 		AIM_GOOD + early * (AIM_OUT - AIM_GOOD) - late * (AIM_GOOD - AIM_CENTER);
 	const target = {
-		x: (stroke === "forehand" ? SCREEN_LEFT : -SCREEN_LEFT) * wide,
+		x: (stroke === "forehand" ? screenLeft : -screenLeft) * wide,
 		z:
 			forwardOf(side) *
 			(lerp(DEPTH_SOFT, DEPTH_HARD, p) + late * lerp(LONG_SOFT, LONG_HARD, p)),

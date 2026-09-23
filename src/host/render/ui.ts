@@ -59,6 +59,9 @@ export interface ScoreUI {
 	 * the last score, so the next match's first score is not "called" as a
 	 * change from the last match's final one. */
 	setVisible(visible: boolean): void;
+	/** Two halves, one per player: a divider down the middle, each half
+	 * labelled with its side, and the scorebug moved to the top centre. */
+	setSplit(split: boolean): void;
 	/** A brief line at the bottom of the screen — what the camera just
 	 * changed to, and nothing weightier. */
 	note(text: string): void;
@@ -112,13 +115,21 @@ export function createScoreUI(root: HTMLElement): ScoreUI {
 	call.setAttribute("aria-live", "polite");
 
 	const note = el("div", "note");
-	root.append(bug, call, note);
+	const divider = el(
+		"div",
+		"divider",
+		el("span", "half-tag", SIDE_LABEL.near),
+		el("span", "half-tag", SIDE_LABEL.far),
+	);
+	divider.setAttribute("aria-hidden", "true");
+	root.append(divider, bug, call, note);
 
 	const rows: Readonly<Record<Side, Row>> = { near: near.row, far: far.row };
 	let lastScore: Score | null = null;
 	let hideAt = 0;
 	let noteTimer = 0;
 	let visible = false;
+	let split = false;
 
 	return {
 		note(text) {
@@ -126,6 +137,12 @@ export function createScoreUI(root: HTMLElement): ScoreUI {
 			note.classList.add("on");
 			window.clearTimeout(noteTimer);
 			noteTimer = window.setTimeout(() => note.classList.remove("on"), 1600);
+		},
+
+		setSplit(on) {
+			if (on === split) return;
+			split = on;
+			root.classList.toggle("split", on);
 		},
 
 		setVisible(on) {

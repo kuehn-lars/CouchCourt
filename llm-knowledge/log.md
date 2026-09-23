@@ -406,3 +406,32 @@ Promoted: [[0017-phosphor-icons-and-the-visual-system]],
 [[touch-action-is-an-intersection]]; [[modules/host]] and
 [[modules/controller]] updated. Seen in headless Chrome only; nothing on a
 phone.
+
+## [2026-09-24] build | A stadium worth playing in, split screen, and a racket on the phone
+
+**The ask.** Go all the way on the 3D scene (lighting, comic-realistic look,
+characters, animation) without touching the feel, sound or haptics; split
+screen for two players; and a phone match screen that is not a generic
+gauge. Permission to overturn earlier decisions.
+
+**What landed.** A rebuilt renderer ([[0018-stylised-stadium-renderer]]):
+cel-shaded, ink-outlined, articulated athletes (layered poses: stance, run or
+shuffle, coil, stroke, reaction; strokes join at the contact frame; a smash
+jumps; a ponytail on a spring; a racket smear), real player shadows, bloom and
+a grade, a night stadium with an upper deck, LED boards, floodlight beams, a
+3,860-strong crowd that reacts and does a wave, a chair umpire and ball kids
+who watch the ball, comic impact effects, and a victory orbit round the
+winner. Split screen ([[0019-split-screen]]) with the sim told whose
+screen-left is whose. The phone's match screen is now a racket whose strings
+carry the message as a stencil ([[0020-the-phone-is-the-string-bed]]), fed
+by a new optional score line on the wire.
+
+**Found:** the pause after a point is one tick (no room for a cutaway); a
+stencil on translucent strings is invisible even when it is there; vitest
+passed while one launch path missed the split flag, typecheck caught it; a
+canvas rendered once after a long synchronous loop screenshots black.
+
+449 tests (up from 408), lint, typecheck, build green; every state seen in
+headless Chrome. **Not verified: a real GPU's frame rate, a real phone.**
+
+

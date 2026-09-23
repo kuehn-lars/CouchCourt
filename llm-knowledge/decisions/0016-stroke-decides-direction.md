@@ -1,6 +1,6 @@
 ---
 title: The stroke you swing decides where the ball goes; timing decides how well
-updated: 2026-09-22
+updated: 2026-09-24
 tags: [decision, sim, input, swing, core, feel]
 status: current
 code:
@@ -21,6 +21,10 @@ backhand and overhand should decide where the ball goes, not the physics* —
 more playable and more fun even if less realistic — with the overhand only
 working on a ball in the air, balls landing in the court rather than on the
 baseline, and more depth. Explicit permission to break earlier decisions.
+
+**Amended by [[0019-split-screen]]:** "screen space" below means the screen
+that player is watching; on a split screen the far player's screen-left is
++x.
 
 **Supersedes decision 4 of [[0015-contact-model]]** (direction is timing, the
 Wii rule; stroke side from the ball's position; the phone's `kind` ignored).

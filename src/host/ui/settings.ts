@@ -20,6 +20,8 @@ export interface Settings {
 	readonly sound: boolean;
 	/** Two machines rally behind the lobby. Off saves a laptop's battery. */
 	readonly lobbyRally: boolean;
+	/** Two people each get their own half of the screen. */
+	readonly split: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -27,6 +29,7 @@ const DEFAULTS: Settings = {
 	opponent: "match",
 	sound: true,
 	lobbyRally: true,
+	split: true,
 };
 
 const OPPONENTS: readonly Opponent[] = ["relaxed", "match", "tough"];
@@ -52,6 +55,7 @@ function load(): Settings {
 			opponent: OPPONENTS,
 			sound: [true, false],
 			lobbyRally: [true, false],
+			split: [true, false],
 		});
 	} catch {
 		// A private window or blocked storage throws on access.
@@ -146,6 +150,9 @@ export function createSettingsUI(
 	const rally = toggleSwitch("Lobby rally", () =>
 		set({ lobbyRally: !settings.lobbyRally }),
 	);
+	const split = toggleSwitch("Split screen", () =>
+		set({ split: !settings.split }),
+	);
 	const fullscreenButton = el("button", "btn btn-ghost btn-small");
 	fullscreenButton.type = "button";
 
@@ -181,6 +188,11 @@ export function createSettingsUI(
 				"The machine",
 				"How often the solo opponent mistimes a shot. Applies from the next match.",
 				opponent.root,
+			),
+			row(
+				"Split screen",
+				"When two people play, each gets their own half, from behind their own player. From the next match.",
+				split.root,
 			),
 			row("Sound", "Racket, bounce and crowd.", sound.root),
 			row(
@@ -228,6 +240,7 @@ export function createSettingsUI(
 		opponent.show(settings.opponent);
 		sound.show(settings.sound);
 		rally.show(settings.lobbyRally);
+		split.show(settings.split);
 		renderScreen();
 	}
 

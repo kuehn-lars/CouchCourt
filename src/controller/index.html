@@ -84,35 +84,12 @@
 			</section>
 
 			<section id="play" hidden>
-				<header class="bar">
-					<span id="side" class="chip">Your side</span>
-					<span id="status" class="pill" role="status">Connecting</span>
-					<button id="open-settings" class="round" type="button" aria-label="Settings">
-						<span data-icon="gear" aria-hidden="true"></span>
-					</button>
-				</header>
-				<div id="stage" class="stage">
-					<p class="live">
-						Reading <b id="move-now">nothing</b>
-					</p>
-					<div id="ring" class="gauge" aria-hidden="true">
-						<i class="gauge-glow"></i>
-						<i class="gauge-track"></i>
-						<i class="gauge-ticks"></i>
-						<i class="gauge-fill"></i>
-						<div class="face">
-							<span id="power" class="power">0</span>
-							<span class="unit">Swing power</span>
-							<span id="move-last" class="last"></span>
-						</div>
-					</div>
-					<p id="toast" class="toast" aria-live="polite"></p>
-				</div>
-				<div id="hint" class="hint">
-					<span id="hint-icon" data-icon="tennisBall" aria-hidden="true"></span>
-					<b id="hint-title">Finding the host</b>
-					<small id="hint-detail">Keep this page open.</small>
-				</div>
+				<!-- The racket: the whole match screen is drawn by racket.ts. -->
+				<canvas id="racket" aria-hidden="true"></canvas>
+				<p id="status" class="sr" role="status" aria-live="polite"></p>
+				<button id="open-settings" class="round corner" type="button" aria-label="Settings">
+					<span data-icon="gear" aria-hidden="true"></span>
+				</button>
 			</section>
 		</main>
 

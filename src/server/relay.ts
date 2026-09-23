@@ -211,6 +211,7 @@ export function attachRelay(
 				phase: msg.phase,
 				server: msg.server,
 				...(msg.winner !== undefined ? { winner: msg.winner } : {}),
+				...(msg.score !== undefined ? { score: msg.score } : {}),
 			};
 			for (const ws of connsByPlayer.values()) sendTo(ws, out);
 		}

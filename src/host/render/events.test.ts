@@ -37,8 +37,10 @@ describe("strokeAnim", () => {
 		expect(strokeAnim({ kind: "backhand", air: false })).toBe("backhand");
 	});
 
-	it("animates a smash with the serve's overhead swing", () => {
-		expect(strokeAnim({ kind: "overhead", air: true })).toBe("serve");
+	// A smash is the serve's overhead swing, jumped: the one stroke taken
+	// off the ground, and the one a player should look like they launched.
+	it("animates a smash as a jumping overhead, not as a serve", () => {
+		expect(strokeAnim({ kind: "overhead", air: true })).toBe("smash");
 	});
 
 	it("animates anything else taken out of the air as a volley", () => {
