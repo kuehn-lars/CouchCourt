@@ -111,6 +111,48 @@ describe("isHostMessage", () => {
 		}
 	});
 
+	// The score line the phones show. Presentation only, but it still comes
+	// over a socket anyone on the LAN can open, so it is checked like the rest.
+	const score = {
+		games: { near: 3, far: 2 },
+		points: { near: "30", far: "AD" },
+		serving: "far",
+		ball: "toss",
+	};
+	it("accepts a match announcement with or without a score line", () => {
+		expect(
+			isHostMessage({ t: "match", phase: "playing", server: "near" }),
+		).toBe(true);
+		expect(
+			isHostMessage({ t: "match", phase: "playing", server: "near", score }),
+		).toBe(true);
+	});
+
+	it.each([
+		["a NaN game count", { ...score, games: { near: Number.NaN, far: 0 } }],
+		["a negative game count", { ...score, games: { near: -1, far: 0 } }],
+		[
+			"a point that is not a tennis point",
+			{ ...score, points: { near: "99999", far: "0" } },
+		],
+		[
+			"a point that is not a string",
+			{ ...score, points: { near: 15, far: "0" } },
+		],
+		["no server", { ...score, serving: "middle" }],
+		["a ball that is nowhere", { ...score, ball: "lost" }],
+		["no games at all", { ...score, games: null }],
+	])("rejects a score line with %s", (_, bad) => {
+		expect(
+			isHostMessage({
+				t: "match",
+				phase: "playing",
+				server: "near",
+				score: bad,
+			}),
+		).toBe(false);
+	});
+
 	// The two inbound directions must not accept each other's traffic, or a
 	// misrouted socket would look like a working one.
 	it("does not accept controller messages, and vice versa", () => {

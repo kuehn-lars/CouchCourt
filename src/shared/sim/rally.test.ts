@@ -355,6 +355,38 @@ describe("the stroke you play is where the ball goes", () => {
 	});
 });
 
+describe("split screen: each player's own screen", () => {
+	/** `near` serves to `far`, far returns a forehand on time, and the
+	 * return is flown to its bounce. */
+	function farForehand(split: boolean) {
+		const served = serve(createMatch("near", split));
+		const s = until(
+			served,
+			(x) => x.phase === "rally" && x.bounces === 1 && x.contact !== null,
+		);
+		const c = s.contact;
+		if (!c) throw new Error("no contact");
+		const on = until(s, (x) => x.time >= c.at + TIMING_IDEAL);
+		const hit = tick(on, [input("far", on, swing(0.7))], DT);
+		expect(hit.toHit).toBe("near");
+		return until(hit, (x) => x.bounces === 1 || x.phase === "point-over").ball
+			.p;
+	}
+
+	// One shared screen: forehand is the screen's left, -x, from either end.
+	it("sends the far forehand to -x when both players share one view", () => {
+		expect(farForehand(false).x).toBeLessThan(-0.5);
+	});
+
+	// Split: the far player watches from behind their own baseline, where
+	// the screen's left is +x. Their forehand must still go left on THEIR
+	// screen, or the stroke they swing sends the ball the other way.
+	it("sends the far forehand to +x when each player has their own view", () => {
+		expect(createMatch("near", true).split).toBe(true);
+		expect(farForehand(true).x).toBeGreaterThan(0.5);
+	});
+});
+
 describe("reach", () => {
 	it("whiffs when the player cannot get to the ball in time", () => {
 		const s = tick(

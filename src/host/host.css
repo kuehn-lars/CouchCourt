@@ -1,0 +1,1257 @@
+/*
+ * The host screen: everything drawn over the court. Dark only, one accent
+ * (the ball's optic yellow), SF Pro through system-ui, and every size in rem
+ * off a root that scales with the window, because this is read from a sofa
+ * on a Mac or a TV three metres away. Rules and rejected alternatives:
+ * llm-knowledge/decisions/0017-phosphor-icons-and-the-visual-system.md.
+ */
+
+@property --fill {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+:root {
+	--bg: #05080c;
+	--ink: #f3f6ef;
+	--ink-2: rgba(243, 246, 239, 0.68);
+	--ink-3: rgba(243, 246, 239, 0.44);
+	--hairline: rgba(255, 255, 255, 0.08);
+	--hairline-2: rgba(255, 255, 255, 0.15);
+	--glass: rgba(13, 18, 24, 0.64);
+	--glass-solid: rgba(11, 15, 20, 0.94);
+	--accent: #dcff4a;
+	--accent-ink: #10150a;
+	--near: #ff5d73;
+	--far: #5ac8fa;
+	--ok: #34d86a;
+
+	--font:
+		system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
+	--font-round:
+		ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif;
+	--font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+	/* A damped spring, sampled. linear() is Safari 17.2+ / Chrome 113+. */
+	--spring: linear(
+		0,
+		0.18 6%,
+		0.62 15%,
+		0.95 24%,
+		1.08 31%,
+		1.1 36%,
+		1.06 44%,
+		1 53%,
+		0.985 62%,
+		1 80%,
+		1
+	);
+
+	--r-panel: 1.75rem;
+	--r-card: 1.25rem;
+
+	color-scheme: dark;
+	/* 16px at 1440 wide, 21px at 1920: the whole overlay scales with the
+	   screen it is shown on. */
+	font-size: clamp(13px, 1.1vw, 24px);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	height: 100%;
+	background: var(--bg);
+	color: var(--ink);
+	font-family: var(--font);
+	-webkit-font-smoothing: antialiased;
+	overflow: hidden;
+}
+
+#scene {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+#ui {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+}
+
+button {
+	font: inherit;
+	color: inherit;
+}
+
+.icon {
+	display: inline-grid;
+	width: 1.25em;
+	height: 1.25em;
+	flex: none;
+}
+.icon svg {
+	width: 100%;
+	height: 100%;
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 3px;
+}
+
+/* ------------------------------------------------------------- buttons */
+
+.btn {
+	pointer-events: auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.55em;
+	height: 3.25rem;
+	padding: 0 1.6rem;
+	border: 0;
+	border-radius: 999px;
+	font-size: 1.05rem;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	white-space: nowrap;
+	cursor: pointer;
+	transition:
+		transform 180ms var(--ease),
+		background-color 180ms var(--ease),
+		box-shadow 240ms var(--ease),
+		opacity 200ms var(--ease);
+}
+.btn:active:not(:disabled) {
+	transform: scale(0.97);
+}
+.btn-primary {
+	background: var(--accent);
+	color: var(--accent-ink);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.55),
+		0 0.6rem 2rem -0.6rem rgba(220, 255, 74, 0.55);
+}
+.btn-primary:hover:not(:disabled) {
+	transform: translateY(-1px);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.55),
+		0 0.9rem 2.4rem -0.6rem rgba(220, 255, 74, 0.7);
+}
+.btn-ghost {
+	background: rgba(255, 255, 255, 0.08);
+	color: var(--ink);
+	box-shadow: inset 0 0 0 1px var(--hairline-2);
+}
+.btn-ghost:hover:not(:disabled) {
+	background: rgba(255, 255, 255, 0.13);
+}
+.btn:disabled {
+	cursor: default;
+}
+.btn-primary:disabled {
+	background: rgba(255, 255, 255, 0.1);
+	color: var(--ink-3);
+	box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.btn-ghost:disabled {
+	opacity: 0.45;
+}
+.btn-round {
+	width: 2.75rem;
+	height: 2.75rem;
+	padding: 0;
+	font-size: 1.15rem;
+	background: rgba(13, 18, 24, 0.5);
+	backdrop-filter: blur(20px) saturate(160%);
+	-webkit-backdrop-filter: blur(20px) saturate(160%);
+	box-shadow: inset 0 0 0 1px var(--hairline-2);
+}
+.btn-round:hover {
+	background: rgba(30, 38, 48, 0.7);
+}
+.btn-small {
+	height: 2.4rem;
+	padding: 0 1.1rem;
+	font-size: 0.92rem;
+}
+
+/* -------------------------------------------------- screen controls */
+
+.chrome {
+	position: fixed;
+	top: 1.5rem;
+	right: 1.75rem;
+	display: flex;
+	gap: 0.6rem;
+	transition:
+		opacity 500ms var(--ease),
+		transform 500ms var(--ease);
+}
+/* During a match the controls get out of the way until the mouse moves. */
+body.idle[data-phase="playing"] .chrome {
+	opacity: 0;
+	transform: translateY(-0.5rem);
+}
+body.idle[data-phase="playing"] {
+	cursor: none;
+}
+
+/* -------------------------------------------------- shared overlay */
+
+.layer {
+	position: fixed;
+	inset: 0;
+	opacity: 0;
+	visibility: hidden;
+	transition:
+		opacity 600ms var(--ease),
+		visibility 0s linear 600ms;
+}
+.layer.on {
+	opacity: 1;
+	visibility: visible;
+	transition:
+		opacity 600ms var(--ease),
+		visibility 0s;
+}
+
+/* ---------------------------------------------------------- lobby */
+
+.lobby {
+	display: grid;
+	grid-template-columns: minmax(0, 40rem) 1fr;
+	grid-template-rows: auto 1fr auto;
+	padding: 1.75rem 2.25rem 1.75rem 3.5rem;
+}
+/* A scrim, not a blur: the court stays sharp on the right and the panel
+   reads on the left. */
+.lobby::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	background:
+		linear-gradient(
+			90deg,
+			rgba(5, 8, 12, 0.94) 0%,
+			rgba(5, 8, 12, 0.86) 28%,
+			rgba(5, 8, 12, 0.35) 52%,
+			rgba(5, 8, 12, 0) 70%
+		),
+		linear-gradient(0deg, rgba(5, 8, 12, 0.7) 0%, rgba(5, 8, 12, 0) 26%);
+}
+
+.brand {
+	grid-column: 1;
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	font-size: 1.15rem;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+.brand .icon {
+	color: var(--accent);
+	width: 1.6rem;
+	height: 1.6rem;
+}
+
+.join {
+	grid-column: 1;
+	align-self: center;
+	display: flex;
+	flex-direction: column;
+	gap: 2rem;
+	pointer-events: auto;
+}
+
+.headline {
+	margin: 0;
+	font-size: 4.4rem;
+	line-height: 0.98;
+	font-weight: 700;
+	letter-spacing: -0.045em;
+	max-width: 11ch;
+	text-wrap: balance;
+}
+.headline .hl {
+	color: var(--accent);
+}
+.lede {
+	margin: -0.9rem 0 0;
+	max-width: 30ch;
+	font-size: 1.2rem;
+	line-height: 1.45;
+	color: var(--ink-2);
+	letter-spacing: -0.005em;
+}
+
+.join-row {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 1.5rem;
+	align-items: stretch;
+}
+
+.qr-card {
+	margin: 0;
+	display: grid;
+	gap: 0.7rem;
+	justify-items: center;
+}
+.qr {
+	position: relative;
+	width: 13.5rem;
+	aspect-ratio: 1;
+	padding: 0.85rem;
+	border-radius: var(--r-card);
+	background: #f6f8f2;
+	overflow: hidden;
+	box-shadow:
+		0 0 0 1px rgba(255, 255, 255, 0.4),
+		0 1.5rem 3.5rem -1rem rgba(0, 0, 0, 0.7),
+		0 0 0 0.5rem rgba(220, 255, 74, 0.08);
+}
+.qr svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+.qr svg path,
+.qr svg rect[fill="black"] {
+	fill: #0b0f0a;
+}
+/* A glint that crosses the code every few seconds, the one thing on the
+   screen that moves on its own: the code is what a guest should look at. */
+.qr::after {
+	content: "";
+	position: absolute;
+	inset: -40%;
+	background: linear-gradient(
+		105deg,
+		transparent 40%,
+		rgba(220, 255, 74, 0.28) 48%,
+		rgba(255, 255, 255, 0.5) 50%,
+		rgba(220, 255, 74, 0.28) 52%,
+		transparent 60%
+	);
+	transform: translateX(-70%);
+	animation: glint 5.5s var(--ease) 1.2s infinite;
+	mix-blend-mode: multiply;
+	pointer-events: none;
+}
+@keyframes glint {
+	0% {
+		transform: translateX(-70%);
+	}
+	30%,
+	100% {
+		transform: translateX(70%);
+	}
+}
+.url {
+	font: 500 0.78rem / 1.3 var(--font-mono);
+	color: var(--ink-3);
+	letter-spacing: 0;
+	max-width: 13.5rem;
+	text-align: center;
+	overflow-wrap: anywhere;
+}
+
+/* ----------------------------------------------------- the two seats */
+
+.roster {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	align-content: center;
+	gap: 0.6rem;
+}
+.seat {
+	--side: var(--near);
+	position: relative;
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 0.9rem;
+	padding: 0.9rem 1rem;
+	border-radius: var(--r-card);
+	background: rgba(255, 255, 255, 0.04);
+	box-shadow: inset 0 0 0 1px var(--hairline);
+	transition:
+		background-color 400ms var(--ease),
+		box-shadow 400ms var(--ease);
+}
+.seat[data-side="far"] {
+	--side: var(--far);
+}
+.seat-avatar {
+	position: relative;
+	padding: 0.8rem;
+	display: grid;
+	place-items: center;
+	width: 3rem;
+	height: 3rem;
+	border-radius: 50%;
+	color: color-mix(in srgb, var(--side) 70%, var(--ink-3));
+	font-size: 1.3rem;
+	box-shadow: inset 0 0 0 1.5px var(--hairline-2);
+	transition:
+		background-color 400ms var(--ease),
+		color 400ms var(--ease),
+		box-shadow 400ms var(--ease);
+}
+.seat-avatar svg,
+.btn-round > svg {
+	width: 100%;
+	height: 100%;
+}
+.btn-round > svg {
+	width: 1.2rem;
+	height: 1.2rem;
+}
+/* An empty seat breathes: it is waiting to be filled. */
+.seat[data-state="empty"] .seat-avatar::after {
+	content: "";
+	position: absolute;
+	inset: -1px;
+	border-radius: 50%;
+	border: 1.5px dashed color-mix(in srgb, var(--side) 55%, transparent);
+	animation: turn 14s linear infinite;
+}
+@keyframes turn {
+	to {
+		transform: rotate(1turn);
+	}
+}
+.seat-name {
+	font-size: 1.1rem;
+	font-weight: 650;
+	letter-spacing: -0.015em;
+}
+.seat-status {
+	margin-top: 0.15rem;
+	font-size: 0.88rem;
+	color: var(--ink-3);
+	transition: color 400ms var(--ease);
+}
+.seat-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	height: 1.9rem;
+	padding: 0 0.8rem;
+	border-radius: 999px;
+	font-size: 0.82rem;
+	font-weight: 650;
+	opacity: 0;
+	transform: scale(0.8);
+	transition:
+		opacity 300ms var(--ease),
+		transform 500ms var(--spring);
+}
+
+.seat[data-state="joining"] .seat-avatar,
+.seat[data-state="away"] .seat-avatar {
+	color: var(--side);
+	box-shadow: inset 0 0 0 1.5px var(--side);
+}
+.seat[data-state="joining"] .seat-status,
+.seat[data-state="away"] .seat-status {
+	color: var(--ink-2);
+}
+
+.seat[data-state="ready"],
+.seat[data-state="bot"] {
+	background: color-mix(in srgb, var(--side) 9%, rgba(255, 255, 255, 0.03));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--side) 45%, transparent);
+}
+.seat[data-state="ready"] .seat-avatar,
+.seat[data-state="bot"] .seat-avatar {
+	background: var(--side);
+	color: #0b0f14;
+	box-shadow: 0 0.4rem 1.4rem -0.3rem
+		color-mix(in srgb, var(--side) 70%, transparent);
+}
+.seat[data-state="ready"] .seat-status,
+.seat[data-state="bot"] .seat-status {
+	color: var(--ink-2);
+}
+.seat[data-state="ready"] .seat-tag {
+	opacity: 1;
+	transform: none;
+	background: color-mix(in srgb, var(--side) 18%, transparent);
+	color: var(--side);
+}
+.seat[data-state="away"] .seat-avatar {
+	animation: pulse 1.4s var(--ease) infinite;
+}
+@keyframes pulse {
+	50% {
+		opacity: 0.45;
+	}
+}
+
+/* ---------------------------------------------------------- actions */
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.75rem;
+}
+.actions .note-inline {
+	flex-basis: 100%;
+	margin: 0.1rem 0 0 0.25rem;
+	font-size: 0.85rem;
+	color: var(--ink-3);
+}
+
+.keys {
+	grid-column: 1;
+	grid-row: 3;
+	display: flex;
+	gap: 1.25rem;
+	font-size: 0.8rem;
+	color: var(--ink-3);
+}
+.keys span {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+}
+kbd {
+	display: inline-grid;
+	place-items: center;
+	min-width: 1.5rem;
+	height: 1.5rem;
+	padding: 0 0.35rem;
+	border-radius: 0.4rem;
+	font: 600 0.72rem / 1 var(--font);
+	color: var(--ink-2);
+	background: rgba(255, 255, 255, 0.06);
+	box-shadow:
+		inset 0 0 0 1px var(--hairline-2),
+		inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ------------------------------------------------ how-to-play slides */
+
+.tips {
+	grid-column: 2;
+	grid-row: 3;
+	justify-self: end;
+	align-self: end;
+	width: 22rem;
+	padding: 1.1rem 1.25rem 1.25rem;
+	border-radius: var(--r-panel);
+	background: var(--glass);
+	backdrop-filter: blur(28px) saturate(170%);
+	-webkit-backdrop-filter: blur(28px) saturate(170%);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.08),
+		inset 0 0 0 1px var(--hairline),
+		0 1.5rem 3rem -1.5rem rgba(0, 0, 0, 0.6);
+}
+.tips-progress {
+	display: grid;
+	grid-auto-flow: column;
+	gap: 0.3rem;
+	margin-bottom: 1rem;
+}
+.tips-progress i {
+	--fill: 0;
+	height: 3px;
+	border-radius: 2px;
+	background: linear-gradient(
+		90deg,
+		var(--ink) calc(var(--fill) * 100%),
+		rgba(255, 255, 255, 0.16) 0
+	);
+}
+.tips-progress i.done {
+	--fill: 1;
+}
+.tips-progress i.active {
+	animation: fill var(--tip-ms, 6000ms) linear forwards;
+}
+@keyframes fill {
+	to {
+		--fill: 1;
+	}
+}
+.tips-stage {
+	display: grid;
+}
+.tip {
+	grid-area: 1 / 1;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0.3rem 1rem;
+	align-items: start;
+	opacity: 0;
+	transform: translateY(0.6rem);
+	transition:
+		opacity 420ms var(--ease),
+		transform 620ms var(--ease);
+}
+.tip.on {
+	opacity: 1;
+	transform: none;
+	transition-delay: 120ms;
+}
+.tip .icon {
+	grid-row: span 2;
+	width: 2.6rem;
+	height: 2.6rem;
+	padding: 0.55rem;
+	border-radius: 0.85rem;
+	color: var(--accent);
+	background: rgba(220, 255, 74, 0.1);
+}
+.tip b {
+	font-size: 1.02rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+.tip span {
+	font-size: 0.88rem;
+	line-height: 1.4;
+	color: var(--ink-2);
+}
+
+/* ------------------------------------------------------- countdown */
+
+.countdown {
+	display: grid;
+	place-content: center;
+	justify-items: center;
+	gap: 1rem;
+	background: radial-gradient(
+		ellipse 60% 60% at 50% 50%,
+		rgba(5, 8, 12, 0.55),
+		rgba(5, 8, 12, 0) 70%
+	);
+}
+.count-num {
+	display: block;
+	font: 700 16rem / 0.9 var(--font-round);
+	letter-spacing: -0.06em;
+	font-variant-numeric: tabular-nums;
+	text-shadow: 0 1rem 4rem rgba(0, 0, 0, 0.6);
+}
+.count-sub {
+	margin: 0;
+	font-size: 1.2rem;
+	color: var(--ink-2);
+	font-weight: 500;
+}
+
+/* The word that starts a match, once, over the court. */
+.go {
+	display: grid;
+	place-items: center;
+	font: 800 12rem / 1 var(--font-round);
+	letter-spacing: -0.06em;
+	color: var(--accent);
+	text-shadow: 0 1rem 5rem rgba(220, 255, 74, 0.35);
+}
+
+/* -------------------------------------------------------- the pause */
+
+.pause {
+	display: grid;
+	place-items: center;
+	background: rgba(5, 8, 12, 0.62);
+	backdrop-filter: blur(14px) saturate(120%);
+	-webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+.pause-card {
+	display: grid;
+	justify-items: center;
+	gap: 1rem;
+	max-width: 30rem;
+	text-align: center;
+}
+.pause-card .icon {
+	width: 5rem;
+	height: 5rem;
+	padding: 1.3rem;
+	border-radius: 50%;
+	color: var(--side, var(--accent));
+	background: color-mix(in srgb, var(--side, var(--accent)) 12%, transparent);
+	box-shadow: 0 0 0 0
+		color-mix(in srgb, var(--side, var(--accent)) 40%, transparent);
+	animation: ripple 2s var(--ease) infinite;
+}
+@keyframes ripple {
+	70%,
+	100% {
+		box-shadow: 0 0 0 1.6rem transparent;
+	}
+}
+.pause h2,
+.result h2 {
+	margin: 0;
+	font-size: 3rem;
+	font-weight: 700;
+	letter-spacing: -0.04em;
+	line-height: 1.05;
+}
+.pause p,
+.result p {
+	margin: 0;
+	text-wrap: balance;
+	font-size: 1.15rem;
+	line-height: 1.45;
+	color: var(--ink-2);
+}
+
+/* ------------------------------------------------------- the result */
+
+/* A lower third over the winner's celebration, not a curtain in front of
+   it: the camera is orbiting the winner (render/camera.ts, victoryPose), so
+   the card sits bottom-left and the scene stays unblurred. */
+.result {
+	--side: var(--accent);
+	display: grid;
+	align-items: end;
+	justify-items: start;
+	padding: 0 0 4.5rem 4rem;
+	pointer-events: none;
+	background:
+		radial-gradient(
+			ellipse 60% 70% at 0% 100%,
+			color-mix(in srgb, var(--side) 22%, rgba(5, 8, 12, 0.9)),
+			transparent 70%
+		),
+		linear-gradient(0deg, rgba(5, 8, 12, 0.75), transparent 45%);
+}
+.result.on {
+	pointer-events: auto;
+}
+.result-card {
+	display: grid;
+	justify-items: start;
+	gap: 0.5rem;
+	text-align: left;
+}
+.result-card > .icon {
+	width: 3.6rem;
+	height: 3.6rem;
+	color: var(--side);
+	margin-bottom: 0.2rem;
+	filter: drop-shadow(
+		0 0 1.2rem color-mix(in srgb, var(--side) 60%, transparent)
+	);
+}
+.result h2 {
+	font-size: 3.6rem;
+}
+.result .winner {
+	color: var(--side);
+}
+.result .final {
+	display: flex;
+	align-items: baseline;
+	gap: 1.4rem;
+	margin: 0.2rem 0 0.6rem;
+	color: var(--ink);
+	font: 700 6.5rem / 1 var(--font-round);
+	letter-spacing: -0.05em;
+	font-variant-numeric: tabular-nums;
+}
+.final .lose {
+	color: var(--ink-3);
+}
+.final .sep {
+	width: 2.2rem;
+	height: 0.4rem;
+	border-radius: 1rem;
+	align-self: center;
+	background: var(--hairline-2);
+}
+.result .btn {
+	margin-top: 0.8rem;
+}
+
+/* --------------------------------------------------------- scorebug */
+
+.bug {
+	position: fixed;
+	top: 1.5rem;
+	left: 1.75rem;
+	display: grid;
+	min-width: 17rem;
+	border-radius: 1.1rem;
+	overflow: hidden;
+	background: rgba(10, 14, 19, 0.78);
+	backdrop-filter: blur(24px) saturate(160%);
+	-webkit-backdrop-filter: blur(24px) saturate(160%);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.08),
+		inset 0 0 0 1px var(--hairline),
+		0 1rem 2.5rem -1rem rgba(0, 0, 0, 0.7);
+	opacity: 0;
+	transform: translateY(-1.5rem) scale(0.98);
+	transition:
+		opacity 500ms var(--ease),
+		transform 700ms var(--spring);
+}
+.bug.on {
+	opacity: 1;
+	transform: none;
+}
+
+/* Split screen: one half per player. The scorebug moves to the top centre,
+   over the seam, where it belongs to neither half. */
+.divider {
+	position: fixed;
+	inset: 0 auto 0 50%;
+	width: 0.25rem;
+	margin-left: -0.125rem;
+	background: linear-gradient(
+		180deg,
+		var(--near) 0%,
+		rgba(5, 8, 12, 0.95) 30%,
+		rgba(5, 8, 12, 0.95) 70%,
+		var(--far) 100%
+	);
+	box-shadow:
+		0 0 0 1px rgba(255, 255, 255, 0.06),
+		0 0 2rem rgba(0, 0, 0, 0.6);
+	opacity: 0;
+	transition: opacity 500ms var(--ease);
+}
+#ui.split .divider {
+	opacity: 1;
+}
+.half-tag {
+	position: absolute;
+	bottom: 1.5rem;
+	display: inline-flex;
+	align-items: center;
+	height: 2.2rem;
+	padding: 0 1rem;
+	border-radius: 999px;
+	font-size: 0.95rem;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	white-space: nowrap;
+	color: var(--accent-ink);
+}
+.half-tag:first-child {
+	right: 1.5rem;
+	background: var(--near);
+}
+.half-tag:last-child {
+	left: 1.5rem;
+	background: var(--far);
+}
+#ui.split .bug {
+	left: 50%;
+	translate: -50% 0;
+}
+.bug-row {
+	display: grid;
+	grid-template-columns: 0.3rem 1fr 1.4rem 2.6rem 3.4rem;
+	align-items: center;
+	height: 2.9rem;
+}
+.bug-row + .bug-row {
+	border-top: 1px solid var(--hairline);
+}
+.bug-bar {
+	align-self: stretch;
+	background: var(--near);
+}
+.bug-row[data-side="far"] .bug-bar {
+	background: var(--far);
+}
+.bug-name {
+	padding-left: 0.9rem;
+	font-size: 1rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+.bug-serve {
+	display: grid;
+	place-items: center;
+	color: var(--accent);
+	opacity: 0;
+	transform: scale(0.4);
+	transition:
+		opacity 250ms var(--ease),
+		transform 500ms var(--spring);
+}
+.bug-serve.on {
+	opacity: 1;
+	transform: none;
+}
+.bug-serve .icon {
+	width: 1rem;
+	height: 1rem;
+}
+.bug-games,
+.bug-points {
+	display: grid;
+	place-items: center;
+	height: 100%;
+	overflow: hidden;
+	font: 700 1.35rem / 1 var(--font-round);
+	font-variant-numeric: tabular-nums;
+}
+.bug-games {
+	color: var(--ink-2);
+}
+.bug-points {
+	background: var(--accent);
+	color: var(--accent-ink);
+}
+.bug-row + .bug-row .bug-points {
+	box-shadow: inset 0 1px 0 rgba(16, 21, 10, 0.18);
+}
+.bug-tb {
+	padding: 0.35rem 0.9rem;
+	font-size: 0.72rem;
+	font-weight: 650;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	border-top: 1px solid var(--hairline);
+}
+
+/* ------------------------------------------------------ umpire's call */
+
+.call {
+	position: fixed;
+	top: 15%;
+	left: 50%;
+	transform: translateX(-50%);
+	display: grid;
+	justify-items: center;
+	gap: 0.7rem;
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity 400ms var(--ease);
+}
+.call.on {
+	opacity: 1;
+	transition: none;
+}
+.call-text {
+	font-size: 3.6rem;
+	font-weight: 700;
+	letter-spacing: -0.035em;
+	text-shadow: 0 0.4rem 2.5rem rgba(0, 0, 0, 0.8);
+}
+.call.on .call-text {
+	animation: wipe 560ms var(--ease) both;
+}
+.call-rule {
+	width: 4rem;
+	height: 0.3rem;
+	border-radius: 1rem;
+	background: var(--accent);
+	transform-origin: center;
+}
+.call.on .call-rule {
+	animation: grow 700ms var(--spring) 120ms both;
+}
+@keyframes wipe {
+	/* The clip overhangs every edge but the moving one, or it crops the
+	   text-shadow into a visible box. */
+	from {
+		clip-path: inset(-60% 100% -60% -20%);
+		transform: translateX(-0.8rem);
+	}
+	to {
+		clip-path: inset(-60% -20% -60% -20%);
+		transform: none;
+	}
+}
+@keyframes grow {
+	from {
+		transform: scaleX(0);
+	}
+}
+
+/* A brief line at the bottom: what the camera just changed to. */
+.note {
+	position: fixed;
+	bottom: 2rem;
+	left: 50%;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.55rem;
+	padding: 0.7rem 1.2rem;
+	border-radius: 999px;
+	font-size: 0.95rem;
+	font-weight: 550;
+	background: var(--glass);
+	backdrop-filter: blur(20px) saturate(160%);
+	-webkit-backdrop-filter: blur(20px) saturate(160%);
+	box-shadow: inset 0 0 0 1px var(--hairline-2);
+	opacity: 0;
+	transform: translate(-50%, 0.8rem);
+	transition:
+		opacity 300ms var(--ease),
+		transform 500ms var(--ease);
+}
+.note.on {
+	opacity: 1;
+	transform: translate(-50%, 0);
+}
+
+/* ------------------------------------------------------ settings sheet */
+
+.sheet {
+	position: fixed;
+	inset: 1rem 1rem auto auto;
+	margin: 0;
+	width: min(27rem, calc(100vw - 2rem));
+	height: auto;
+	max-height: calc(100vh - 2rem);
+	padding: 0;
+	border: 0;
+	border-radius: var(--r-panel);
+	color: var(--ink);
+	background: rgba(14, 19, 26, 0.8);
+	backdrop-filter: blur(40px) saturate(180%);
+	-webkit-backdrop-filter: blur(40px) saturate(180%);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.1),
+		inset 0 0 0 1px var(--hairline-2),
+		0 2rem 5rem -1rem rgba(0, 0, 0, 0.7);
+	overflow: auto;
+}
+.sheet[open] {
+	animation: sheet-in 560ms var(--ease) both;
+}
+.sheet.closing {
+	animation: sheet-out 260ms var(--ease-in) both;
+}
+.sheet::backdrop {
+	background: rgba(5, 8, 12, 0.35);
+	backdrop-filter: blur(4px);
+	-webkit-backdrop-filter: blur(4px);
+}
+@keyframes sheet-in {
+	from {
+		opacity: 0;
+		transform: translateX(2rem) scale(0.98);
+	}
+}
+@keyframes sheet-out {
+	to {
+		opacity: 0;
+		transform: translateX(1.5rem);
+	}
+}
+.sheet-inner {
+	display: grid;
+	gap: 0.35rem;
+	padding: 1.5rem;
+}
+.sheet-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 0.9rem;
+}
+.sheet h2 {
+	margin: 0;
+	font-size: 1.7rem;
+	font-weight: 700;
+	letter-spacing: -0.03em;
+}
+.setting {
+	display: grid;
+	gap: 0.7rem;
+	padding: 1.1rem 0;
+}
+.setting + .setting {
+	border-top: 1px solid var(--hairline);
+}
+.setting.row {
+	grid-template-columns: 1fr auto;
+	align-items: center;
+}
+.setting h3 {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+.setting p {
+	margin: 0.2rem 0 0;
+	font-size: 0.85rem;
+	line-height: 1.4;
+	color: var(--ink-3);
+}
+
+/* Segmented control with a sliding thumb. */
+.seg {
+	--i: 0;
+	--n: 3;
+	position: relative;
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 1fr;
+	padding: 0.25rem;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.06);
+	box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.seg::before {
+	content: "";
+	position: absolute;
+	top: 0.25rem;
+	bottom: 0.25rem;
+	left: 0.25rem;
+	width: calc((100% - 0.5rem) / var(--n));
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.14);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.12),
+		0 0.3rem 0.9rem -0.3rem rgba(0, 0, 0, 0.6);
+	transform: translateX(calc(var(--i) * 100%));
+	transition: transform 520ms var(--spring);
+}
+.seg button {
+	position: relative;
+	height: 2.35rem;
+	border: 0;
+	border-radius: 999px;
+	background: none;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--ink-2);
+	cursor: pointer;
+	transition: color 250ms var(--ease);
+}
+.seg button[aria-checked="true"] {
+	color: var(--ink);
+}
+
+/* A switch, drawn: the native `switch` attribute is Safari-only. */
+.switch {
+	position: relative;
+	width: 3.2rem;
+	height: 1.95rem;
+	border: 0;
+	border-radius: 999px;
+	padding: 0;
+	background: rgba(255, 255, 255, 0.16);
+	cursor: pointer;
+	transition: background-color 300ms var(--ease);
+}
+.switch::after {
+	content: "";
+	position: absolute;
+	top: 0.2rem;
+	left: 0.2rem;
+	width: 1.55rem;
+	height: 1.55rem;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 0.15rem 0.5rem rgba(0, 0, 0, 0.35);
+	transition: transform 480ms var(--spring);
+}
+.switch[aria-checked="true"] {
+	background: var(--ok);
+}
+.switch[aria-checked="true"]::after {
+	transform: translateX(1.25rem);
+}
+
+.sheet-foot {
+	margin-top: 0.6rem;
+	font-size: 0.78rem;
+	color: var(--ink-3);
+}
+
+/* ------------------------------------------------- narrow host windows */
+
+@media (max-width: 900px) {
+	.lobby {
+		grid-template-columns: 1fr;
+		padding: 1.25rem 1rem;
+	}
+	.lobby::before {
+		background: rgba(5, 8, 12, 0.86);
+	}
+	.tips,
+	.keys {
+		display: none;
+	}
+	.headline {
+		font-size: 2.8rem;
+	}
+	.join-row {
+		grid-template-columns: 1fr;
+		justify-items: center;
+	}
+	.roster {
+		width: 100%;
+	}
+	.seat {
+		padding: 0.8rem 1rem;
+	}
+}
+
+/* ----------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+	/* The one override that has to beat every animation and transition
+	   rule on the page, hence the only !important in the file. */
+	/* biome-ignore-start lint/complexity/noImportantStyles: see above */
+	*,
+	*::before,
+	*::after {
+		animation-duration: 1ms !important;
+		animation-delay: 0ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+		transition-delay: 0ms !important;
+	}
+	/* biome-ignore-end lint/complexity/noImportantStyles: see above */
+
+	.qr::after {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-transparency: reduce) {
+	.tips,
+	.sheet,
+	.bug,
+	.note,
+	.btn-round {
+		background: var(--glass-solid);
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+	}
+}
+
+/* The panel slides away as the countdown takes the screen. */
+.lobby .join,
+.lobby .tips {
+	transition: transform 800ms var(--ease);
+}
+.lobby:not(.on) .join {
+	transform: translateX(-3rem);
+}
+.lobby:not(.on) .tips {
+	transform: translateY(2rem);
+}

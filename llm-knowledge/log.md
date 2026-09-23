@@ -1,6 +1,6 @@
 ---
 title: Project log
-updated: 2026-09-22
+updated: 2026-09-24
 tags: [meta]
 status: current
 ---
@@ -389,3 +389,68 @@ width and pace together. Shipped: decent player wins 57% of points against the
 phone sending mixed strokes against the bot, and the controller's readout
 driven by synthetic `devicemotion` — no console errors. **Not verified: a real
 phone, a real person, recorded smashes (only serves back the overhead rule).**
+
+## [2026-09-23] build | The host and the phone, redesigned
+
+Lobby as a title screen: headline, join QR, two animated seats, how-to
+slides, and two machines rallying behind it under a slow crane camera
+(`attractPose`, tested at 16:9 and 16:10). Broadcast scorebug, wipe-in
+umpire's call ("Game, Near", no dashes), cinematic countdown, pause and
+result screens, a settings sheet (camera, machine level, sound, lobby rally,
+full screen). Phone: animated swing on the gate, swipeable cards, a 270°
+power dial in the player's colour, stamped feedback, a settings sheet.
+Far player amber → ice. Near plane 0.1 → 1 (court striped against the
+apron from the crane). 408 tests.
+
+Promoted: [[0017-phosphor-icons-and-the-visual-system]],
+[[touch-action-is-an-intersection]]; [[modules/host]] and
+[[modules/controller]] updated. Seen in headless Chrome only; nothing on a
+phone.
+
+## [2026-09-24] build | A stadium worth playing in, split screen, and a racket on the phone
+
+**The ask.** Go all the way on the 3D scene (lighting, comic-realistic look,
+characters, animation) without touching the feel, sound or haptics; split
+screen for two players; and a phone match screen that is not a generic
+gauge. Permission to overturn earlier decisions.
+
+**What landed.** A rebuilt renderer ([[0018-stylised-stadium-renderer]]):
+cel-shaded, ink-outlined, articulated athletes (layered poses: stance, run or
+shuffle, coil, stroke, reaction; strokes join at the contact frame; a smash
+jumps; a ponytail on a spring; a racket smear), real player shadows, bloom and
+a grade, a night stadium with an upper deck, LED boards, floodlight beams, a
+3,860-strong crowd that reacts and does a wave, a chair umpire and ball kids
+who watch the ball, comic impact effects, and a victory orbit round the
+winner. Split screen ([[0019-split-screen]]) with the sim told whose
+screen-left is whose. The phone's match screen is now a racket whose strings
+carry the message as a stencil ([[0020-the-phone-is-the-string-bed]]), fed
+by a new optional score line on the wire.
+
+**Found:** the pause after a point is one tick (no room for a cutaway); a
+stencil on translucent strings is invisible even when it is there; vitest
+passed while one launch path missed the split flag, typecheck caught it; a
+canvas rendered once after a long synchronous loop screenshots black.
+
+449 tests (up from 408), lint, typecheck, build green; every state seen in
+headless Chrome. **Not verified: a real GPU's frame rate, a real phone.**
+
+
+## [2026-09-24] fix | The host went black on a real GPU
+
+On an M3 the host flashed the stadium, then went black. The cause was not
+GPU power. three invalidates a multisampled target after every render, and
+bloom (and a split screen's second view) drew into it again. Apple GPUs
+discard it, SwiftShader does not. The composer target is now `samples: 0`.
+Checked on the real Metal GPU through headless Chrome: renders, 60fps in
+the lobby. Promoted: [[msaa-target-is-discarded-after-resolve]]. Not
+verified: split screen and a full match on the real GPU.
+
+## [2026-09-24] fix | Black rectangles flickering on the host
+
+On an M3, black rectangles flickered across the host screen on about 5% of
+frames. The floodlight beam shader took `pow` of a value that interpolation
+pushes just below zero at the court end. Metal returns NaN for that, and
+bloom spread the NaN into blocks. The base is now clamped. With the host read
+back on the real Metal GPU in the lobby, frames with NaN went from 3–7 in
+100–150 to 0 in 251. Promoted: [[nan-pixels-become-bloom-blocks]]. Not
+verified: a full match and the split screen on the real GPU.

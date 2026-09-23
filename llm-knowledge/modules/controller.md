@@ -1,6 +1,6 @@
 ---
 title: "Module: src/controller — the iPhone racket"
-updated: 2026-09-22
+updated: 2026-09-24
 tags: [module, controller, ios]
 status: current
 code:
@@ -10,6 +10,11 @@ code:
   - `src/controller/wake-lock.ts`
   - `src/controller/motion.ts`
   - `src/controller/index.html`
+  - `src/controller/controller.css`
+  - `src/controller/icons.ts`
+  - `src/controller/racket.ts`
+  - `src/controller/view.ts`
+  - `src/controller/view.test.ts`
   - `src/controller/record.ts`
   - `src/controller/record.html`
   - `scripts/trace-endpoint.ts`
@@ -30,7 +35,11 @@ verified" below before trusting this page over your own hands.
 | `src/controller/session.ts` | Socket identity, resume, reconnect backoff | `backoffMs` tested; socket wiring untested by design (DOM/WebSocket wiring) |
 | `src/controller/wake-lock.ts` | `keepAwake()` — screen wake lock with re-acquire on visibility | untested by design (browser API wiring, no logic to assert) |
 | `src/controller/motion.ts` | `requestMotionPermission()` — the iOS permission gate | working, now used by both the controller and the recorder |
-| `src/controller/index.html` | The controller page | built — permission gate + play screen, replaces the old placeholder |
+| `src/controller/index.html` | The controller page | built — permission gate + play screen + settings sheet; redesigned 2026-09-23 |
+| `src/controller/controller.css` | Every controller style, including the platform rules (touch-action, safe areas) | — |
+| `src/controller/icons.ts` | Phosphor glyphs; fills `[data-icon]` placeholders | no |
+| `src/controller/view.ts` | `racketView`: what the racket says for each match state, from your own side | **yes**, `view.test.ts` |
+| `src/controller/racket.ts` | The match screen: the racket drawn on a 2D canvas — strings, stencil, frame, ball, stamps | no (drawing) |
 | `src/controller/record.html` | The trace recorder UI | working, dev tool, unchanged |
 | `src/controller/record.ts` | The recorder: capture, countdown, live readout, save | working, dev tool; now imports `keepAwake` from `wake-lock.ts` instead of holding its own copy |
 
@@ -155,39 +164,63 @@ One page-level constraint encoded in both HTML files: a racket swing must
 never scroll, rubber-band or pinch-zoom the page — `user-scalable=no`,
 `touch-action: none`, `overscroll-behavior: none`, `viewport-fit=cover`.
 
-## The match screen, added 2026-09-20, redesigned 2026-09-22
+## The match screen: the phone is the string bed (2026-09-24)
 
-The play screen is a side chip in the avatar's colour (`SIDE_COLOR`, matching
-`host/render/entities.ts`), a ring showing the last swing's power with a glow
-that follows live rotation, a feedback toast, and a two-line hint — the serve
-hint teaches the Wii toss ("swing once to toss, again to hit"), the rally hint
-the stroke directions. The ring keeps the strongest peak for 400ms, because
-one swing arrives as several peaks.
+[[0020-the-phone-is-the-string-bed]]. The match screen is one canvas
+(`racket.ts`) drawing a racket head that fills the screen, with everything the
+phone says stencilled onto the strings. `main.ts` wires it and decides
+nothing about how it looks:
 
-**A corner readout shows the move the phone reads** (added 2026-09-22 for
-debugging the classifier with a phone in hand): *Now* is `stream.current`,
-redrawn once a frame, the lobe in progress or a dash; *Last* is the stroke
-and power of the peak the ring shows — the same strongest-in-400ms rule, so
-it names the peak the host will most likely play. The arrows are screen
-directions ([[0016-stroke-decides-direction]]). It runs in the lobby too,
-where nothing is sent, so a player can try strokes before the match.
-Seen in headless Chrome with synthetic `devicemotion`; not on a phone.
+```
+session.onMatch ──▶ match ─┐
+session.onSide  ──▶ mySide ├─▶ racketView() (view.ts, pure) ──▶ racket.show()
+connection state ──────────┘        once a frame, in drawLevel; re-inks only on change
 
-`createSession` gained two optional handlers, and `main.ts` renders them:
+stream.level / stream.current ──▶ racket.level()     frame glow, strings bow
+stream.push → Swing ──▶ showSwing ──▶ racket.swing()  frame charges; ball tossed
+session.onFeedback ──▶ flash()  ──▶ racket.hit/point/miss  + colour wash + haptic
+devicemotion gravity ──▶ racket.tilt()                stencil parallax
+```
 
-- `onMatch(info)` — the host's `{ phase, server, winner }`, relayed. The
-  phone shows "Waiting for the host to start", "Get ready", "You serve —
-  swing!", "Match over". It **decides nothing** from this
-  ([[0002-host-authoritative-simulation]]); it is presentation of a relayed
-  fact.
-- `onFeedback(kind)` — `hit` (you struck the ball), `point` (you won the
-  point) or `miss` (you lost it), as a full-screen colour wash and a toast.
-  Since 2026-09-22 the host derives these from state, not from whether the
-  tick a swing arrived on flipped `toHit` — under the contact model an early
-  swing is held, so that tick says nothing. The flash is not a fallback:
-  **iOS Safari has no `navigator.vibrate`**. It also clicks a hidden
-  `<input switch>` label, which on iOS 18+ is reported to play a system haptic
-  tick — **unverified on a phone**; if it does nothing, nothing is lost.
+What the phone knows about the match comes from the host's `match` message:
+the phase, and since 2026-09-24 **`score`** (`MatchScore` — games, points, who
+serves, and the ball in hand / tossed / in play). That is what lets the racket
+say SERVE with a ball on the strings, HIT once it is up, RETURN when they
+serve, and the score from your own side. Still presentation of a relayed fact:
+the phone decides nothing from it ([[0002-host-authoritative-simulation]]).
+
+**The toss is started by the phone's own swing**, not by the host's reply:
+with the ball in hand, the swing the phone just read is the toss, so the ball
+leaves the strings immediately, back-dated by the detector's `lag`, and flies
+on `TOSS_APEX`. The host's `ball: "toss"` is the fallback.
+
+Kept from before, unchanged: one swing arrives as several peaks, so the
+strongest in 400ms is the one shown (and the one the host plays); swings are
+sent only while `playing`; the flash wash and the iOS 18 switch-label haptic
+(**iOS Safari has no `navigator.vibrate`**; the haptic trick is still
+unverified on a phone). The stroke readout (a setting) now reads along the
+throat.
+
+**Why the strings are opaque:** a stencil drawn `source-atop` onto
+58%-transparent strings landed — 5,767 yellow pixels measured on the layer —
+and was invisible, olive on grey. Opaque grey strings, full-strength ink, and
+a denser weave (20 × 27) so a letter is crossed by a dozen strings. Captions
+and game pips are printed over the strings, not stencilled: at caption size a
+letter is crossed by two strings.
+
+## The gate (redesigned 2026-09-23, unchanged since)
+
+An animated swing (a phone on an arm meeting a ball at the top of its arc),
+"This phone is your racket.", four swipeable how-to cards that turn over on
+their own until touched, and one button. The permission rules above are
+untouched: the button's handler is byte-for-byte the same. **The cards needed
+a `touch-action` change** — [[touch-action-is-an-intersection]]. Settings
+(gear, bottom corner beside the throat): screen flash, haptic tick, stroke
+readout, kept in `localStorage` through `shared/prefs.ts`.
+
+Seen in headless Chrome at 390x844, driven by a fake host over the real relay
+(every phase and feedback kind) and by synthetic `devicemotion` through the
+real detector. Not on a phone.
 
 ## What is and is not verified
 

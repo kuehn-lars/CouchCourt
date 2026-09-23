@@ -172,6 +172,118 @@ export function cameraPose(mode: CameraMode, input: CameraInput): CameraPose {
 	};
 }
 
+/**
+ * Attract: the lobby's title-screen camera. The court plays itself behind
+ * the join panel, so this is a slow crane round the corner of the court —
+ * swinging gently either side of a high three-quarter view — rather than any
+ * of the match cameras. The target is pushed off to the camera's left by
+ * `ATTRACT_OFFSET`, which puts the court in the right of the frame and leaves
+ * the left to the panel (`ui/lobby.ts`).
+ *
+ * Seconds in, pose out, and a whole number of loops per `ATTRACT_PERIOD`, so
+ * the lobby can sit for an hour without the move ever snapping back.
+ */
+export const ATTRACT_PERIOD = 64;
+const ATTRACT_RADIUS = 44;
+const ATTRACT_HEIGHT = 22;
+const ATTRACT_FOV = 40;
+/** Centre of the swing and how far it goes either way, radians from
+ * straight behind the near baseline. */
+const ATTRACT_MID = (30 * Math.PI) / 180;
+const ATTRACT_SWING = (14 * Math.PI) / 180;
+const ATTRACT_OFFSET = 15;
+/** Looking at a point below the floor lifts the court to the middle of the
+ * frame instead of the bottom third. All seven numbers were swept together
+ * against the same projection `camera.test.ts` uses, then picked by eye. */
+const ATTRACT_LOOK_Y = -3;
+
+export function attractPose(seconds: number): CameraPose {
+	const phase = (seconds / ATTRACT_PERIOD) * Math.PI * 2;
+	const angle = ATTRACT_MID + ATTRACT_SWING * Math.sin(phase);
+	const sin = Math.sin(angle);
+	const cos = Math.cos(angle);
+	// The camera's own right, level with the ground, while it looks at the
+	// middle of the court.
+	return {
+		position: {
+			x: ATTRACT_RADIUS * sin,
+			y: ATTRACT_HEIGHT,
+			z: ATTRACT_RADIUS * cos,
+		},
+		target: {
+			x: -ATTRACT_OFFSET * cos,
+			y: ATTRACT_LOOK_Y,
+			z: ATTRACT_OFFSET * sin,
+		},
+		fov: ATTRACT_FOV,
+	};
+}
+
+/**
+ * Split: one half of the screen per player, each from behind their own
+ * baseline, the way a game gives each player their own camera. A player
+ * watches their own avatar's back and the ball coming at them, so the depth
+ * cue the game is built on is the same at both ends — on one shared screen
+ * the far player sees everything from the wrong side.
+ *
+ * The camera slides with its own player (`selfX`), not with the ball: from
+ * this close, a half-screen slice is only ~7m wide at the baseline and a
+ * player out wide would leave it.
+ *
+ * The far half is the near half turned round through the net, so its left is
+ * world +x — which is why the sim sends a far forehand to +x on a split
+ * screen (`shot.ts`, `screenLeftOf`).
+ */
+const SPLIT_HEIGHT = 6.4;
+const SPLIT_BACK = 13;
+const SPLIT_FOV = 44;
+const SPLIT_TARGET_Z = -3;
+const SPLIT_TARGET_Y = 0.4;
+/** How far the camera follows its own player across, as a fraction. */
+const SPLIT_FOLLOW = 0.72;
+
+export function splitPose(side: "near" | "far", selfX: number): CameraPose {
+	const s = side === "near" ? 1 : -1;
+	const x = clamp(selfX, -NET_POST_X - 1.5, NET_POST_X + 1.5) * SPLIT_FOLLOW;
+	return {
+		position: { x, y: SPLIT_HEIGHT, z: s * (BASELINE_Z + SPLIT_BACK) },
+		target: { x, y: SPLIT_TARGET_Y, z: s * SPLIT_TARGET_Z },
+		fov: SPLIT_FOV,
+	};
+}
+
+/**
+ * Victory: the match is over and the camera comes down onto the court to
+ * orbit the winner while they celebrate, from the front — their face, not
+ * the back of their shirt. A slow swing either side, never a full circle,
+ * so it reads as a crane move and not as a spin.
+ *
+ * Height is what keeps it clear of the net: a winner who finished the last
+ * point at the net puts this camera over the other half, above the cord.
+ */
+const VICTORY_RADIUS = 7.6;
+const VICTORY_HEIGHT = 2.3;
+const VICTORY_FOV = 36;
+const VICTORY_SWING = 0.75;
+
+export function victoryPose(
+	side: "near" | "far",
+	at: { readonly x: number; readonly z: number },
+	seconds: number,
+): CameraPose {
+	const front = side === "near" ? -1 : 1;
+	const angle = VICTORY_SWING * Math.sin(seconds * 0.35);
+	return {
+		position: {
+			x: at.x + Math.sin(angle) * VICTORY_RADIUS,
+			y: VICTORY_HEIGHT,
+			z: at.z + front * Math.cos(angle) * VICTORY_RADIUS,
+		},
+		target: { x: at.x, y: 1.3, z: at.z },
+		fov: VICTORY_FOV,
+	};
+}
+
 /** The next mode in the cycle, for the key handler in `main.ts`. */
 export function nextMode(mode: CameraMode): CameraMode {
 	const i = CAMERA_MODES.indexOf(mode);

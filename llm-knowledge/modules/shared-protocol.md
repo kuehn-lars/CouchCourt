@@ -1,6 +1,6 @@
 ---
 title: "Module: src/shared/protocol.ts — the wire contract"
-updated: 2026-09-22
+updated: 2026-09-24
 tags: [module, protocol, networking]
 status: current
 code:
@@ -116,6 +116,19 @@ oversight, so [[wire-protocol]] records the reasoning.
   because the host page, the controller and three integration tests all have
   to agree with it. Sharing a port with Vite's HMR socket makes a path part of
   the contract: [[one-port-one-websocket-path]].
+
+## Changes of 2026-09-24
+
+`MatchInfo.score?: MatchScore` — games, points (as the umpire says them),
+who serves, and `ball: "hand" | "toss" | "play"`. **Optional, no version
+bump**: an older phone ignores it, an older host never sends it. Guarded in
+`isHostMessage` (`isMatchScore`: whole games 0..99, points matching
+`0|15|30|40|AD|\d{1,2}`, a real side, a real ball state), passed through by
+the relay's explicit `match` rebuild in `relay.ts` **and** by the session's in
+`controller/session.ts` — both copy fields one by one, so a new field has to
+be added in both or it silently vanishes. The host builds it in
+`src/host/score-line.ts` and sends it only when it changes.
+[[0020-the-phone-is-the-string-bed]].
 
 ## Fields with a trap in them
 

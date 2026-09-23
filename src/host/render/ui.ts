@@ -1,70 +1,67 @@
 /**
- * The score overlay. Plain DOM over the canvas, not a Three.js scene — crisp
- * text at any resolution costs nothing this way, and there is no reason to
- * fight a GPU for something a browser already renders perfectly.
+ * The score overlay: a broadcast scorebug in the top-left corner, the
+ * umpire's call above the net, and a one-line note at the bottom. Plain DOM
+ * over the canvas, not a Three.js scene — crisp text at any resolution costs
+ * nothing this way. Styles are in `host.css`.
+ *
+ * The corner, not the centre: panels once sat centred at the top and bottom
+ * edges, which put the near player's head behind the bottom one for the
+ * whole match — the players stand on the centre line, which is exactly where
+ * the middle of the screen is.
  */
 
 import type { Side } from "../../shared/protocol.ts";
 import type { Score } from "../../shared/sim/scoring.ts";
+import { el, play, setText } from "../ui/dom.ts";
+import { icon } from "../ui/icons.ts";
 
 const SIDE_LABEL: Readonly<Record<Side, string>> = { near: "Near", far: "Far" };
-const SIDE_COLOR: Readonly<Record<Side, string>> = {
-	near: "#ff5d73",
-	far: "#ffd166",
-};
 
-interface Panel {
-	readonly root: HTMLDivElement;
-	readonly games: HTMLDivElement;
-	readonly points: HTMLDivElement;
-	readonly dot: HTMLDivElement;
+interface Row {
+	readonly games: HTMLSpanElement;
+	readonly points: HTMLSpanElement;
+	readonly serve: HTMLSpanElement;
 }
 
-/**
- * Corners, not the centre. The panels used to sit centred at the top and
- * bottom edges, which put the near player's head behind the bottom one for
- * the whole match — the players stand on the centre line, which is exactly
- * where the middle of the screen is.
- */
-function buildPanel(side: Side, align: "left" | "right"): Panel {
-	const root = document.createElement("div");
-	root.className = "score-panel";
-	root.style.cssText = `
-		position: fixed; top: 20px; ${align}: 20px;
-		display: flex; align-items: center; gap: 12px;
-		padding: 10px 20px; border-radius: 16px;
-		background: rgba(10, 20, 30, 0.55);
-		backdrop-filter: blur(10px);
-		border: 1px solid rgba(255,255,255,0.12);
-		font-family: system-ui, sans-serif; color: #f4f8fb;
-		box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-	`;
+function buildRow(side: Side): { root: HTMLDivElement; row: Row } {
+	const games = el("span", "bug-games");
+	const points = el("span", "bug-points");
+	const serve = el("span", "bug-serve", icon("tennisBall"));
+	const root = el(
+		"div",
+		"bug-row",
+		el("span", "bug-bar"),
+		el("span", "bug-name", SIDE_LABEL[side]),
+		serve,
+		games,
+		points,
+	);
+	root.dataset.side = side;
+	return { root, row: { games, points, serve } };
+}
 
-	const dot = document.createElement("div");
-	dot.style.cssText = `
-		width: 10px; height: 10px; border-radius: 50%;
-		background: ${SIDE_COLOR[side]};
-		box-shadow: 0 0 8px ${SIDE_COLOR[side]};
-		opacity: 0; transition: opacity 150ms ease;
-	`;
-
-	const label = document.createElement("div");
-	label.textContent = SIDE_LABEL[side];
-	label.style.cssText =
-		"font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7;";
-
-	const games = document.createElement("div");
-	games.style.cssText = "font-size: 28px; font-weight: 700; min-width: 1.2em;";
-
-	const points = document.createElement("div");
-	points.style.cssText = "font-size: 16px; opacity: 0.85; min-width: 2em;";
-
-	root.append(dot, label, games, points);
-	return { root, games, points, dot };
+/** A number rolling up into place, the way a broadcast graphic changes. */
+function roll(node: HTMLElement, text: string): void {
+	if (!setText(node, text)) return;
+	play(
+		node,
+		[
+			{ transform: "translateY(70%)", opacity: 0 },
+			{ transform: "none", opacity: 1 },
+		],
+		{ duration: 480 },
+	);
 }
 
 export interface ScoreUI {
 	update(score: Score): void;
+	/** Shown in a match, hidden over the lobby's rally. Hiding also forgets
+	 * the last score, so the next match's first score is not "called" as a
+	 * change from the last match's final one. */
+	setVisible(visible: boolean): void;
+	/** Two halves, one per player: a divider down the middle, each half
+	 * labelled with its side, and the scorebug moved to the top centre. */
+	setSplit(split: boolean): void;
 	/** A brief line at the bottom of the screen — what the camera just
 	 * changed to, and nothing weightier. */
 	note(text: string): void;
@@ -81,14 +78,14 @@ export interface ScoreUI {
  */
 export function callFor(before: Score, after: Score): string | null {
 	if (before === after) return null;
-	if (after.setWinner) return `Set — ${SIDE_LABEL[after.setWinner]}`;
+	if (after.setWinner) return `Set, ${SIDE_LABEL[after.setWinner]}`;
 	for (const side of ["near", "far"] as const) {
 		if (after.games[side] !== before.games[side]) {
-			return `Game — ${SIDE_LABEL[side]}`;
+			return `Game, ${SIDE_LABEL[side]}`;
 		}
 	}
 	if (after.tiebreak) {
-		return `${after.tiebreak.points.near} – ${after.tiebreak.points.far}`;
+		return `${after.tiebreak.points.near}-${after.tiebreak.points.far}`;
 	}
 	const near = after.points.near;
 	const far = after.points.far;
@@ -96,76 +93,100 @@ export function callFor(before: Score, after: Score): string | null {
 	if (far === "AD") return `Advantage ${SIDE_LABEL.far}`;
 	if (near === 40 && far === 40) return "Deuce";
 	if (near === far) return `${near} all`;
-	return `${near} – ${far}`;
+	return `${near}-${far}`;
 }
 
 /** How long a call stays on screen, seconds. */
 const CALL_SECONDS = 1.8;
 
 export function createScoreUI(root: HTMLElement): ScoreUI {
-	const near = buildPanel("near", "left");
-	const far = buildPanel("far", "right");
-	root.append(near.root, far.root);
+	const near = buildRow("near");
+	const far = buildRow("far");
+	const tiebreak = el("div", "bug-tb", "Tiebreak");
+	tiebreak.hidden = true;
+	const bug = el("div", "bug", near.root, far.root, tiebreak);
+	bug.setAttribute("role", "status");
+	bug.setAttribute("aria-label", "Score");
 
 	// The call, centred and high — above the net, below the far player, so it
 	// never sits on top of either player or the ball's usual path.
-	const call = document.createElement("div");
-	call.style.cssText = `
-		position: fixed; top: 16%; left: 50%; transform: translateX(-50%);
-		font: 700 clamp(28px, 4vw, 56px)/1.1 system-ui, sans-serif;
-		color: #f4f8fb; letter-spacing: -.01em; white-space: nowrap;
-		text-shadow: 0 6px 30px rgba(0,0,0,.75);
-		opacity: 0; transition: opacity 260ms ease;
-	`;
-	root.append(call);
+	const callText = el("span", "call-text");
+	const call = el("div", "call", callText, el("span", "call-rule"));
+	call.setAttribute("aria-live", "polite");
 
-	const toast = document.createElement("div");
-	toast.style.cssText = `
-		position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-		font: 500 15px/1 system-ui, sans-serif; color: #eef6fb;
-		padding: 10px 18px; border-radius: 999px;
-		background: rgba(10, 20, 30, 0.6); backdrop-filter: blur(8px);
-		border: 1px solid rgba(255,255,255,0.12);
-		opacity: 0; transition: opacity 200ms ease;
-	`;
-	root.append(toast);
-	let toastTimer: ReturnType<typeof setTimeout> | undefined;
+	const note = el("div", "note");
+	const divider = el(
+		"div",
+		"divider",
+		el("span", "half-tag", SIDE_LABEL.near),
+		el("span", "half-tag", SIDE_LABEL.far),
+	);
+	divider.setAttribute("aria-hidden", "true");
+	root.append(divider, bug, call, note);
 
-	const panels: Readonly<Record<Side, Panel>> = { near, far };
+	const rows: Readonly<Record<Side, Row>> = { near: near.row, far: far.row };
 	let lastScore: Score | null = null;
 	let hideAt = 0;
+	let noteTimer = 0;
+	let visible = false;
+	let split = false;
 
 	return {
 		note(text) {
-			toast.textContent = text;
-			toast.style.opacity = "1";
-			clearTimeout(toastTimer);
-			toastTimer = setTimeout(() => {
-				toast.style.opacity = "0";
-			}, 1600);
+			note.textContent = text;
+			note.classList.add("on");
+			window.clearTimeout(noteTimer);
+			noteTimer = window.setTimeout(() => note.classList.remove("on"), 1600);
+		},
+
+		setSplit(on) {
+			if (on === split) return;
+			split = on;
+			root.classList.toggle("split", on);
+		},
+
+		setVisible(on) {
+			if (on === visible) return;
+			visible = on;
+			bug.classList.toggle("on", on);
+			if (!on) {
+				lastScore = null;
+				call.classList.remove("on");
+			}
 		},
 
 		update(score) {
+			if (score === lastScore) {
+				if (hideAt !== 0 && performance.now() > hideAt) {
+					call.classList.remove("on");
+					hideAt = 0;
+				}
+				return;
+			}
 			if (lastScore !== null) {
 				const text = callFor(lastScore, score);
 				if (text !== null) {
-					call.textContent = text;
-					call.style.opacity = "1";
+					callText.textContent = text;
+					// Restart the wipe for a call that follows another.
+					call.classList.remove("on");
+					void call.offsetWidth;
+					call.classList.add("on");
 					hideAt = performance.now() + CALL_SECONDS * 1000;
-				} else if (hideAt !== 0 && performance.now() > hideAt) {
-					call.style.opacity = "0";
-					hideAt = 0;
 				}
 			}
 			lastScore = score;
 
+			tiebreak.hidden = !score.tiebreak;
 			for (const side of ["near", "far"] as const) {
-				const panel = panels[side];
-				panel.games.textContent = String(score.games[side]);
-				panel.points.textContent = score.tiebreak
-					? String(score.tiebreak.points[side])
-					: String(score.points[side]);
-				panel.dot.style.opacity = score.server === side ? "1" : "0";
+				const row = rows[side];
+				roll(row.games, String(score.games[side]));
+				roll(
+					row.points,
+					score.tiebreak
+						? String(score.tiebreak.points[side])
+						: String(score.points[side]),
+				);
+				row.serve.classList.toggle("on", score.server === side);
 			}
 		},
 	};

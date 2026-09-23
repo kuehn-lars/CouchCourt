@@ -36,9 +36,9 @@ describe("callFor", () => {
 	});
 
 	it("calls the running score with the server's points first", () => {
-		expect(lastCall(play("near"))).toBe("15 – 0");
+		expect(lastCall(play("near"))).toBe("15-0");
 		expect(lastCall(play("near", "far"))).toBe("15 all");
-		expect(lastCall(play("near", "far", "far"))).toBe("15 – 30");
+		expect(lastCall(play("near", "far", "far"))).toBe("15-30");
 	});
 
 	it("calls deuce and advantage", () => {
@@ -56,7 +56,7 @@ describe("callFor", () => {
 	});
 
 	it("calls the game, not the points, on the point that wins it", () => {
-		expect(lastCall(play("near", "near", "near", "near"))).toBe("Game — Near");
+		expect(lastCall(play("near", "near", "near", "near"))).toBe("Game, Near");
 	});
 
 	it("calls the set ahead of the game that won it", () => {
@@ -64,6 +64,6 @@ describe("callFor", () => {
 		// Six straight games to `near`.
 		while (!score.setWinner) score = awardPoint(score, "near");
 		const before = { ...score, setWinner: null } as Score;
-		expect(callFor(before, score)).toBe("Set — Near");
+		expect(callFor(before, score)).toBe("Set, Near");
 	});
 });

@@ -1,6 +1,6 @@
 ---
 title: "Module: src/shared/sim — the game"
-updated: 2026-09-22
+updated: 2026-09-24
 tags: [module, sim, core]
 status: current
 code:
@@ -100,9 +100,14 @@ Nothing in `sim/` imports anything outside `src/shared/`. The consumers are
   becomes a stroke: `serve` mid-rally falls back to the stance, and
   `overhead` needs `contact.air`. `revise` goes through it too, so a harder
   peak can change the stroke but never smash a bounced ball.
-- **Direction is screen space** (`SCREEN_LEFT`), not the hitter's frame. The
-  bot's choice of stroke depends on the same constant; change one without
-  the other and the bot aims at its opponent.
+- **Direction is the hitter's screen**, not the hitter's frame:
+  `screenLeftOf(side, state.split)`. On one shared screen that is
+  `SCREEN_LEFT` (-x) for both; on a split screen the far player's is +x
+  ([[0019-split-screen]]). `MatchState.split` is fixed at `createMatch` and
+  every launch path reads it — `strike` and `revise` both, which is why
+  `shoot` takes it as a required argument (a default once let `revise`
+  silently use the shared frame). The bot picks its stroke through the same
+  function; change one without the other and the bot aims at its opponent.
 - `stepBall` reports **at most one** of `net` or `bounce` per step.
 
 ## The bot is an input source, not a simulation feature

@@ -1,6 +1,6 @@
 ---
 title: How SwingCourt fits together
-updated: 2026-09-22
+updated: 2026-09-24
 tags: [map, architecture, core]
 status: current
 code:
@@ -97,7 +97,10 @@ including overhead ([[2026-09-22-stroke-classifier]]). Unverified on a phone.
 ③ The swing is stamped with the **host's** sim clock, never the phone's
 `swing.at` — [[0007-host-arrival-time-for-swing-timing]].
 ④ `hit` to whoever struck a new stroke; on a point, `point` to the winner and
-`miss` to the loser. Read off state, not off the input.
+`miss` to the loser. Read off state, not off the input. Alongside it, every
+phone is sent the score and whether the ball is in hand or tossed
+(`MatchInfo.score`), so the racket can say what to do next
+([[0020-the-phone-is-the-string-bed]]).
 ⑤ `swing.lag` is a duration inside the phone's own clock
 ([[0013-detector-latency-is-compensated]]).
 ⑥ **The contact is the hinge of the whole diagram.** `predictStrike` plans it;
@@ -107,8 +110,9 @@ Re-predicting at arrival instead is what made every return whiff until
 2026-09-22. [[0015-contact-model]].
 
 **Where the ball goes** is the stroke the phone read: forehand to screen-left,
-backhand to screen-right (screen space, because both players face the same
-screen), overhead a smash down the middle — and an overhead only connects
+backhand to screen-right — the left of the screen *that player* is watching,
+which on a split screen is a different world direction for the far player
+([[0019-split-screen]]) — overhead a smash down the middle — and an overhead only connects
 with a ball taken out of the air. Timing is how well: on time is paced and
 wide of the middle, early goes wider and out, late goes central and long.
 Forehand or backhand *stance* is still set from where the ball is. Every

@@ -161,6 +161,7 @@ export function createSession(handlers: {
 						phase: msg.phase,
 						server: msg.server,
 						...(msg.winner !== undefined ? { winner: msg.winner } : {}),
+						...(msg.score !== undefined ? { score: msg.score } : {}),
 					});
 					return;
 				case "feedback":

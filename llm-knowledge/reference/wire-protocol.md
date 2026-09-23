@@ -1,6 +1,6 @@
 ---
 title: Wire protocol intent
-updated: 2026-09-20
+updated: 2026-09-24
 tags: [reference, networking, protocol]
 status: current
 code:
@@ -77,6 +77,10 @@ desync.
   device. Do not compare it across devices without solving clock offset first.
 - **No sim state on the wire.** The host renders what it simulates; nothing
   sends game state anywhere. See [[0002-host-authoritative-simulation]].
+  The phones are *told* a presentation summary — phase, and since
+  2026-09-24 the score and whether the ball is in the server's hand
+  (`MatchScore`) — the way a scoreboard tells a crowd. They decide nothing
+  from it; that is the line, not whether a fact about the match is sent.
 - **No acknowledgements or sequence numbers.** A dropped aim update is replaced
   20ms later. If swings ever start getting lost on real hardware, that is the
   point to reconsider — not before.

@@ -1,0 +1,621 @@
+/*
+ * The racket. Same visual system as the host (decision 0017): dark, SF Pro,
+ * one accent in the ball's optic yellow for the one thing to press, and the
+ * player's own side colour (`--side`, set from main.ts) for everything that
+ * is about *them*. The match screen itself is a canvas (racket.ts).
+ *
+ * Platform rules that are not style and must survive any restyle: a racket
+ * swing must never scroll, rubber-band or pinch-zoom the page
+ * (`touch-action`, `overscroll-behavior`, and the viewport meta), and
+ * nothing sits under the home indicator (`env(safe-area-inset-*)`).
+ */
+
+:root {
+	--bg: #05080c;
+	--ink: #f3f6ef;
+	--ink-2: rgba(243, 246, 239, 0.66);
+	--ink-3: rgba(243, 246, 239, 0.42);
+	--hairline: rgba(255, 255, 255, 0.08);
+	--hairline-2: rgba(255, 255, 255, 0.15);
+	--card: rgba(255, 255, 255, 0.05);
+	--accent: #dcff4a;
+	--accent-ink: #10150a;
+	--side: #dcff4a;
+	--ok: #34d86a;
+	--bad: #ff5a5f;
+	--warn: #ffb340;
+
+	--font: system-ui, -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+	--font-round:
+		ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif;
+
+	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--spring: linear(
+		0,
+		0.18 6%,
+		0.62 15%,
+		0.95 24%,
+		1.08 31%,
+		1.1 36%,
+		1.06 44%,
+		1 53%,
+		0.985 62%,
+		1 80%,
+		1
+	);
+
+	color-scheme: dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	height: 100%;
+	color: var(--ink);
+	font: 16px / 1.45 var(--font);
+	-webkit-font-smoothing: antialiased;
+	/* A racket swing must never scroll or rubber-band the page. The gate
+	   allows horizontal pans and nothing else: touch-action is the
+	   intersection of every ancestor's, so `none` up here would also freeze
+	   the swipeable cards. Pinch zoom is out either way. main.ts adds
+	   `.playing` when the match screen takes over. */
+	overscroll-behavior: none;
+	touch-action: pan-x;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+body {
+	background:
+		radial-gradient(
+			120% 60% at 50% -10%,
+			color-mix(in srgb, var(--side) 16%, transparent),
+			transparent 60%
+		),
+		var(--bg);
+	overflow: hidden;
+	transition: background 800ms var(--ease);
+}
+body.gated {
+	background:
+		radial-gradient(
+			90% 50% at 50% 18%,
+			rgba(220, 255, 74, 0.1),
+			transparent 70%
+		),
+		var(--bg);
+}
+
+html.playing,
+html.playing body {
+	touch-action: none;
+}
+
+/* Full-screen colour wash for feedback: the only thing that works on iOS,
+   which has no navigator.vibrate. */
+body::after {
+	content: "";
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	background: radial-gradient(
+		circle at 50% 45%,
+		var(--flash, transparent),
+		color-mix(in srgb, var(--flash, transparent) 30%, transparent) 70%
+	);
+	opacity: 0;
+	transition: opacity 520ms var(--ease);
+}
+body.flash::after {
+	opacity: 0.5;
+	transition: none;
+}
+
+button {
+	font: inherit;
+	color: inherit;
+}
+
+[data-icon] {
+	display: inline-grid;
+	width: 1.25em;
+	height: 1.25em;
+	flex: none;
+}
+[data-icon] svg {
+	width: 100%;
+	height: 100%;
+}
+
+main {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	padding: max(14px, env(safe-area-inset-top)) 20px
+		max(18px, env(safe-area-inset-bottom));
+}
+#gate[hidden],
+#play[hidden] {
+	display: none;
+}
+
+/* ------------------------------------------------------------ the gate */
+
+#gate {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	width: 100%;
+	max-width: 440px;
+	margin: 0 auto;
+	min-height: 0;
+}
+/* Everything on the gate rises in, in order. */
+#gate > * {
+	animation: rise 900ms var(--ease) both;
+	animation-delay: calc(var(--i, 0) * 90ms + 80ms);
+}
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(18px);
+		filter: blur(6px);
+	}
+}
+
+.brand {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 17px;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+.brand [data-icon] {
+	color: var(--accent);
+	width: 22px;
+	height: 22px;
+}
+
+/* The swing, drawn: a phone on an arm swinging through an arc round a
+   shoulder at the bottom, meeting a ball at the top and sending it away. It
+   teaches the one motion the whole game is before anyone has read a word.
+   Geometry: the pivot is the bottom-centre of .swing-box, the radius is
+   --r, and every piece turns about that one point. */
+.swing {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: grid;
+	place-items: center;
+}
+.swing-box {
+	--r: min(40vw, 150px);
+	position: relative;
+	width: calc(var(--r) * 2.2);
+	height: calc(var(--r) * 1.25);
+}
+.swing-arc,
+.swing-arm {
+	position: absolute;
+	left: 50%;
+	bottom: 0;
+}
+/* The trail: a ring centred on the pivot, lit only across the swing. */
+.swing-arc {
+	width: calc(var(--r) * 2);
+	height: calc(var(--r) * 2);
+	margin: 0 0 calc(var(--r) * -1) calc(var(--r) * -1);
+	border-radius: 50%;
+	background: conic-gradient(
+		from -64deg,
+		rgba(220, 255, 74, 0) 0deg,
+		rgba(220, 255, 74, 0.7) 64deg,
+		rgba(220, 255, 74, 0) 66deg
+	);
+	-webkit-mask: radial-gradient(
+		farthest-side,
+		transparent calc(100% - 4px),
+		#000 calc(100% - 3px)
+	);
+	mask: radial-gradient(
+		farthest-side,
+		transparent calc(100% - 4px),
+		#000 calc(100% - 3px)
+	);
+	animation: arc 2.8s var(--ease) infinite;
+}
+.swing-arm {
+	width: 0;
+	height: var(--r);
+	transform-origin: 50% 100%;
+	animation: sweep 2.8s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+}
+.swing-arm [data-icon] {
+	position: absolute;
+	top: -30px;
+	left: -30px;
+	width: 60px;
+	height: 60px;
+	color: var(--ink);
+	filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.6));
+}
+.swing-ball {
+	position: absolute;
+	left: 50%;
+	bottom: var(--r);
+	width: 24px;
+	height: 24px;
+	margin: 0 0 16px -12px;
+	color: var(--accent);
+	animation: ball 2.8s var(--ease) infinite;
+}
+@keyframes sweep {
+	0%,
+	14% {
+		transform: rotate(-64deg);
+	}
+	44% {
+		transform: rotate(0deg);
+	}
+	60%,
+	100% {
+		transform: rotate(52deg);
+	}
+}
+@keyframes arc {
+	0%,
+	24% {
+		opacity: 0;
+	}
+	44% {
+		opacity: 1;
+	}
+	78%,
+	100% {
+		opacity: 0;
+	}
+}
+/* Waits at the top of the arc, is struck at 44%, and leaves. */
+@keyframes ball {
+	0%,
+	8% {
+		opacity: 0;
+		transform: translateY(-12px) scale(0.6);
+	}
+	18%,
+	43% {
+		opacity: 1;
+		transform: none;
+	}
+	76%,
+	100% {
+		opacity: 0;
+		transform: translate(-40vw, -60px) scale(0.3);
+	}
+}
+
+h1 {
+	margin: 0;
+	font-size: 38px;
+	line-height: 1.02;
+	font-weight: 700;
+	letter-spacing: -0.04em;
+	text-wrap: balance;
+}
+h1 .hl {
+	color: var(--accent);
+}
+
+/* How to play, as cards you can swipe — the one part of this page that
+   may move under a finger, so it gets its own touch-action. */
+.cards {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 86%;
+	gap: 10px;
+	margin: 0 -20px;
+	padding: 0 20px;
+	overflow-x: auto;
+	scroll-snap-type: x mandatory;
+	scroll-padding: 0 20px;
+	scrollbar-width: none;
+	touch-action: pan-x;
+	overscroll-behavior-x: contain;
+}
+.cards::-webkit-scrollbar {
+	display: none;
+}
+.card {
+	scroll-snap-align: start;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 2px 14px;
+	align-items: start;
+	padding: 16px;
+	border-radius: 20px;
+	background: var(--card);
+	box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.card > [data-icon] {
+	grid-row: span 2;
+	width: 44px;
+	height: 44px;
+	padding: 10px;
+	border-radius: 14px;
+	color: var(--accent);
+	background: rgba(220, 255, 74, 0.1);
+}
+.card b {
+	font-size: 16px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+.card span {
+	font-size: 14px;
+	line-height: 1.4;
+	color: var(--ink-2);
+}
+.dots {
+	display: flex;
+	justify-content: center;
+	gap: 6px;
+	margin-top: -6px;
+}
+.dots i {
+	width: 6px;
+	height: 6px;
+	border-radius: 3px;
+	background: var(--hairline-2);
+	transition:
+		width 400ms var(--spring),
+		background-color 300ms var(--ease);
+}
+.dots i.on {
+	width: 18px;
+	background: var(--ink);
+}
+
+.cta {
+	display: grid;
+	gap: 10px;
+	margin-top: auto;
+}
+.primary {
+	height: 58px;
+	border: 0;
+	border-radius: 999px;
+	font-size: 18px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+	background: var(--accent);
+	color: var(--accent-ink);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.6),
+		0 14px 36px -12px rgba(220, 255, 74, 0.6);
+	transition: transform 160ms var(--ease);
+}
+.primary:active {
+	transform: scale(0.97);
+}
+.fine {
+	margin: 0;
+	text-align: center;
+	font-size: 13px;
+	color: var(--ink-3);
+}
+#gate-status {
+	margin: 0;
+	text-align: center;
+	font-size: 14px;
+	line-height: 1.45;
+	color: var(--warn);
+}
+#gate-status:empty {
+	display: none;
+}
+
+/* ------------------------------------------------------ the match screen */
+
+/* The racket is drawn edge to edge by racket.ts: the head fills the screen
+   and the throat runs off the bottom into the player's hand. The canvas
+   ignores the safe areas on purpose; the drawing keeps its own margins. */
+#play {
+	position: fixed;
+	inset: 0;
+	animation: racket-in 900ms var(--ease) both;
+}
+#racket {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+@keyframes racket-in {
+	from {
+		opacity: 0;
+		transform: translateY(6%) scale(0.94);
+	}
+}
+.round {
+	display: grid;
+	place-items: center;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: none;
+	color: var(--ink-2);
+	box-shadow: inset 0 0 0 1px var(--hairline-2);
+}
+/* Settings live in the bottom corner, beside the throat, where a thumb in a
+   racket grip is not. */
+.round.corner {
+	position: absolute;
+	left: max(16px, env(safe-area-inset-left));
+	bottom: max(18px, env(safe-area-inset-bottom));
+	width: 44px;
+	height: 44px;
+	background: rgba(255, 255, 255, 0.04);
+}
+.round.corner [data-icon] {
+	width: 20px;
+	height: 20px;
+}
+.sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* --------------------------------------------------------- the sheet */
+
+.sheet {
+	position: fixed;
+	inset: auto 0 0;
+	width: 100%;
+	max-width: 520px;
+	margin: 0 auto;
+	padding: 10px 20px max(22px, env(safe-area-inset-bottom));
+	border: 0;
+	border-radius: 28px 28px 0 0;
+	color: var(--ink);
+	background: rgba(22, 27, 34, 0.92);
+	backdrop-filter: blur(30px) saturate(180%);
+	-webkit-backdrop-filter: blur(30px) saturate(180%);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.sheet[open] {
+	animation: up 460ms var(--ease) both;
+}
+.sheet.closing {
+	animation: down 240ms cubic-bezier(0.5, 0, 0.75, 0) both;
+}
+.sheet::backdrop {
+	background: rgba(0, 0, 0, 0.45);
+}
+@keyframes up {
+	from {
+		transform: translateY(100%);
+	}
+}
+@keyframes down {
+	to {
+		transform: translateY(100%);
+	}
+}
+.grabber {
+	width: 38px;
+	height: 5px;
+	margin: 0 auto 14px;
+	border-radius: 3px;
+	background: var(--hairline-2);
+}
+.sheet h2 {
+	margin: 0 0 6px;
+	font-size: 24px;
+	font-weight: 700;
+	letter-spacing: -0.03em;
+}
+.row {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 0;
+}
+.row + .row {
+	border-top: 1px solid var(--hairline);
+}
+.row b {
+	display: block;
+	font-size: 16px;
+	font-weight: 600;
+}
+.row small {
+	display: block;
+	margin-top: 2px;
+	font-size: 13px;
+	line-height: 1.35;
+	color: var(--ink-3);
+}
+.switch {
+	position: relative;
+	width: 51px;
+	height: 31px;
+	padding: 0;
+	border: 0;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.16);
+	transition: background-color 300ms var(--ease);
+}
+.switch::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 27px;
+	height: 27px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+	transition: transform 460ms var(--spring);
+}
+.switch[aria-checked="true"] {
+	background: var(--ok);
+}
+.switch[aria-checked="true"]::after {
+	transform: translateX(20px);
+}
+.done {
+	width: 100%;
+	height: 52px;
+	margin-top: 12px;
+	border: 0;
+	border-radius: 999px;
+	font-size: 17px;
+	font-weight: 650;
+	background: rgba(255, 255, 255, 0.1);
+}
+
+/* The iOS 18 haptic trick needs a real switch in the page. */
+.haptic {
+	position: fixed;
+	left: -9999px;
+	opacity: 0;
+}
+
+/* Short phones (SE, landscape-ish): the drawing is the first thing to go. */
+@media (max-height: 640px) {
+	.swing {
+		display: none;
+	}
+	h1 {
+		font-size: 32px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* The one override that has to beat every animation and transition
+	   rule on the page, hence the only !important in the file. */
+	/* biome-ignore-start lint/complexity/noImportantStyles: see above */
+	*,
+	*::before,
+	*::after {
+		animation-duration: 1ms !important;
+		animation-delay: 0ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+	}
+	/* biome-ignore-end lint/complexity/noImportantStyles: see above */
+
+	/* A frozen mid-swing drawing still teaches the grip. */
+	.swing-arm {
+		transform: rotate(-30deg);
+	}
+}

@@ -69,6 +69,7 @@ import {
 } from "./serve.ts";
 import {
 	groundstroke,
+	screenLeftOf,
 	serveShot,
 	smash,
 	TIMING_IDEAL,
@@ -139,6 +140,10 @@ export interface MatchState {
 	readonly whiffs: Readonly<Record<Side, number>>;
 	/** Elapsed sim time, seconds — the clock `RallyInput.time` is stamped in. */
 	readonly time: number;
+	/** Each player watches their own half of a split screen, from behind
+	 * their own baseline, so "screen-left" is their own left
+	 * (`shot.ts`, `screenLeftOf`). Fixed for the match. */
+	readonly split: boolean;
 }
 
 /** One swing, already resolved to a side and stamped with the host's arrival
@@ -209,7 +214,7 @@ function setUpServe(state: MatchState, serveNumber: 1 | 2): MatchState {
 	};
 }
 
-export function createMatch(server: Side): MatchState {
+export function createMatch(server: Side, split = false): MatchState {
 	const blank: MatchState = {
 		phase: "waiting-serve",
 		ball: heldBall({ x: 0, y: HAND_HEIGHT, z: 0 }),
@@ -229,6 +234,7 @@ export function createMatch(server: Side): MatchState {
 		lastPoint: null,
 		whiffs: { near: 0, far: 0 },
 		time: 0,
+		split,
 	};
 	return setUpServe(blank, 1);
 }
@@ -360,10 +366,19 @@ function shoot(
 	timing: number,
 	power: number,
 	env: BallEnv,
+	split: boolean,
 ): Vec3 {
 	return kind === "overhead"
 		? smash(from, side, timing, power, env)
-		: groundstroke(from, side, kind, timing, power, env);
+		: groundstroke(
+				from,
+				side,
+				kind,
+				timing,
+				power,
+				env,
+				screenLeftOf(side, split),
+			);
 }
 
 function strike(
@@ -382,7 +397,15 @@ function strike(
 	}
 	const timing = timingOf(at - c.at) ?? 0;
 	const spin = swing.spin ?? 0;
-	const v = shoot(c.ball, c.side, kind, timing, swing.power, envForSpin(spin));
+	const v = shoot(
+		c.ball,
+		c.side,
+		kind,
+		timing,
+		swing.power,
+		envForSpin(spin),
+		state.split,
+	);
 	const struck: MatchState = {
 		...state,
 		phase: "rally",
@@ -498,7 +521,7 @@ function revise(
 		if (played === null) return state;
 		kind = played;
 		timing = t;
-		v = shoot(st.from, side, kind, timing, swing.power, env);
+		v = shoot(st.from, side, kind, timing, swing.power, env, state.split);
 	}
 	const redone: MatchState = {
 		...state,

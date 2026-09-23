@@ -25,6 +25,7 @@ import {
 	type HostMessage,
 	type LobbyPlayer,
 	type MatchPhase,
+	type MatchScore,
 	type PlayerId,
 	PROTOCOL_VERSION,
 	RELAY_PATH,
@@ -40,10 +41,16 @@ import {
 } from "../shared/sim/index.ts";
 import { createAudio } from "./audio/index.ts";
 import { advance, FIXED_DT } from "./loop.ts";
-import { type CameraMode, nextMode } from "./render/camera.ts";
+import { nextMode } from "./render/camera.ts";
 import { detectEvents, type RenderEvent } from "./render/events.ts";
 import { createRenderer } from "./render/index.ts";
+import { sameScoreLine, scoreLine } from "./score-line.ts";
 import { createLobbyUI } from "./ui/lobby.ts";
+import {
+	CAMERA_LABEL,
+	createSettingsUI,
+	type Opponent,
+} from "./ui/settings.ts";
 
 const canvas = document.getElementById("scene");
 const uiRoot = document.getElementById("ui");
@@ -78,7 +85,9 @@ let winner: Side | null = null;
 let bot: Bot | null = null;
 let botSide: Side | null = null;
 let countdownUntil = 0;
-let cameraMode: CameraMode = "broadcast";
+/** This match is played on a split screen. Fixed at the start, because the
+ * sim's idea of "screen-left" is fixed with it (`shot.ts`, `screenLeftOf`). */
+let split = false;
 
 const pending: RallyInput[] = [];
 let previous: MatchState = createMatch("near");
@@ -86,11 +95,63 @@ let current: MatchState = previous;
 
 const JOIN_URL = `${location.origin}/controller/`;
 
-const CAMERA_LABEL: Record<CameraMode, string> = {
-	broadcast: "Broadcast",
-	follow: "Follow the ball",
-	side: "Side on",
+/**
+ * The machine's skill per settings choice. "match" is the tuned one — it
+ * loses nearly 6 points in 10 to a decent player and wins nearly 6 in 10
+ * from a newcomer, with rallies of eight to ten shots
+ * (llm-knowledge/experiments/2026-09-22-stroke-direction-balance.md). The
+ * other two are the same timing spread turned either way and are not
+ * measured.
+ */
+const OPPONENT_SKILL: Readonly<Record<Opponent, number>> = {
+	relaxed: 0.4,
+	match: 0.65,
+	tough: 0.85,
 };
+
+const settings = createSettingsUI(uiRoot, (next, change) => {
+	if (change.camera) renderer.note(`Camera: ${CAMERA_LABEL[next.camera]}`);
+	if (change.sound !== undefined) audio.setMuted(!next.sound);
+	if (change.lobbyRally === false) demo = null;
+});
+audio.setMuted(!settings.get().sound);
+
+/**
+ * The lobby's rally: two machines playing each other behind the join panel,
+ * on its own state so nothing about it can leak into a real match. No
+ * sound (nobody has clicked anything yet, so the browser would not play it
+ * anyway) and no feedback to phones. A finished set starts another.
+ */
+interface Demo {
+	previous: MatchState;
+	current: MatchState;
+	readonly bots: readonly [Bot, Bot];
+}
+let demo: Demo | null = null;
+const idle = createMatch("near");
+
+function newDemo(): Demo {
+	const state = createMatch("near");
+	return {
+		previous: state,
+		current: state,
+		bots: [createBot("near", 0.6), createBot("far", 0.6)],
+	};
+}
+
+function demoTick(): void {
+	demo ??= newDemo();
+	const before = demo.current;
+	const inputs: RallyInput[] = [];
+	for (const [i, side] of (["near", "far"] as const).entries()) {
+		const swing = demo.bots[i]?.swing(before) ?? null;
+		if (swing) inputs.push({ side, swing, time: before.time });
+	}
+	demo.previous = before;
+	demo.current = tick(before, inputs, FIXED_DT);
+	frameEvents.push(...detectEvents(before, demo.current));
+	if (demo.current.score.setWinner !== null) demo = null;
+}
 
 function sideFor(playerId: PlayerId): Side | undefined {
 	return players.find((p) => p.playerId === playerId)?.side;
@@ -115,12 +176,19 @@ function waitingFor(): Side | null {
 	return null;
 }
 
+/** The score line the phones were last told, so it is only re-sent when
+ * something on it changed — a handful of times a point. */
+let announced: MatchScore | null = null;
+
 function announce(): void {
+	const score = phase === "lobby" ? null : scoreLine(current);
+	announced = score;
 	send({
 		t: "match",
 		phase,
 		server: serverSide,
 		...(winner !== null ? { winner } : {}),
+		...(score !== null ? { score } : {}),
 	});
 }
 
@@ -137,19 +205,21 @@ const lobbyUI = createLobbyUI(uiRoot, {
 
 		if (solo) {
 			botSide = other(first.side);
-			// Loses nearly 6 points in 10 to a decent player and wins nearly 6
-			// in 10 from a newcomer, with rallies of eight to ten shots —
-			// see llm-knowledge/experiments/2026-09-22-stroke-direction-balance.md.
-			bot = createBot(botSide, 0.65);
+			bot = createBot(botSide, OPPONENT_SKILL[settings.get().opponent]);
 		} else {
 			if (ready.length < 2) return;
 			botSide = null;
 			bot = null;
 		}
 		serverSide = first.side;
+		split = !solo && settings.get().split;
 		winner = null;
 		phase = "countdown";
 		countdownUntil = performance.now() + 3000;
+		// The court the countdown shows is the one about to be played on:
+		// the camera flies in from the lobby's crane to a fresh match.
+		previous = createMatch(serverSide, split);
+		current = previous;
 		announce();
 	},
 	onRematch() {
@@ -187,13 +257,20 @@ socket.addEventListener("message", (event) => {
 });
 
 window.addEventListener("keydown", (event) => {
-	if (event.key === "c" || event.key === "C") {
-		cameraMode = nextMode(cameraMode);
-		renderer.note(`Camera: ${CAMERA_LABEL[cameraMode]}`);
-	}
-	if (event.key === "f" || event.key === "F") {
-		if (document.fullscreenElement) void document.exitFullscreen();
-		else void document.documentElement.requestFullscreen();
+	// Cmd-F is the browser's find, not full screen.
+	if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+	switch (event.key.toLowerCase()) {
+		case "c":
+			// Each half of a split screen is already its player's camera.
+			if (split && phase !== "lobby") return;
+			settings.set({ camera: nextMode(settings.get().camera) });
+			return;
+		case "f":
+			settings.toggleFullscreen();
+			return;
+		case "s":
+			settings.toggle();
+			return;
 	}
 });
 
@@ -234,6 +311,15 @@ function runTick(inputs: readonly RallyInput[]): void {
 		phase = "over";
 		winner = current.score.setWinner;
 		announce();
+	} else if (
+		// The only three things a score line is read from: checked first so a
+		// tick that changed none of them builds nothing.
+		(current.score !== before.score ||
+			current.phase !== before.phase ||
+			current.toss !== before.toss) &&
+		!sameScoreLine(announced, scoreLine(current))
+	) {
+		announce();
 	}
 }
 
@@ -252,7 +338,7 @@ function frame(now: number): void {
 
 		if (phase === "countdown" && now >= countdownUntil) {
 			phase = "playing";
-			previous = createMatch(serverSide);
+			previous = createMatch(serverSide, split);
 			current = previous;
 			pending.length = 0;
 			accumulator = 0;
@@ -267,7 +353,12 @@ function frame(now: number): void {
 
 		const result = advance(accumulator, paused ? 0 : frameDt);
 		accumulator = result.accumulator;
+		const rally = phase === "lobby" && settings.get().lobbyRally;
 		for (let i = 0; i < result.ticks; i++) {
+			if (rally) {
+				demoTick();
+				continue;
+			}
 			if (phase !== "playing") break;
 			// The bot answers the same state the renderer draws and its swing
 			// joins the same queue a phone's does — it has no privileged path
@@ -279,15 +370,27 @@ function frame(now: number): void {
 			runTick(pending.splice(0));
 		}
 
-		audio.play(frameEvents);
-		renderer.render(
-			previous,
-			current,
-			result.alpha,
-			frameDt,
-			frameEvents,
-			cameraMode,
-		);
+		if (phase === "lobby") {
+			const shown = demo ?? { previous: idle, current: idle };
+			renderer.render(
+				shown.previous,
+				shown.current,
+				result.alpha,
+				frameDt,
+				frameEvents,
+				"attract",
+			);
+		} else {
+			audio.play(frameEvents);
+			renderer.render(
+				previous,
+				current,
+				result.alpha,
+				frameDt,
+				frameEvents,
+				phase === "over" ? "victory" : split ? "split" : settings.get().camera,
+			);
+		}
 		frameEvents.length = 0;
 
 		lobbyUI.update({

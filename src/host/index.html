@@ -12,31 +12,14 @@
 		-->
 		<link
 			rel="icon"
-			href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="%23d8f24a"/><path d="M4.5 5.5a16 16 0 0 1 0 21M27.5 5.5a16 16 0 0 0 0 21" fill="none" stroke="%230a1a2e" stroke-width="2.2"/></svg>'
+			href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="%23dcff4a"/><path d="M4.5 5.5a16 16 0 0 1 0 21M27.5 5.5a16 16 0 0 0 0 21" fill="none" stroke="%230a1a2e" stroke-width="2.2"/></svg>'
 		/>
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="dark" />
+		<meta name="theme-color" content="#05080c" />
 		<title>SwingCourt</title>
-		<style>
-			html,
-			body {
-				margin: 0;
-				height: 100%;
-				background: #0a1a2e;
-				color: #e8f5ec;
-				font: 16px/1.5 system-ui, sans-serif;
-				overflow: hidden;
-			}
-			#scene {
-				display: block;
-				width: 100%;
-				height: 100%;
-			}
-			#ui {
-				position: fixed;
-				inset: 0;
-				pointer-events: none;
-			}
-		</style>
+		<!-- Every style on this page: tokens, lobby, score, settings. -->
+		<link rel="stylesheet" href="./host.css" />
 	</head>
 	<body>
 		<!-- Host display: runs the authoritative simulation and renders it

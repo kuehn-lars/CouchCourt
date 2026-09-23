@@ -10,13 +10,17 @@
 
 import { describe, expect, it } from "vitest";
 import { BASELINE_Z, SINGLES_HALF_WIDTH } from "../../shared/sim/court.ts";
-import { NET_KEEP_OUT, RUN_BACK } from "../../shared/sim/players.ts";
+import { NET_KEEP_OUT, RUN_BACK, RUN_WIDE } from "../../shared/sim/players.ts";
 import {
+	ATTRACT_PERIOD,
+	attractPose,
 	CAMERA_MODES,
 	type CameraPose,
 	cameraPose,
 	nextMode,
+	splitPose,
 	type Vec3Mutable,
+	victoryPose,
 } from "./camera.ts";
 
 /** Where a player stands, at chest height — the point that has to be on
@@ -64,7 +68,11 @@ const cross = (a: Vec3Mutable, b: Vec3Mutable): Vec3Mutable => ({
  * a `lookAt` with a Y-up world does, then checks the point's angle from the
  * view axis against the half-FOV vertically and horizontally.
  */
-function isVisible(pose: CameraPose, point: Vec3Mutable): boolean {
+function isVisible(
+	pose: CameraPose,
+	point: Vec3Mutable,
+	aspect = ASPECT,
+): boolean {
 	const forward = norm(sub(pose.target, pose.position));
 	const right = norm(cross(forward, { x: 0, y: 1, z: 0 }));
 	const up = cross(right, forward);
@@ -74,7 +82,7 @@ function isVisible(pose: CameraPose, point: Vec3Mutable): boolean {
 	if (depth <= 0) return false; // behind the camera
 
 	const halfV = (pose.fov / 2) * (Math.PI / 180);
-	const halfH = Math.atan(Math.tan(halfV) * ASPECT);
+	const halfH = Math.atan(Math.tan(halfV) * aspect);
 
 	return (
 		Math.abs(Math.atan2(dot(v, up), depth)) <= halfV &&
@@ -190,5 +198,196 @@ describe("cameraPose", () => {
 		let mode = CAMERA_MODES[0] ?? "broadcast";
 		for (let i = 0; i < CAMERA_MODES.length; i++) mode = nextMode(mode);
 		expect(mode).toBe(CAMERA_MODES[0]);
+	});
+});
+
+/** Where `point` lands across the frame, -1 at the left edge to 1 at the
+ * right, the same basis `isVisible` builds. */
+function screenX(
+	pose: CameraPose,
+	point: Vec3Mutable,
+	aspect = ASPECT,
+): number {
+	const forward = norm(sub(pose.target, pose.position));
+	const right = norm(cross(forward, { x: 0, y: 1, z: 0 }));
+	const v = sub(point, pose.position);
+	const halfH = Math.atan(Math.tan((pose.fov / 2) * (Math.PI / 180)) * aspect);
+	return Math.tan(Math.atan2(dot(v, right), dot(v, forward))) / Math.tan(halfH);
+}
+
+describe("attractPose", () => {
+	// The lobby is a title screen: the join panel owns the left of the frame
+	// and the court plays itself on the right. Sampled across a whole loop.
+	const SAMPLES = Array.from(
+		{ length: 48 },
+		(_, i) => (i / 48) * ATTRACT_PERIOD,
+	);
+	const CORNERS: Vec3Mutable[] = [
+		{ x: -SINGLES_HALF_WIDTH, y: 0, z: -BASELINE_Z },
+		{ x: SINGLES_HALF_WIDTH, y: 0, z: -BASELINE_Z },
+		{ x: -SINGLES_HALF_WIDTH, y: 0, z: BASELINE_Z },
+		{ x: SINGLES_HALF_WIDTH, y: 0, z: BASELINE_Z },
+	];
+
+	// 16:10 as well as 16:9: the host is a MacBook, and every MacBook
+	// screen is 16:10 — narrower, so the court's far corner went off the
+	// right edge in a screenshot while a 16:9 check passed.
+	it.each([
+		["16:9", 16 / 9],
+		["16:10", 16 / 10],
+	])("keeps the whole court in frame for the whole loop at %s", (_, aspect) => {
+		for (const t of SAMPLES) {
+			for (const corner of CORNERS) {
+				expect(isVisible(attractPose(t), corner, aspect)).toBe(true);
+				expect(screenX(attractPose(t), corner, aspect)).toBeLessThan(0.96);
+			}
+		}
+	});
+
+	// The panel's content is 43.5rem wide, which is 0.48 of a 16:9 frame at
+	// the lobby's rem scale — so its right edge sits at -0.04 in these units.
+	// Seen: at -0.15 the near player stood behind the seat cards.
+	it.each([
+		["16:9", 16 / 9],
+		["16:10", 16 / 10],
+	])("keeps the court clear of the join panel at %s", (_, aspect) => {
+		for (const t of SAMPLES) {
+			const pose = attractPose(t);
+			expect(screenX(pose, { x: 0, y: 0, z: 0 }, aspect)).toBeGreaterThan(0.3);
+			for (const corner of CORNERS) {
+				expect(screenX(pose, corner, aspect)).toBeGreaterThan(0.02);
+			}
+		}
+	});
+
+	it("loops without a seam", () => {
+		const a = attractPose(3);
+		const b = attractPose(3 + ATTRACT_PERIOD);
+		expect(b.position.x).toBeCloseTo(a.position.x, 6);
+		expect(b.position.z).toBeCloseTo(a.position.z, 6);
+		expect(b.target.x).toBeCloseTo(a.target.x, 6);
+	});
+
+	it("drifts, never lurches", () => {
+		// A title-screen camera that moves faster than a slow walk reads as a
+		// replay, not as a backdrop.
+		for (const t of SAMPLES) {
+			const a = attractPose(t).position;
+			const b = attractPose(t + 0.1).position;
+			expect(len(sub(b, a)) / 0.1).toBeLessThan(1.6);
+		}
+	});
+});
+
+describe("splitPose", () => {
+	// Each half of a split screen is a portrait-ish slice: half of 16:10 or
+	// half of 16:9.
+	const HALVES = [
+		["half of 16:10", 8 / 10],
+		["half of 16:9", 8 / 9],
+	] as const;
+	const WIDE = SINGLES_HALF_WIDTH + RUN_WIDE;
+	const sign = (side: "near" | "far") => (side === "near" ? 1 : -1);
+
+	// From behind your own player, the one thing that must never happen is
+	// losing them: wherever the sim can put them, feet and head.
+	it.each(HALVES)(
+		"frames your own player whole wherever they stand, %s",
+		(_, aspect) => {
+			for (const side of ["near", "far"] as const) {
+				for (const depth of [
+					NET_KEEP_OUT,
+					4,
+					8,
+					BASELINE_Z,
+					BASELINE_Z + RUN_BACK,
+				]) {
+					for (const x of [-WIDE, -2, 0, 2, WIDE]) {
+						const pose = splitPose(side, x);
+						for (const y of [PLAYER_FEET, PLAYER_HEAD]) {
+							const at = { x, y, z: sign(side) * depth };
+							expect(
+								isVisible(pose, at, aspect),
+								`${side} x=${x} z=${at.z} y=${y}`,
+							).toBe(true);
+						}
+					}
+				}
+			}
+		},
+	);
+
+	it.each(HALVES)("shows the opponent at their baseline, %s", (_, aspect) => {
+		for (const side of ["near", "far"] as const) {
+			for (const self of [-WIDE, 0, WIDE]) {
+				const pose = splitPose(side, self);
+				for (const x of [-SINGLES_HALF_WIDTH, 0, SINGLES_HALF_WIDTH]) {
+					for (const y of [PLAYER_FEET, PLAYER_HEAD]) {
+						const at = { x, y, z: -sign(side) * BASELINE_Z };
+						expect(isVisible(pose, at, aspect), `${side} sees x=${x}`).toBe(
+							true,
+						);
+					}
+				}
+			}
+		}
+	});
+
+	// The sim's per-side "screen-left" (shot.ts, screenLeftOf) is only right
+	// if the far half really is looking back up the court: its left is +x.
+	it("puts world -x on the near half's left and +x on the far half's left", () => {
+		const near = splitPose("near", 0);
+		const far = splitPose("far", 0);
+		expect(screenX(near, { x: -3, y: 0, z: 0 }, 0.8)).toBeLessThan(0);
+		expect(screenX(far, { x: 3, y: 0, z: 0 }, 0.8)).toBeLessThan(0);
+	});
+
+	it("is the near half turned round through the net", () => {
+		const near = splitPose("near", 2);
+		const far = splitPose("far", -2);
+		expect(far.position.x).toBeCloseTo(-near.position.x);
+		expect(far.position.y).toBeCloseTo(near.position.y);
+		expect(far.position.z).toBeCloseTo(-near.position.z);
+		expect(far.target.z).toBeCloseTo(-near.target.z);
+		expect(far.fov).toBe(near.fov);
+	});
+});
+
+describe("victoryPose", () => {
+	const SAMPLES = Array.from({ length: 60 }, (_, i) => i * 0.5);
+	const spots = [
+		{ side: "near", x: 0, z: BASELINE_Z },
+		{ side: "near", x: 4, z: BASELINE_Z + RUN_BACK },
+		{ side: "far", x: -3, z: -BASELINE_Z },
+		{ side: "far", x: 0, z: -2 },
+	] as const;
+
+	// The whole point of the shot: the winner, head to toe, the whole time.
+	it("keeps the winner whole in frame while it orbits", () => {
+		for (const s of spots) {
+			for (const t of SAMPLES) {
+				const pose = victoryPose(s.side, s, t);
+				for (const y of [PLAYER_FEET, PLAYER_HEAD]) {
+					expect(
+						isVisible(pose, { x: s.x, y, z: s.z }),
+						`${s.side} t=${t}`,
+					).toBe(true);
+				}
+			}
+		}
+	});
+
+	// From the net side, so it is their face and not their back. A winner
+	// who finished at the net puts the camera over the other half, so it has
+	// to stay well above the net cord, never pass through it.
+	it("watches from in front of the winner, above the net", () => {
+		for (const s of spots) {
+			for (const t of SAMPLES) {
+				const pose = victoryPose(s.side, s, t);
+				const toward = s.side === "near" ? -1 : 1;
+				expect((pose.position.z - s.z) * toward).toBeGreaterThan(0);
+				expect(pose.position.y).toBeGreaterThan(1.8);
+			}
+		}
 	});
 });

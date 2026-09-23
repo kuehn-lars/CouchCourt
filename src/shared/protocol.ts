@@ -125,6 +125,29 @@ export type ControllerMessage =
 	| ({ t: "aim" } & Aim)
 	| ({ t: "swing" } & Swing);
 
+/** Where the ball is, as far as the phones care: in the server's hand
+ * (their next swing tosses it), up on the toss, or in play. */
+export type BallState = "hand" | "toss" | "play";
+
+/**
+ * The score and the serve, as a phone shows them. **Presentation only**: the
+ * phone decides nothing from it, exactly as it decides nothing from `phase`
+ * (`llm-knowledge/decisions/0002-host-authoritative-simulation.md`). It lets
+ * a racket in someone's hand say "your serve, swing to toss" at the moment
+ * that is true, instead of a hint that is right half the time.
+ *
+ * Added without a version bump: optional, so an older phone ignores it and
+ * an older host never sends it.
+ */
+export interface MatchScore {
+	games: Record<Side, number>;
+	/** "0" "15" "30" "40" "AD", or a tiebreak count. */
+	points: Record<Side, string>;
+	/** Who serves the current point. */
+	serving: Side;
+	ball: BallState;
+}
+
 /** What the host says about the match, and what every phone is told. */
 export interface MatchInfo {
 	phase: MatchPhase;
@@ -132,6 +155,8 @@ export interface MatchInfo {
 	server: Side;
 	/** Set only in phase `over`. */
 	winner?: Side;
+	/** Sent once a match is under way. */
+	score?: MatchScore;
 }
 
 /** server -> controller */
@@ -176,6 +201,32 @@ const MATCH_PHASES: readonly MatchPhase[] = [
 ];
 
 const isSide = (x: unknown): x is Side => x === "near" || x === "far";
+
+const BALL_STATES: readonly BallState[] = ["hand", "toss", "play"];
+
+/** A game count: a small whole number. A set cannot run past 7 games a
+ * side; 99 is generous and still rejects anything absurd. */
+const isGames = (x: unknown): boolean =>
+	Number.isInteger(x) && (x as number) >= 0 && (x as number) <= 99;
+
+/** A point as the umpire calls it, or a tiebreak count. */
+const isPoint = (x: unknown): boolean =>
+	typeof x === "string" && /^(0|15|30|40|AD|\d{1,2})$/.test(x);
+
+function isMatchScore(x: unknown): x is MatchScore {
+	if (!isRecord(x)) return false;
+	const { games, points } = x;
+	return (
+		isRecord(games) &&
+		isGames(games.near) &&
+		isGames(games.far) &&
+		isRecord(points) &&
+		isPoint(points.near) &&
+		isPoint(points.far) &&
+		isSide(x.serving) &&
+		BALL_STATES.includes(x.ball as BallState)
+	);
+}
 
 const isRecord = (x: unknown): x is Record<string, unknown> =>
 	typeof x === "object" && x !== null;
@@ -240,7 +291,8 @@ export function isHostMessage(x: unknown): x is HostMessage {
 			return (
 				MATCH_PHASES.includes(x.phase as MatchPhase) &&
 				isSide(x.server) &&
-				(x.winner === undefined || isSide(x.winner))
+				(x.winner === undefined || isSide(x.winner)) &&
+				(x.score === undefined || isMatchScore(x.score))
 			);
 		case "feedback":
 			return typeof x.playerId === "string" && isFeedbackKind(x.kind);

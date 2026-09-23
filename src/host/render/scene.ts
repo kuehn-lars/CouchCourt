@@ -1,143 +1,276 @@
 /**
- * Renderer, camera, lights and background. Built once; `resize()` and
- * `updateCamera()` are the only things called again after setup.
+ * Renderer, lights, sky and the cameras. Built once; per frame the cameras
+ * ease toward what `camera.ts` asks for and `post.ts` draws the result.
  *
- * No shadow map (`WebGLRenderer.shadowMap` is left off): the blob shadow
- * (`entities.ts`) is the primary depth cue at this ball size and costs
- * nothing, per `llm-knowledge/modules/host.md`'s renderer rule 3. No
- * post-processing, per rule 6 — the gradient background and fog do the
- * atmospheric work a bloom pass would otherwise buy.
+ * ## Light
  *
- * Where the camera goes is not decided here: that is `camera.ts`, which is
- * pure and tested. This file only eases toward what it returns.
+ * One key light standing in for the floodlight rig, high and behind the near
+ * end, casting the only real shadows in the scene — the players', the net's
+ * and the umpire's. Its shadow camera is fitted to the court, not the
+ * stadium, which is what keeps a 2048 map sharp. A cool back light from the
+ * far end rims the players; a hemisphere light keeps the stands out of
+ * black. The ball keeps its blob shadow: directly under it is the depth cue,
+ * and a real shadow from a light at 60° is not under it
+ * (`llm-knowledge/decisions/0018-stylised-stadium-renderer.md`).
+ *
+ * The environment map is a tiny scene of floodlight panels over a dark bowl,
+ * prefiltered once. It is what puts a sheen of light across the court.
+ *
+ * ## Frame rate
+ *
+ * Feel beats fidelity (`PRODUCT.md`), and a dropped frame is felt. The pixel
+ * ratio steps down when frames run long and back up when they are cheap —
+ * resolution is the one thing that can be given up without anyone noticing.
  */
 
 import * as THREE from "three";
-import { type CameraMode, cameraPose } from "./camera.ts";
+import {
+	attractPose,
+	type CameraMode,
+	type CameraPose,
+	cameraPose,
+	splitPose,
+	victoryPose,
+} from "./camera.ts";
+import { createPost, type View } from "./post.ts";
+import { buildSky, SKY_HORIZON } from "./sky.ts";
 
-/** Exponential smoothing per frame. Higher eases faster; tuned by eye. Two
- * rates: the pose slides, but a mode change is a cut worth easing through
- * quickly rather than sliding across the stadium for a second. */
-const EASE = 0.06;
-const EASE_MODE_CHANGE = 0.12;
+/** A match camera, the lobby's slow crane (`attractPose`), one half of the
+ * screen per player, or the orbit round the winner once it is over. */
+export type CameraShot = CameraMode | "attract" | "split" | "victory";
 
-const SKY_TOP = "#071426";
-const SKY_HORIZON = "#2f5d7a";
+/** Exponential smoothing per second. The pose slides; a change of shot is
+ * eased through quickly rather than sliding across the stadium. */
+const EASE = 3.8;
+const EASE_SHOT_CHANGE = 7.5;
 
-/** The camera now sits ~28m from the near player and ~50m from the far one
- * ([[camera]]), so fog that started at 20m would swallow the whole far
- * court. These are set past the far baseline, not in front of it. */
-const FOG_NEAR = 55;
-const FOG_FAR = 135;
+/** The fog starts past the far baseline and has swallowed the top of the
+ * stands by the far end of the bowl. */
+const FOG_NEAR = 60;
+const FOG_FAR = 175;
 
-function gradientBackground(): THREE.Texture {
-	const canvas = document.createElement("canvas");
-	canvas.width = 1;
-	canvas.height = 256;
-	const ctx = canvas.getContext("2d");
-	if (ctx) {
-		const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-		gradient.addColorStop(0, SKY_TOP);
-		gradient.addColorStop(0.55, "#14304a");
-		gradient.addColorStop(1, SKY_HORIZON);
-		ctx.fillStyle = gradient;
-		ctx.fillRect(0, 0, canvas.width, canvas.height);
+/** Pixel-ratio steps, best first. */
+const QUALITY = [1.75, 1.5, 1.25, 1, 0.8] as const;
+/** Frame time over which to step down, and under which to step up. */
+const SLOW_MS = 19;
+const FAST_MS = 12.5;
+
+interface Rig {
+	readonly camera: THREE.PerspectiveCamera;
+	readonly target: THREE.Vector3;
+	shot: CameraShot | null;
+}
+
+function environment(renderer: THREE.WebGLRenderer): THREE.Texture {
+	const env = new THREE.Scene();
+	env.background = new THREE.Color("#0a1622");
+	const panel = new THREE.MeshBasicMaterial({ color: "#fff3dc" });
+	panel.color.multiplyScalar(6);
+	for (const [x, z] of [
+		[-1, -1],
+		[1, -1],
+		[-1, 1],
+		[1, 1],
+	] as const) {
+		const light = new THREE.Mesh(new THREE.PlaneGeometry(10, 4), panel);
+		light.position.set(x * 26, 24, z * 34);
+		light.lookAt(0, 0, 0);
+		env.add(light);
 	}
-	const texture = new THREE.CanvasTexture(canvas);
-	texture.colorSpace = THREE.SRGBColorSpace;
+	const ring = new THREE.Mesh(
+		new THREE.CylinderGeometry(60, 60, 18, 24, 1, true),
+		new THREE.MeshBasicMaterial({ color: "#16324a", side: THREE.BackSide }),
+	);
+	ring.position.y = 4;
+	env.add(ring);
+	const pmrem = new THREE.PMREMGenerator(renderer);
+	const texture = pmrem.fromScene(env, 0.02).texture;
+	pmrem.dispose();
 	return texture;
 }
 
+/** Where each player is drawn, on the ground. */
+export type PlayerSpots = Readonly<
+	Record<"near" | "far", { readonly x: number; readonly z: number }>
+>;
+
 export interface Scene {
 	readonly scene: THREE.Scene;
-	readonly camera: THREE.PerspectiveCamera;
-	readonly renderer: THREE.WebGLRenderer;
-	/** Eases the camera toward the pose `camera.ts` wants for `mode` and the
-	 * ball's current position. Call once per rendered frame. */
-	updateCamera(mode: CameraMode, ball: THREE.Vector3 | Ball3): void;
-	resize(): void;
-}
-
-interface Ball3 {
-	readonly x: number;
-	readonly y: number;
-	readonly z: number;
+	/** Eases the cameras toward `shot`, and returns what to draw. */
+	updateCameras(
+		shot: CameraShot,
+		ball: { x: number; z: number },
+		players: PlayerSpots,
+		/** Who won, for the victory shot. */
+		winner: "near" | "far" | null,
+		dt: number,
+	): readonly View[];
+	draw(views: readonly View[], dt: number): void;
+	/** A shake, 0..1: a smash, not a forehand. */
+	shake(amount: number): void;
+	/** The screen's own kick on impact, 0..1. */
+	punch(amount: number): void;
 }
 
 export function createScene(canvas: HTMLCanvasElement): Scene {
-	const scene = new THREE.Scene();
-	scene.background = gradientBackground();
-	scene.fog = new THREE.Fog(SKY_HORIZON, FOG_NEAR, FOG_FAR);
-
-	const start = cameraPose("broadcast", { ballX: 0, ballZ: 0 });
-	const camera = new THREE.PerspectiveCamera(
-		start.fov,
-		window.innerWidth / window.innerHeight,
-		0.1,
-		// Far plane past the fog, or the stadium behind the far court would be
-		// clipped away before the fog ever got to fade it.
-		260,
-	);
-	camera.position.set(start.position.x, start.position.y, start.position.z);
-
-	const target = new THREE.Vector3(
-		start.target.x,
-		start.target.y,
-		start.target.z,
-	);
-	let lastMode: CameraMode = "broadcast";
-
-	// The sky half of this lights the stands, which face upward and catch
-	// almost nothing from the sun. Raised from 1.0 with a much lighter ground
-	// colour once the bowl existed: at the old values the whole stadium read
-	// as a black wall behind the court.
-	const hemi = new THREE.HemisphereLight("#a8cdff", "#2d4356", 1.35);
-	scene.add(hemi);
-	const sun = new THREE.DirectionalLight("#fff4e0", 1.9);
-	sun.position.set(-14, 22, 10);
-	scene.add(sun);
-	// A cool fill from the opposite side so the far player is not a silhouette
-	// — at 50m the only thing separating them from the court is their own
-	// shading.
-	const fill = new THREE.DirectionalLight("#7fd0ff", 0.55);
-	fill.position.set(16, 9, -18);
-	scene.add(fill);
-
-	const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-	renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+	const renderer = new THREE.WebGLRenderer({
+		canvas,
+		antialias: false,
+		powerPreference: "high-performance",
+	});
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
-	renderer.toneMappingExposure = 1.1;
+	renderer.toneMappingExposure = 1.05;
 	renderer.outputColorSpace = THREE.SRGBColorSpace;
+	renderer.shadowMap.enabled = true;
+	renderer.shadowMap.type = THREE.PCFShadowMap;
+	// Rendered once per frame by `post.ts`, however many views there are.
+	renderer.shadowMap.autoUpdate = false;
 
+	const scene = new THREE.Scene();
+	scene.add(buildSky());
+	scene.fog = new THREE.Fog(SKY_HORIZON, FOG_NEAR, FOG_FAR);
+	scene.environment = environment(renderer);
+	scene.environmentIntensity = 0.55;
+
+	scene.add(new THREE.HemisphereLight("#9cc6ff", "#16283a", 0.7));
+	const key = new THREE.DirectionalLight("#fff0da", 2.9);
+	key.position.set(-10, 34, 16);
+	key.castShadow = true;
+	key.shadow.mapSize.set(2048, 2048);
+	const box = key.shadow.camera;
+	box.left = -15;
+	box.right = 15;
+	box.top = 20;
+	box.bottom = -20;
+	box.near = 10;
+	box.far = 80;
+	key.shadow.bias = -0.0004;
+	key.shadow.normalBias = 0.03;
+	key.shadow.radius = 3;
+	scene.add(key, key.target);
+	const back = new THREE.DirectionalLight("#79c8ff", 1.1);
+	back.position.set(12, 14, -30);
+	scene.add(back);
+	const warm = new THREE.DirectionalLight("#ffb98a", 0.45);
+	warm.position.set(20, 10, 20);
+	scene.add(warm);
+
+	const post = createPost(renderer, scene);
+
+	const makeRig = (): Rig => ({
+		camera: new THREE.PerspectiveCamera(19, 1, 1, 320),
+		target: new THREE.Vector3(),
+		shot: null,
+	});
+	const rigs = [makeRig(), makeRig()] as const;
+
+	let quality = 1;
+	let slowFor = 0;
+	let fastFor = 0;
 	function resize(): void {
-		const { innerWidth, innerHeight } = window;
-		camera.aspect = innerWidth / innerHeight;
-		camera.updateProjectionMatrix();
-		renderer.setSize(innerWidth, innerHeight, false);
+		const ratio = Math.min(window.devicePixelRatio, QUALITY[quality] ?? 1);
+		renderer.setPixelRatio(ratio);
+		renderer.setSize(window.innerWidth, window.innerHeight, false);
+		post.resize(window.innerWidth, window.innerHeight, ratio);
 	}
 	resize();
 	window.addEventListener("resize", resize);
 
-	function updateCamera(mode: CameraMode, ball: Ball3): void {
-		const pose = cameraPose(mode, { ballX: ball.x, ballZ: ball.z });
-		const ease = mode === lastMode ? EASE : EASE_MODE_CHANGE;
-		lastMode = mode;
-
-		camera.position.x += (pose.position.x - camera.position.x) * ease;
-		camera.position.y += (pose.position.y - camera.position.y) * ease;
-		camera.position.z += (pose.position.z - camera.position.z) * ease;
-		target.x += (pose.target.x - target.x) * ease;
-		target.y += (pose.target.y - target.y) * ease;
-		target.z += (pose.target.z - target.z) * ease;
-		camera.lookAt(target);
-
-		// `updateProjectionMatrix` is not free, and the fov only moves when
-		// the mode does.
-		if (Math.abs(camera.fov - pose.fov) > 0.01) {
-			camera.fov += (pose.fov - camera.fov) * ease;
-			camera.updateProjectionMatrix();
+	/** Watches frame time and moves `quality` one step at a time, only
+	 * after a sustained run either way. */
+	function adapt(dt: number): void {
+		const ms = dt * 1000;
+		if (ms > 100) return; // a hitch or a restored tab says nothing
+		slowFor = ms > SLOW_MS ? slowFor + dt : 0;
+		fastFor = ms < FAST_MS ? fastFor + dt : 0;
+		if (slowFor > 1.5 && quality < QUALITY.length - 1) {
+			quality++;
+			slowFor = 0;
+			resize();
+		} else if (fastFor > 6 && quality > 0) {
+			quality--;
+			fastFor = 0;
+			resize();
 		}
 	}
 
-	return { scene, camera, renderer, updateCamera, resize };
+	let shakeAmount = 0;
+	let clock = 0;
+
+	function ease(rig: Rig, pose: CameraPose, shot: CameraShot, dt: number) {
+		const snap = rig.shot === null;
+		const rate = rig.shot === shot ? EASE : EASE_SHOT_CHANGE;
+		rig.shot = shot;
+		const k = snap ? 1 : 1 - Math.exp(-dt * rate);
+		const c = rig.camera;
+		c.position.x += (pose.position.x - c.position.x) * k;
+		c.position.y += (pose.position.y - c.position.y) * k;
+		c.position.z += (pose.position.z - c.position.z) * k;
+		rig.target.x += (pose.target.x - rig.target.x) * k;
+		rig.target.y += (pose.target.y - rig.target.y) * k;
+		rig.target.z += (pose.target.z - rig.target.z) * k;
+		if (Math.abs(c.fov - pose.fov) > 0.01) c.fov += (pose.fov - c.fov) * k;
+	}
+
+	/** Hand-held breathing plus any shake, applied after the ease so it
+	 * never accumulates into the camera's resting pose. */
+	function finish(rig: Rig, aspect: number, seed: number): void {
+		const c = rig.camera;
+		const t = clock + seed;
+		const s = shakeAmount * shakeAmount;
+		const dx = Math.sin(t * 0.7) * 0.05 + Math.sin(t * 31) * 0.18 * s;
+		const dy = Math.sin(t * 0.53) * 0.04 + Math.sin(t * 27 + 1) * 0.14 * s;
+		c.position.x += dx;
+		c.position.y += dy;
+		c.lookAt(rig.target);
+		c.position.x -= dx;
+		c.position.y -= dy;
+		if (c.aspect !== aspect) c.aspect = aspect;
+		c.updateProjectionMatrix();
+	}
+
+	const single: View[] = [{ camera: rigs[0].camera, left: 0, width: 1 }];
+	const split: View[] = [
+		{ camera: rigs[0].camera, left: 0, width: 0.5 },
+		{ camera: rigs[1].camera, left: 0.5, width: 0.5 },
+	];
+
+	return {
+		scene,
+		updateCameras(shot, ball, players, winner, dt) {
+			clock += dt;
+			shakeAmount *= Math.exp(-dt * 6);
+			const aspect = window.innerWidth / window.innerHeight;
+			if (shot === "split") {
+				ease(rigs[0], splitPose("near", players.near.x), shot, dt);
+				ease(rigs[1], splitPose("far", players.far.x), shot, dt);
+				finish(rigs[0], aspect / 2, 0);
+				finish(rigs[1], aspect / 2, 5.3);
+				return split;
+			}
+			const now = performance.now() / 1000;
+			const pose =
+				shot === "attract"
+					? attractPose(now)
+					: shot === "victory"
+						? victoryPose(winner ?? "near", players[winner ?? "near"], now)
+						: cameraPose(shot, { ballX: ball.x, ballZ: ball.z });
+			ease(rigs[0], pose, shot, dt);
+			finish(rigs[0], aspect, 0);
+			// The idle rig follows along, so a split that starts later eases
+			// in from where the match camera was instead of from nowhere.
+			rigs[1].shot = null;
+			return single;
+		},
+		draw(views, dt) {
+			adapt(dt);
+			post.render(views, dt);
+		},
+		shake(amount) {
+			shakeAmount = Math.max(shakeAmount, amount);
+		},
+		punch(amount) {
+			post.punch(amount);
+		},
+	};
 }
