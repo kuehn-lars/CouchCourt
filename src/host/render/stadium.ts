@@ -199,7 +199,9 @@ function beamMaterial(): THREE.ShaderMaterial {
 			varying float vEdge;
 			void main() {
 				// uv.y is 1 at the court end: brightest at the lamp, gone by the floor.
-				float a = pow(1.0 - vAlong, 1.3) * vEdge * vEdge * 0.075;
+				// Clamped: interpolation overshoots 1 at the court end, and pow
+				// of a negative is NaN on Metal, which bloom smears into blocks.
+				float a = pow(max(1.0 - vAlong, 0.0), 1.3) * vEdge * vEdge * 0.075;
 				gl_FragColor = vec4(color * a, 1.0);
 			}`,
 	});

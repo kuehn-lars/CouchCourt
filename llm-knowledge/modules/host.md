@@ -322,6 +322,10 @@ reconnect-after-suspension are all still unverified.
   ([[msaa-target-is-discarded-after-resolve]]). For renderer work, drive
   system Chrome with `--headless=new --use-angle=metal --enable-gpu` over
   CDP. That run measured 60fps (p95 16.7ms) in the lobby at 2880px wide.
+- **A single NaN pixel flickers as a black rectangle** once bloom has spread
+  it ([[nan-pixels-become-bloom-blocks]]). Clamp every `pow` base in a
+  shader. It shows up on a few frames in a hundred, so screenshots miss it.
+  Count NaNs in the HDR target instead.
 
 - Chrome 153 no longer falls back to SwiftShader implicitly.
   `--use-gl=swiftshader` alone yields no WebGL context at all, `createScene`

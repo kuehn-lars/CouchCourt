@@ -79,6 +79,7 @@ around. **These are the ones that cost an afternoon if you skip them.**
 | [[one-port-one-websocket-path]] | Sharing a port with Vite means sharing its upgrade handler, and `ws` does not decline politely |
 | [[relay-survives-a-broken-client]] | One malformed frame from one phone ended the whole server. Every `ws` socket needs an `error` listener |
 | [[msaa-target-is-discarded-after-resolve]] | **Why the host went black on a Mac.** three invalidates an MSAA target after every render; bloom drew into it again. SwiftShader hides it. How to test on the real GPU |
+| [[nan-pixels-become-bloom-blocks]] | **Why black rectangles flickered on a Mac.** `pow` of a negative is NaN on Metal; bloom turns one NaN pixel into blocks. How to count NaNs in the HDR target |
 | [[touch-action-is-an-intersection]] | A child cannot re-allow a gesture an ancestor's `touch-action` refused. Why the controller's gate is `pan-x` and the match screen `none` |
 
 ## Reference

@@ -444,3 +444,13 @@ discard it, SwiftShader does not. The composer target is now `samples: 0`.
 Checked on the real Metal GPU through headless Chrome: renders, 60fps in
 the lobby. Promoted: [[msaa-target-is-discarded-after-resolve]]. Not
 verified: split screen and a full match on the real GPU.
+
+## [2026-09-24] fix | Black rectangles flickering on the host
+
+On an M3, black rectangles flickered across the host screen on about 5% of
+frames. The floodlight beam shader took `pow` of a value that interpolation
+pushes just below zero at the court end. Metal returns NaN for that, and
+bloom spread the NaN into blocks. The base is now clamped. With the host read
+back on the real Metal GPU in the lobby, frames with NaN went from 3–7 in
+100–150 to 0 in 251. Promoted: [[nan-pixels-become-bloom-blocks]]. Not
+verified: a full match and the split screen on the real GPU.
