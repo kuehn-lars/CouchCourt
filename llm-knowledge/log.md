@@ -1,6 +1,6 @@
 ---
 title: Project log
-updated: 2026-09-23
+updated: 2026-09-24
 tags: [meta]
 status: current
 ---
@@ -435,3 +435,12 @@ canvas rendered once after a long synchronous loop screenshots black.
 headless Chrome. **Not verified: a real GPU's frame rate, a real phone.**
 
 
+## [2026-09-24] fix | The host went black on a real GPU
+
+On an M3 the host flashed the stadium, then went black. The cause was not
+GPU power. three invalidates a multisampled target after every render, and
+bloom (and a split screen's second view) drew into it again. Apple GPUs
+discard it, SwiftShader does not. The composer target is now `samples: 0`.
+Checked on the real Metal GPU through headless Chrome: renders, 60fps in
+the lobby. Promoted: [[msaa-target-is-discarded-after-resolve]]. Not
+verified: split screen and a full match on the real GPU.

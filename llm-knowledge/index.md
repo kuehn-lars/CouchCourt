@@ -78,6 +78,7 @@ around. **These are the ones that cost an afternoon if you skip them.**
 | [[vite-https-is-http2]] | Every Vite server with TLS is an `Http2SecureServer`. The relay has always been on one |
 | [[one-port-one-websocket-path]] | Sharing a port with Vite means sharing its upgrade handler, and `ws` does not decline politely |
 | [[relay-survives-a-broken-client]] | One malformed frame from one phone ended the whole server. Every `ws` socket needs an `error` listener |
+| [[msaa-target-is-discarded-after-resolve]] | **Why the host went black on a Mac.** three invalidates an MSAA target after every render; bloom drew into it again. SwiftShader hides it. How to test on the real GPU |
 | [[touch-action-is-an-intersection]] | A child cannot re-allow a gesture an ancestor's `touch-action` refused. Why the controller's gate is `pan-x` and the match screen `none` |
 
 ## Reference
@@ -124,10 +125,11 @@ folders above and recorded in [[log]]. See `llm-knowledge/sessions/README.md`.
 
 Things that are true today and that a session should not be surprised by.
 
-- **The renderer's frame time is unmeasured on a real GPU**
-  ([[0018-stylised-stadium-renderer]]). ~600 draws plus a shadow pass and
-  bloom, doubled on a split screen, seen only through SwiftShader. The
-  adaptive pixel ratio is a safety net, not a measurement. Likewise the
+- **The renderer's frame time is measured once, in the lobby only**
+  ([[0018-stylised-stadium-renderer]]). 60fps (p95 16.7ms) on an M3 at 2880px
+  wide, after the MSAA fix ([[msaa-target-is-discarded-after-resolve]]).
+  rAF caps at 60, so the headroom is unknown. A match and the split screen
+  are unmeasured on a real GPU. Likewise the
   phone's racket canvas has never run on a phone.
 
 - **Stroke classification is measured on multi-rep captures only**, and the

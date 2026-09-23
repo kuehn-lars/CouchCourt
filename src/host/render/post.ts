@@ -1,5 +1,5 @@
 /**
- * Post-processing: the scene is drawn into a multisampled HDR target — once,
+ * Post-processing: the scene is drawn into an HDR target — once,
  * or twice side by side on a split screen — then bloomed, tone mapped and
  * graded. Bloom is what turns emissive floodlights, the ball and the court
  * lines into light rather than into bright paint.
@@ -127,7 +127,13 @@ export function createPost(
 	const size = renderer.getDrawingBufferSize(new THREE.Vector2());
 	const target = new THREE.WebGLRenderTarget(size.x, size.y, {
 		type: THREE.HalfFloatType,
-		samples: 4,
+		// No MSAA. After each render into a multisampled target three
+		// resolves it and then invalidates the multisampled colour buffer.
+		// Bloom (and a split screen's second view) then draw into that same
+		// buffer again; Apple GPUs really discard it, so the frame came out
+		// black. SwiftShader keeps it, which is why it was never seen there.
+		// See llm-knowledge/platform/msaa-target-is-discarded-after-resolve.md
+		samples: 0,
 	});
 	const composer = new EffectComposer(renderer, target);
 	const views = new ViewsPass(scene);

@@ -40,7 +40,7 @@ physically shaded, so the floodlights can put a sheen across the court from a
 prefiltered environment of lamp panels. The split is the style: drawn figures
 under real light.
 
-**2. Post-processing: bloom and a grade.** One HDR multisampled target, bloom
+**2. Post-processing: bloom and a grade.** One HDR target (no MSAA: on Apple GPUs a multisampled one rendered black — [[msaa-target-is-discarded-after-resolve]]), bloom
 at half resolution (threshold 0.92, only emissives and highlights), ACES tone
 mapping in `OutputPass`, then a display-space grade: vignette, a chromatic
 fringe toward the corners that kicks on a hard hit, a gentle S-curve and

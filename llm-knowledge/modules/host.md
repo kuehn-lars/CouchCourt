@@ -317,6 +317,12 @@ reconnect-after-suspension are all still unverified.
 
 **Harness traps, both costly:**
 
+- **SwiftShader hides real-GPU bugs.** The composer's MSAA target rendered
+  black on an M3 and correctly under SwiftShader
+  ([[msaa-target-is-discarded-after-resolve]]). For renderer work, drive
+  system Chrome with `--headless=new --use-angle=metal --enable-gpu` over
+  CDP. That run measured 60fps (p95 16.7ms) in the lobby at 2880px wide.
+
 - Chrome 153 no longer falls back to SwiftShader implicitly.
   `--use-gl=swiftshader` alone yields no WebGL context at all, `createScene`
   throws, and the host page dies — which looks exactly like a renderer bug
@@ -330,6 +336,7 @@ reconnect-after-suspension are all still unverified.
 - **A page that renders once after a long synchronous loop screenshots
   black.** A canvas is only presented when the task yields, and SwiftShader
   shader compiles take seconds. It looked like a NaN bloom bug for an hour.
+  (Maybe it partly was the MSAA discard above; this was never re-checked.)
   Yield between frames (`setTimeout`) and wait for a done flag.
 
 ## See also
