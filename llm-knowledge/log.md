@@ -525,3 +525,13 @@ that still quoted `PRODUCT.md` now state their reason. [[modules/tooling]],
 [[modules/host]], [[0004-lan-https-via-local-ip-co]]. The GitHub repo was
 renamed to `CouchCourt` the same day, matching the CI badge. Not verified: a
 phone scanning the QR from a host opened at the printed URL.
+
+## [2026-09-25] fix | Windows vault check, dependency majors
+
+`vault:check` failed only on Windows: `path.relative` gives backslashes and
+the module-coverage rule matched on `llm-knowledge/modules/`. Normalised to
+`/`, proven by simulating backslashes on macOS. Took Dependabot's Vite 8,
+Vitest 5, `actions/checkout@v7` and `actions/setup-node@v7`; all checks green
+and dev/preview smoke-run. Declined `@types/node` 26: the runtime is Node 24,
+and Dependabot now ignores its majors. [[modules/tooling]],
+[[vite-https-is-http2]].

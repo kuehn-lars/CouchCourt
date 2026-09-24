@@ -1,6 +1,6 @@
 ---
 title: Vite's https server is an HTTP/2 server, not an https.Server
-updated: 2026-09-20
+updated: 2026-09-25
 tags: [platform, vite, networking, tooling]
 status: current
 code:
@@ -11,7 +11,9 @@ code:
 # Vite's `https` server is HTTP/2
 
 `resolveHttpServer` in Vite 7 (`vite/dist/node/chunks/config.js`) is four
-lines long and decides the whole shape of the server:
+lines long and decides the whole shape of the server. **Still true on Vite
+8.3.1** (2026-09-25): curl negotiated HTTP/2 against dev and preview, and a
+`wss://…/relay` upgrade opened on both.
 
 ```js
 async function resolveHttpServer(app, httpsOptions) {

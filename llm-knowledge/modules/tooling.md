@@ -61,8 +61,8 @@ which fails Biome's format check on every file and stops the vault checker's
 ## The `serving` gate now has three cases, not two
 
 `vite.config.ts`'s predicate used to separate "actually serving a browser"
-from Vitest. There is a third case now, and it needs `isPreview` from Vite
-7's `ConfigEnv`:
+from Vitest. There is a third case now, and it needs `isPreview` from
+Vite's `ConfigEnv` (7 and 8):
 
 | | dev (`vite`) | preview (`vite preview`) | vitest | build |
 | --- | --- | --- | --- | --- |
@@ -130,9 +130,9 @@ Other things this file decides:
   only motion input actually needs TLS.
 - The port is read from `package.json`'s `config.port`, the single source of
   truth shared with `scripts/setup-certs.ts`.
-- `build.chunkSizeWarningLimit: 700`. The host bundle is ~665 kB, and three.js
-  alone is 543 kB minified, so a `three` manualChunk still trips Vite's
-  default 500 kB and only adds a request (measured 2026-09-25). The limit sits
+- `build.chunkSizeWarningLimit: 700`. The host bundle is ~672 kB on Vite 8
+  (665 kB on Vite 7), and three.js alone is 543 kB minified, so a `three`
+  manualChunk still trips Vite's default 500 kB and only adds a request (measured 2026-09-25). The limit sits
   just above today's size, so the warning still means "this grew"; a 600 kB
   limit was run and does warn.
 - `test.environment: "node"` — no jsdom. Everything worth testing is pure or
@@ -235,6 +235,20 @@ nobody has written yet — checking prose would make forward references
 impossible and the check would get switched off.
 
 `sessions/` and `.obsidian/` are skipped.
+
+**Paths inside the checker are always `/`.** A note's `where` comes from
+`path.relative`, which returns `\` on Windows, and rule 6 matches it against
+`llm-knowledge/modules/`. On Windows no page matched and every `src/` folder
+was reported uncovered (CI, 2026-09-25), so `where` is normalised to `/`.
+Reproduced on macOS by rewriting `where` with backslashes; the fix passes the
+same rewrite.
+
+**Dependencies.** Vite 8 and Vitest 5 since 2026-09-25 (dev and preview
+smoke-run: printed URLs, HTTP/2 200, relay upgrade). `@types/node` stays on
+the runtime's major — `.nvmrc`'s Node 24 — and Dependabot ignores its majors;
+bump it with `.nvmrc`. npm 10 (Node 23's) crashes resolving Vitest 5's peers
+(`Cannot read properties of null (reading 'edgesOut')`); npm 11, which Node
+24 ships, installs it.
 
 ## See also
 
