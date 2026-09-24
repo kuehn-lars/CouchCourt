@@ -1,0 +1,385 @@
+/* Over the court during play: countdown, pause, result, scorebug, the
+   umpire's call and the camera note. */
+
+/* ------------------------------------------------------- countdown */
+
+.countdown {
+	display: grid;
+	place-content: center;
+	justify-items: center;
+	gap: 1rem;
+	background: radial-gradient(
+		ellipse 60% 60% at 50% 50%,
+		rgba(5, 8, 12, 0.55),
+		rgba(5, 8, 12, 0) 70%
+	);
+}
+.count-num {
+	display: block;
+	font: 700 16rem / 0.9 var(--font-round);
+	letter-spacing: -0.06em;
+	font-variant-numeric: tabular-nums;
+	text-shadow: 0 1rem 4rem rgba(0, 0, 0, 0.6);
+}
+.count-sub {
+	margin: 0;
+	font-size: 1.2rem;
+	color: var(--ink-2);
+	font-weight: 500;
+}
+
+/* The word that starts a match, once, over the court. */
+.go {
+	display: grid;
+	place-items: center;
+	font: 800 12rem / 1 var(--font-round);
+	letter-spacing: -0.06em;
+	color: var(--accent);
+	text-shadow: 0 1rem 5rem rgba(220, 255, 74, 0.35);
+}
+
+/* -------------------------------------------------------- the pause */
+
+.pause {
+	display: grid;
+	place-items: center;
+	background: rgba(5, 8, 12, 0.62);
+	backdrop-filter: blur(14px) saturate(120%);
+	-webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+.pause-card {
+	display: grid;
+	justify-items: center;
+	gap: 1rem;
+	max-width: 30rem;
+	text-align: center;
+}
+.pause-card .icon {
+	width: 5rem;
+	height: 5rem;
+	padding: 1.3rem;
+	border-radius: 50%;
+	color: var(--side, var(--accent));
+	background: color-mix(in srgb, var(--side, var(--accent)) 12%, transparent);
+	box-shadow: 0 0 0 0
+		color-mix(in srgb, var(--side, var(--accent)) 40%, transparent);
+	animation: ripple 2s var(--ease) infinite;
+}
+@keyframes ripple {
+	70%,
+	100% {
+		box-shadow: 0 0 0 1.6rem transparent;
+	}
+}
+.pause h2,
+.result h2 {
+	margin: 0;
+	font-size: 3rem;
+	font-weight: 700;
+	letter-spacing: -0.04em;
+	line-height: 1.05;
+}
+.pause p,
+.result p {
+	margin: 0;
+	text-wrap: balance;
+	font-size: 1.15rem;
+	line-height: 1.45;
+	color: var(--ink-2);
+}
+
+/* ------------------------------------------------------- the result */
+
+/* A lower third over the winner's celebration, not a curtain in front of
+   it: the camera is orbiting the winner (render/camera.ts, victoryPose), so
+   the card sits bottom-left and the scene stays unblurred. */
+.result {
+	--side: var(--accent);
+	display: grid;
+	align-items: end;
+	justify-items: start;
+	padding: 0 0 4.5rem 4rem;
+	pointer-events: none;
+	background:
+		radial-gradient(
+			ellipse 60% 70% at 0% 100%,
+			color-mix(in srgb, var(--side) 22%, rgba(5, 8, 12, 0.9)),
+			transparent 70%
+		),
+		linear-gradient(0deg, rgba(5, 8, 12, 0.75), transparent 45%);
+}
+.result.on {
+	pointer-events: auto;
+}
+.result-card {
+	display: grid;
+	justify-items: start;
+	gap: 0.5rem;
+	text-align: left;
+}
+.result-card > .icon {
+	width: 3.6rem;
+	height: 3.6rem;
+	color: var(--side);
+	margin-bottom: 0.2rem;
+	filter: drop-shadow(
+		0 0 1.2rem color-mix(in srgb, var(--side) 60%, transparent)
+	);
+}
+.result h2 {
+	font-size: 3.6rem;
+}
+.result .winner {
+	color: var(--side);
+}
+.result .final {
+	display: flex;
+	align-items: baseline;
+	gap: 1.4rem;
+	margin: 0.2rem 0 0.6rem;
+	color: var(--ink);
+	font: 700 6.5rem / 1 var(--font-round);
+	letter-spacing: -0.05em;
+	font-variant-numeric: tabular-nums;
+}
+.final .lose {
+	color: var(--ink-3);
+}
+.final .sep {
+	width: 2.2rem;
+	height: 0.4rem;
+	border-radius: 1rem;
+	align-self: center;
+	background: var(--hairline-2);
+}
+.result .btn {
+	margin-top: 0.8rem;
+}
+
+/* --------------------------------------------------------- scorebug */
+
+.bug {
+	position: fixed;
+	top: 1.5rem;
+	left: 1.75rem;
+	display: grid;
+	min-width: 17rem;
+	border-radius: 1.1rem;
+	overflow: hidden;
+	background: rgba(10, 14, 19, 0.78);
+	backdrop-filter: blur(24px) saturate(160%);
+	-webkit-backdrop-filter: blur(24px) saturate(160%);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.08),
+		inset 0 0 0 1px var(--hairline),
+		0 1rem 2.5rem -1rem rgba(0, 0, 0, 0.7);
+	opacity: 0;
+	transform: translateY(-1.5rem) scale(0.98);
+	transition:
+		opacity 500ms var(--ease),
+		transform 700ms var(--spring);
+}
+.bug.on {
+	opacity: 1;
+	transform: none;
+}
+
+/* Split screen: one half per player. The scorebug moves to the top centre,
+   over the seam, where it belongs to neither half. */
+.divider {
+	position: fixed;
+	inset: 0 auto 0 50%;
+	width: 0.25rem;
+	margin-left: -0.125rem;
+	background: linear-gradient(
+		180deg,
+		var(--near) 0%,
+		rgba(5, 8, 12, 0.95) 30%,
+		rgba(5, 8, 12, 0.95) 70%,
+		var(--far) 100%
+	);
+	box-shadow:
+		0 0 0 1px rgba(255, 255, 255, 0.06),
+		0 0 2rem rgba(0, 0, 0, 0.6);
+	opacity: 0;
+	transition: opacity 500ms var(--ease);
+}
+#ui.split .divider {
+	opacity: 1;
+}
+.half-tag {
+	position: absolute;
+	bottom: 1.5rem;
+	display: inline-flex;
+	align-items: center;
+	height: 2.2rem;
+	padding: 0 1rem;
+	border-radius: 999px;
+	font-size: 0.95rem;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	white-space: nowrap;
+	color: var(--accent-ink);
+}
+.half-tag:first-child {
+	right: 1.5rem;
+	background: var(--near);
+}
+.half-tag:last-child {
+	left: 1.5rem;
+	background: var(--far);
+}
+#ui.split .bug {
+	left: 50%;
+	translate: -50% 0;
+}
+.bug-row {
+	display: grid;
+	grid-template-columns: 0.3rem 1fr 1.4rem 2.6rem 3.4rem;
+	align-items: center;
+	height: 2.9rem;
+}
+.bug-row + .bug-row {
+	border-top: 1px solid var(--hairline);
+}
+.bug-bar {
+	align-self: stretch;
+	background: var(--near);
+}
+.bug-row[data-side="far"] .bug-bar {
+	background: var(--far);
+}
+.bug-name {
+	padding-left: 0.9rem;
+	font-size: 1rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+.bug-serve {
+	display: grid;
+	place-items: center;
+	color: var(--accent);
+	opacity: 0;
+	transform: scale(0.4);
+	transition:
+		opacity 250ms var(--ease),
+		transform 500ms var(--spring);
+}
+.bug-serve.on {
+	opacity: 1;
+	transform: none;
+}
+.bug-serve .icon {
+	width: 1rem;
+	height: 1rem;
+}
+.bug-games,
+.bug-points {
+	display: grid;
+	place-items: center;
+	height: 100%;
+	overflow: hidden;
+	font: 700 1.35rem / 1 var(--font-round);
+	font-variant-numeric: tabular-nums;
+}
+.bug-games {
+	color: var(--ink-2);
+}
+.bug-points {
+	background: var(--accent);
+	color: var(--accent-ink);
+}
+.bug-row + .bug-row .bug-points {
+	box-shadow: inset 0 1px 0 rgba(16, 21, 10, 0.18);
+}
+.bug-tb {
+	padding: 0.35rem 0.9rem;
+	font-size: 0.72rem;
+	font-weight: 650;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	border-top: 1px solid var(--hairline);
+}
+
+/* ------------------------------------------------------ umpire's call */
+
+.call {
+	position: fixed;
+	top: 15%;
+	left: 50%;
+	transform: translateX(-50%);
+	display: grid;
+	justify-items: center;
+	gap: 0.7rem;
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity 400ms var(--ease);
+}
+.call.on {
+	opacity: 1;
+	transition: none;
+}
+.call-text {
+	font-size: 3.6rem;
+	font-weight: 700;
+	letter-spacing: -0.035em;
+	text-shadow: 0 0.4rem 2.5rem rgba(0, 0, 0, 0.8);
+}
+.call.on .call-text {
+	animation: wipe 560ms var(--ease) both;
+}
+.call-rule {
+	width: 4rem;
+	height: 0.3rem;
+	border-radius: 1rem;
+	background: var(--accent);
+	transform-origin: center;
+}
+.call.on .call-rule {
+	animation: grow 700ms var(--spring) 120ms both;
+}
+@keyframes wipe {
+	/* The clip overhangs every edge but the moving one, or it crops the
+	   text-shadow into a visible box. */
+	from {
+		clip-path: inset(-60% 100% -60% -20%);
+		transform: translateX(-0.8rem);
+	}
+	to {
+		clip-path: inset(-60% -20% -60% -20%);
+		transform: none;
+	}
+}
+@keyframes grow {
+	from {
+		transform: scaleX(0);
+	}
+}
+
+/* A brief line at the bottom: what the camera just changed to. */
+.note {
+	position: fixed;
+	bottom: 2rem;
+	left: 50%;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.55rem;
+	padding: 0.7rem 1.2rem;
+	border-radius: 999px;
+	font-size: 0.95rem;
+	font-weight: 550;
+	background: var(--glass);
+	backdrop-filter: blur(20px) saturate(160%);
+	-webkit-backdrop-filter: blur(20px) saturate(160%);
+	box-shadow: inset 0 0 0 1px var(--hairline-2);
+	opacity: 0;
+	transform: translate(-50%, 0.8rem);
+	transition:
+		opacity 300ms var(--ease),
+		transform 500ms var(--ease);
+}
+.note.on {
+	opacity: 1;
+	transform: translate(-50%, 0);
+}

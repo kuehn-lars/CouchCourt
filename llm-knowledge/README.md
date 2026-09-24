@@ -11,7 +11,7 @@ code:
 # How this vault works
 
 An Obsidian vault, and the long-term memory for every Claude Code session on
-SwingCourt. Sessions read it before working and write to it before finishing;
+CouchCourt. Sessions read it before working and write to it before finishing;
 `CLAUDE.md` in the repo root is what enforces that.
 
 Open it by pointing Obsidian at `llm-knowledge/`. No plugins — plain Markdown

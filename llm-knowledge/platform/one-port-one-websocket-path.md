@@ -16,7 +16,7 @@ attaches to that server's `upgrade` event and **answers every upgrade on it**,
 whatever the path. Two such servers on one HTTP server both answer the same
 handshake, and the client gets two overlapping responses.
 
-SwingCourt runs exactly that arrangement on purpose: the relay shares Vite's
+CouchCourt runs exactly that arrangement on purpose: the relay shares Vite's
 port and origin ([[0010-vite-preview-as-production-server]]), and Vite runs
 its own WebSocket server on that port for HMR.
 

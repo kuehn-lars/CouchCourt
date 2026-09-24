@@ -138,7 +138,7 @@ not a knife-edge — the original derivation is
 
 The `power` floor of **0.15, not 0**, is a feel decision, not a measurement: a
 swing that cleared the duration gate was a real attempt and should never read
-as nothing. `PRODUCT.md` asks to guess in the player's favour.
+as nothing. When in doubt, guess in the player's favour.
 
 ## Invariants
 

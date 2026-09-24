@@ -42,7 +42,7 @@ The phone's `aim` stream is **not read by any v1 code.**
 
 Reading phone yaw needs a trustworthy compass zero, and that needs a
 per-player calibration step — hold the phone this way, tap here — inside the
-thirty seconds `PRODUCT.md` calls the core engineering problem of the whole
+thirty seconds that are the core engineering problem of the whole
 project. It also has to work for two players facing opposite directions, so
 the calibration cannot be shared.
 
@@ -51,8 +51,8 @@ Using its sign for direction costs nothing extra, needs no calibration, and
 produces a control scheme a player discovers by playing rather than by being
 told.
 
-It is also honest about what the game is. `PRODUCT.md`: *"Timing and intent
-matter more than motion capture."* A direction derived from timing cannot
+It is also honest about what the game is. *Timing and intent
+matter more than motion capture.* A direction derived from timing cannot
 contradict that; a direction derived from a compass bearing invites a fidelity
 argument the project has already declined.
 

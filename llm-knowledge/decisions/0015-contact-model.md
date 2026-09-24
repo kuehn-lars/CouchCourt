@@ -99,7 +99,7 @@ after it, p90 ~84ms, against 200/334ms before.
   unless a ball is at the player's contact or they are serving (a stray swing
   there tosses the ball, which is caught). The phone also only sends while the
   match is `playing`. Idle and pocket traces still never fire — that is the
-  `PRODUCT.md` bar.
+  bar.
 - **A double fault is practically impossible** — serves are solved into the
   box. Faults remain in the rules for a net clip or an edge case.
 - **Balance constants are tuned against a simulated human**, not a real one:

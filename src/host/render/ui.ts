@@ -2,7 +2,7 @@
  * The score overlay: a broadcast scorebug in the top-left corner, the
  * umpire's call above the net, and a one-line note at the bottom. Plain DOM
  * over the canvas, not a Three.js scene — crisp text at any resolution costs
- * nothing this way. Styles are in `host.css`.
+ * nothing this way. Styles are in `styles/match.css`.
  *
  * The corner, not the centre: panels once sat centred at the top and bottom
  * edges, which put the near player's head behind the bottom one for the

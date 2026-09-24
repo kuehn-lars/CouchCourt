@@ -7,9 +7,9 @@
  * Plain DOM over the canvas, for the same reason the score overlay is
  * (`render/ui.ts`): crisp text at any resolution, and no reason to fight a
  * GPU for something the browser already does perfectly. Styles live in
- * `host.css`; this file only builds nodes and flips classes.
+ * `styles/lobby.css`; this file only builds nodes and flips classes.
  *
- * `PRODUCT.md`'s bar for this screen is the only one that matters — a guest
+ * The bar for this screen is the only one that matters — a guest
  * who has never seen the game goes from scanning to swinging in under a
  * minute, with nobody explaining anything. So the code is the biggest thing
  * in the panel, the URL is under it in case the camera app fails, and the
@@ -187,7 +187,7 @@ export function createLobbyUI(
 	const actions = el("div", "actions", start, solo, startNote);
 
 	const join = el("section", "join", headline, lede, joinRow, actions);
-	const brand = el("header", "brand", icon("tennisBall"), "SwingCourt");
+	const brand = el("header", "brand", icon("logo"), "CouchCourt");
 
 	const key = (k: string, label: string) =>
 		el("span", "", el("kbd", "", k), label);

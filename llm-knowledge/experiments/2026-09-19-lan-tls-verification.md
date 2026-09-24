@@ -4,7 +4,7 @@ updated: 2026-09-19
 tags: [experiment, networking, https, ios]
 status: current
 code:
-  - `scripts/setup-certs.mjs`
+  - `scripts/setup-certs.ts`
 ---
 
 # 2026-09-19 — Verifying LAN HTTPS with a public certificate

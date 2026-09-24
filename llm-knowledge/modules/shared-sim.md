@@ -93,7 +93,7 @@ Nothing in `sim/` imports anything outside `src/shared/`. The consumers are
   the same integrator at the same step the live ball does.
 - **`stroke.at` identifies a shot.** A new `at` is a new hit; the same `at` with
   a new object is a `revise` — `events.ts` and `main.ts` both rely on it to
-  avoid a second animation, sound and "hit" buzz.
+  avoid a second animation, sound and "hit" flash.
 - **The stroke played is the phone's `kind`, never `contact.stroke`.**
   `contact.stroke` is the stance the player ran to — the renderer's ready
   pose — and nothing else. `strokeOf` in `rally.ts` is the one place a swing
@@ -163,7 +163,7 @@ errors, or not at all. Changing one alone was measured to do nothing.
 
 ## Deliberately not modelled
 
-Manual movement (`PRODUCT.md` scope); lets as replays; foot faults; doubles;
+Manual movement (out of scope, [[architecture]]); lets as replays; foot faults; doubles;
 best-of-three; a spin vector or Magnus force (spin is a gravity multiplier).
 
 ## See also

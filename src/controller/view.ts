@@ -57,7 +57,7 @@ export function racketView(
 	me: Side | null,
 	sinceCountdown: number,
 ): RacketView {
-	const rim = me ? SIDE_NAME[me] : "SWINGCOURT";
+	const rim = me ? SIDE_NAME[me] : "COUCHCOURT";
 	if (!match || !me) {
 		return {
 			headline: [{ text: "HI", tone: "accent" }],

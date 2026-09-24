@@ -11,7 +11,7 @@ code:
 
 Node's rule for an `EventEmitter` that emits `'error'` with nothing listening
 is to **throw it**. For a `ws` socket that means the process exits. For
-SwingCourt that means the host page, every controller, the static files and
+CouchCourt that means the host page, every controller, the static files and
 the relay all die together, because they are one process
 ([[0010-vite-preview-as-production-server]]).
 

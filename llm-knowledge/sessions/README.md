@@ -39,3 +39,9 @@ worked is visible in the diff. What you tried, ruled out, and abandoned is not,
 and it is the part nobody can reconstruct later.
 
 See `../README.md` for what belongs in the vault at all.
+
+## The handover at the top
+
+Each log opens with a `## Handover` section, rewritten after every response,
+that holds the current state. The next session reads it first. It is the one
+part of the log that is not append-only. Format is in `CLAUDE.md` §2.

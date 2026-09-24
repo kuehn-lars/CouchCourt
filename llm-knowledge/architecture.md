@@ -1,5 +1,5 @@
 ---
-title: How SwingCourt fits together
+title: How CouchCourt fits together
 updated: 2026-09-24
 tags: [map, architecture, core]
 status: current
@@ -12,7 +12,7 @@ code:
   - `package.json`
 ---
 
-# How SwingCourt fits together
+# How CouchCourt fits together
 
 **The second page to read, after [[index]].** It is the only note that
 describes the system as a whole; everything else in the vault describes one
@@ -92,7 +92,8 @@ This is the path that matters. Everything else in the codebase supports it.
 
 ① **Rebuilt 2026-09-22**: announces each rotation lobe at its peak, and lets
 the host pick which peak was the swing. Reads the stroke at the peak,
-including overhead ([[2026-09-22-stroke-classifier]]). Unverified on a phone.
+including overhead ([[2026-09-22-stroke-classifier]]). Played on real iPhones
+2026-09-24 and works; its accuracy has not been measured.
 ② Swings are only sent while the match is `playing`.
 ③ The swing is stamped with the **host's** sim clock, never the phone's
 `swing.at` — [[0007-host-arrival-time-for-swing-timing]].
@@ -267,17 +268,27 @@ over the real relay, swinging blind every 280ms against the solo bot, got 11
 hits, 2 points won and 2 lost in 20s, with no console errors on the host. The
 new controller page was screenshotted at phone size.
 
-A real phone, a real swing and a real frame rate have not. Headless Chrome
-renders through SwiftShader and has no motion sensors, so it says nothing
-about 60fps on a MacBook GPU and nothing at all about feel, which is the bar
-`PRODUCT.md` sets. Nor has the direction classifier been measured against a
-single swing recorded at rally spacing — every committed trace is a
-multi-rep capture. [[2026-09-21-swing-direction-classifier]].
+**Played on real phones, 2026-09-24:** the user played it end to end on an
+iPhone 14 Pro and an iPhone 16e, and it worked on both. The host has been read
+back on a real Apple M3 GPU, holding 60fps in the lobby
+([[msaa-target-is-discarded-after-resolve]]).
+
+What that report does not include is any measurement. How often a swing is
+read as the wrong stroke, the latency a player perceives, and the balance
+constants (`TIMING_IDEAL` and the rest, [[modules/shared-sim]]) are still
+tuned against a simulated human. Nor has the direction classifier been
+measured against a single swing recorded at rally spacing — every committed
+trace is a multi-rep capture. [[2026-09-21-swing-direction-classifier]].
 
 ## What is deliberately not here
 
-Carried forward from the simulation plan's "not being built" list, still
-binding:
+**Out of scope for v1**, and binding: doubles, manual player movement, play
+across different networks, custom characters, and accounts or stats that
+persist between sessions. These are not "later" — building toward them now
+adds structure the game does not need.
+
+The engineering equivalents, carried forward from the simulation plan's "not
+being built" list and just as binding:
 
 - No physics engine dependency — three planes and a sphere is about forty
   lines, and a new dependency needs a decision note per `CLAUDE.md` §7.
@@ -288,9 +299,6 @@ binding:
 - No anti-cheat. The host page is trusted; everyone is in the same room.
 - No time synchronisation between phone and host. See
   [[0007-host-arrival-time-for-swing-timing]].
-
-`PRODUCT.md`'s "Explicitly out of scope for v1" is binding and this list
-extends it with the engineering equivalents.
 
 ## Reading order for a new session
 

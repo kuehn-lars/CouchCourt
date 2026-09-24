@@ -1,13 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { lanUrlsPlugin } from "./scripts/lan-urls.ts";
 import { relayPlugin } from "./scripts/relay-plugin.ts";
 import { traceEndpoint } from "./scripts/trace-endpoint.ts";
 
 const fromRoot = (path: string) =>
 	fileURLToPath(new URL(path, import.meta.url));
 
-/** Single source of truth for the port, shared with scripts/setup-certs.mjs. */
+/** Single source of truth for the port, shared with scripts/setup-certs.ts. */
 const PORT: number = JSON.parse(
 	readFileSync(fromRoot("./package.json"), "utf8"),
 ).config.port;
@@ -28,8 +29,8 @@ function devServerHttps() {
 	const cert = fromRoot("./certs/cert.pem");
 	if (!existsSync(key) || !existsSync(cert)) {
 		console.warn(
-			"\n[swingcourt] No certificates in ./certs — serving over HTTP.\n" +
-				"[swingcourt] iOS will refuse motion sensors. Run `npm run certs` first.\n",
+			"\n[couchcourt] No certificates in ./certs — serving over HTTP.\n" +
+				"[couchcourt] iOS will refuse motion sensors. Run `npm run certs` first.\n",
 		);
 		return undefined;
 	}
@@ -55,16 +56,27 @@ export default defineConfig(({ command, mode, isPreview }) => {
 		// Vitest also runs as command "serve" (with mode "test"), which is
 		// exactly the case `serving` exists to exclude. Without this gate a
 		// filesystem-writing endpoint would come alive on every `vitest run`.
-		// The relay belongs to both serve-time servers (dev and preview); the
-		// recorder writes to the repo's fixture folder and belongs only to dev.
+		// The relay and the printed URLs belong to both serve-time servers (dev
+		// and preview); the recorder writes to the repo's fixture folder and
+		// belongs only to dev.
 		plugins: serving
-			? isPreview
-				? [relayPlugin()]
-				: [traceEndpoint(fromRoot("./tests/fixtures/motion")), relayPlugin()]
+			? [
+					...(isPreview
+						? []
+						: [traceEndpoint(fromRoot("./tests/fixtures/motion"))]),
+					relayPlugin(),
+					lanUrlsPlugin(),
+				]
 			: [],
 		build: {
 			outDir: fromRoot("./dist"),
 			emptyOutDir: true,
+			// The host bundle is ~665 kB and three.js is 543 kB of it, so no
+			// split gets under Vite's default 500 kB (measured 2026-09-25 with a
+			// `three` manualChunk). It is fetched once, over the LAN, from the
+			// laptop it runs on. The limit sits just above today's size so the
+			// warning still means "this grew".
+			chunkSizeWarningLimit: 700,
 			rollupOptions: {
 				// Three pages, one build: the redirect, the court, and the racket.
 				input: {
@@ -96,7 +108,11 @@ export default defineConfig(({ command, mode, isPreview }) => {
 			environment: "node",
 			// Relative to the repo, not to `root` above.
 			root: fromRoot("."),
-			include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+			include: [
+				"src/**/*.test.ts",
+				"scripts/**/*.test.ts",
+				"tests/**/*.test.ts",
+			],
 		},
 	};
 });

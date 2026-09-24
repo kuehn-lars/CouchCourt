@@ -42,8 +42,9 @@ import {
 	TROPHY,
 } from "./poses.ts";
 
-/** Coral and ice, mirrored in `host.css` (`--near`, `--far`) and on the
- * phone, so a player finds themselves on court by colour (decision 0017). */
+/** Coral and ice, mirrored in `styles/base.css` (`--near`, `--far`) and on
+ * the phone, so a player finds themselves on court by colour (decision
+ * 0017). */
 export const SIDE_COLOR: Readonly<Record<Side, string>> = {
 	near: "#ff5d73",
 	far: "#5ac8fa",

@@ -142,7 +142,7 @@ be added in both or it silently vanishes. The host builds it in
   **no v1 code consumes them**. Shot direction comes from timing's sign
   instead — [[0008-timing-not-aim-for-shot-direction]]. Do not wire `aim` into
   the sim on the assumption that it was simply forgotten.
-- **`feedback` is not authoritative for anything.** It drives haptics on the
+- **`feedback` is not authoritative for anything.** It drives the flash on the
   phone. The host has already decided what happened.
 - **`Swing.lag` is a duration, not a timestamp, and that is the whole reason
   it is allowed.** Both ends of it are read from the same phone's clock

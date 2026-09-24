@@ -42,7 +42,7 @@ minute costs nothing and there is no window length to tune.
 Because it cannot be fast. `EPISODE_MERGE_GAP_MS` is 800, so the batch
 detector does not know an episode has ended until 800ms of quiet have passed.
 Measured, a rolling-buffer wrapper emits **817–3133ms after the swing's peak,
-median 1066ms**. `PRODUCT.md` asks for a delay "not something a player
+median 1066ms**. The bar is a delay "not something a player
 notices." Emitting at 70% decay gives **median 133ms, p90 234ms, max 317ms**.
 
 This is not a tuning gap that could be closed. It is what batch means.
@@ -60,7 +60,7 @@ three failures are invisible to the game; only a serve read as a groundstroke
 changes anything, and it changes it to a legal, slower serve.
 
 The residual cost is an under-read `power`. `POWER_FLOOR` exists for exactly
-this, and `PRODUCT.md` asks us to guess in the player's favour.
+this, and the design principle is to guess in the player's favour.
 
 **The property that actually matters survives untouched:** zero false fires
 across all nine negative traces — phone on a table, in a pocket, walking,

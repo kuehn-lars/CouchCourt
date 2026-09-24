@@ -1,8 +1,8 @@
 /**
  * Every texture in the scene, drawn at startup on a 2D canvas. No image
- * files: `PRODUCT.md`'s "own assets only", and nothing to fetch on a party's
- * Wi-Fi. Each is drawn once; only the LED boards are scrolled, and that is a
- * texture offset, not a redraw.
+ * files: nothing to license, and nothing to fetch on a party's Wi-Fi. Each
+ * is drawn once; only the LED boards are scrolled, and that is a texture
+ * offset, not a redraw.
  */
 
 import * as THREE from "three";
@@ -96,7 +96,7 @@ export function wordmarkTexture(): THREE.CanvasTexture {
 		ctx.textAlign = "center";
 		ctx.textBaseline = "middle";
 		ctx.fillStyle = "rgba(220,255,74,0.8)";
-		ctx.fillText("SWINGCOURT", w / 2, h / 2 + 6);
+		ctx.fillText("COUCHCOURT", w / 2, h / 2 + 6);
 	});
 }
 
@@ -111,9 +111,9 @@ export function ledTexture(): THREE.CanvasTexture {
 		ctx.fillRect(0, 0, w, h);
 		const block = w / 4;
 		const items = [
-			{ text: "SWINGCOURT", color: "#dcff4a" },
+			{ text: "COUCHCOURT", color: "#dcff4a" },
 			{ text: "NEAR", color: "#ff5d73" },
-			{ text: "SWINGCOURT", color: "#f3f6ef" },
+			{ text: "COUCHCOURT", color: "#f3f6ef" },
 			{ text: "FAR", color: "#5ac8fa" },
 		];
 		ctx.font = "800 40px system-ui, -apple-system, sans-serif";

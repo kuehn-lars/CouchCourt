@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-How to work in this repository. **What** the project is lives in `PRODUCT.md`;
+How to work in this repository. **What** the project is lives in `README.md`;
 **how the code fits together** lives in `llm-knowledge/architecture.md`; **why
 things are the way they are** lives in the rest of the knowledge vault. This
 file is only the working contract.
@@ -9,7 +9,10 @@ file is only the working contract.
 
 ## 1. Start: read the vault
 
-**Before anything else, read `llm-knowledge/index.md`.** It is the catalog —
+**Before anything else, read the `## Handover` at the top of the newest log in
+`llm-knowledge/sessions/`.** It is where the previous session left off (§2).
+
+**Then read `llm-knowledge/index.md`.** It is the catalog —
 every note, one line each — and it stays short enough to read at the start of
 every session.
 
@@ -66,6 +69,22 @@ the part nobody can reconstruct later.
 
 This folder is gitignored scratch. Be rough and be honest, especially about
 dead ends.
+
+### The handover at the top, rewritten after every message
+
+The log opens with a `## Handover` section: the session's **current state**, so
+the next chat can pick up from it without reading the rest. **Rewrite it at the
+end of every response** — a chat can end at any message. It is the one part of
+the log you overwrite; the iterations below it stay append-only.
+
+```markdown
+## Handover
+
+**Goal:** what the user asked for.
+**State:** done / in progress / blocked; branch; anything uncommitted.
+**Open:** unfinished work, failing tests, questions waiting on the user.
+**Next:** the exact next step.
+```
 
 ---
 
@@ -242,11 +261,10 @@ locally before pushing; do not use CI as your test runner.
 
 ## 8. Scope
 
-Build what was asked. `PRODUCT.md` lists what v1 is not — do not build those,
-and do not add abstractions in anticipation of them. No interface with one
-implementation, no config for a value that never changes, no scaffolding for
-later. `llm-knowledge/architecture.md`'s "What is deliberately not here" is the
-engineering half of the same list.
+Build what was asked. `llm-knowledge/architecture.md`'s "What is deliberately
+not here" lists what v1 is not — do not build those, and do not add
+abstractions in anticipation of them. No interface with one implementation, no
+config for a value that never changes, no scaffolding for later.
 
 If you think something is out of scope or wrongly specified, say so in a
 sentence and then deliver the full request anyway. Narrowing the work is the

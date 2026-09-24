@@ -9,6 +9,11 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     open-pull-requests-limit: 5
+    # @types/node describes the runtime, and the runtime is `.nvmrc`'s Node 24
+    # LTS. A newer major types APIs Node 24 does not have. Bump it with `.nvmrc`.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /

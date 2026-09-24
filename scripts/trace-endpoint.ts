@@ -18,7 +18,7 @@ const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
 export function traceEndpoint(dir: string): Plugin {
 	return {
-		name: "swingcourt-trace-endpoint",
+		name: "couchcourt-trace-endpoint",
 		apply: "serve",
 		configureServer(server) {
 			server.middlewares.use("/__trace", (req, res) => {

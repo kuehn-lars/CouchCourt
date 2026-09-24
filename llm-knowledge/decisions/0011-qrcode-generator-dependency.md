@@ -27,7 +27,7 @@ version selection, and a bit-interleaving step. That is 250+ lines of code
 whose only acceptance test is "does a phone camera read it", which is the one
 test this project cannot run in CI.
 
-`PRODUCT.md` is unusually direct about which part of this system is load
+The project is unusually direct about which part of this system is load
 bearing: *"the hard problem is the first thirty seconds"*, and the code is
 the first three of them. Hand-rolling the one component whose failure mode is
 "a guest points a camera at it and nothing happens" is the worst possible
@@ -41,13 +41,13 @@ place to save a dependency.
 several transitive dependencies for a function we call once. `qrcode-generator`
 is the same algorithm with none of that.
 
-**A QR web service.** Dead on arrival: `PRODUCT.md`'s "local first —
+**A QR web service.** Dead on arrival: "local first —
 gameplay never depends on an internet connection", and the LAN this runs on
 may have no route out at all.
 
 **No QR at all, just the URL as text.** This was the real alternative, and it
 is what the lobby falls back to anyway (the URL is printed under the code).
-But typing `https://192.168.178.26:5173/controller/` on a guest's phone is
+But typing `https://192.168.1.42:5173/controller/` on a guest's phone is
 exactly the "nothing typed" bar the product sets, and it is the difference
 between a party trick and a support call.
 

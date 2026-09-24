@@ -200,7 +200,9 @@ const vault = { noteNames: new Set(files.map((f) => basename(f, ".md"))) };
 const notes = files.map((file) => {
 	const text = readFileSync(file, "utf8");
 	return {
-		where: relative(ROOT, file),
+		// Forward slashes on every OS: rules match on `where`, and Windows'
+		// `relative` returns backslashes.
+		where: relative(ROOT, file).replaceAll("\\", "/"),
 		name: basename(file, ".md"),
 		text,
 		frontmatter: readFrontmatter(text),

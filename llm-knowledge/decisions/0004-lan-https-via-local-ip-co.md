@@ -1,10 +1,11 @@
 ---
 title: Publicly trusted certificates for LAN addresses
-updated: 2026-09-19
+updated: 2026-09-25
 tags: [decision, networking, ios, https]
 status: current
 code:
-  - `scripts/setup-certs.mjs`
+  - `scripts/setup-certs.ts`
+  - `scripts/lan-urls.ts`
   - `vite.config.ts`
 ---
 
@@ -15,7 +16,7 @@ code:
 iOS refuses `DeviceMotion` outside a secure context — see
 [[ios-motion-permission]]. The phone must therefore reach the Mac over HTTPS, at
 a LAN address, with a certificate Safari trusts. That requirement collides
-head-on with the "zero friction setup" principle in `PRODUCT.md`.
+head-on with the "zero friction setup" principle.
 
 ## Decision
 
@@ -64,5 +65,13 @@ Verified end to end on 2026-09-19 — see [[2026-09-19-lan-tls-verification]].
    verifies it — see [[lan-https-cert-chain]].
 6. **Third-party dependency.** If local-ip.co disappears, the fallback is mkcert
    with the friction described above. Nothing else in the design depends on it.
+7. **Only the local-ip.co name works, and Vite prints the other one.** The
+   certificate covers `*.my.local-ip.co`, never a bare IP, yet Vite's own
+   startup banner offers `https://<ip>:5173/`. That address gets a certificate
+   warning, and the host page puts its **own origin** in the join QR code, so
+   a host opened at the IP hands that warning to every phone. Since
+   2026-09-25, `npm run dev` and `npm start` print the local-ip.co Host and
+   Controller URLs instead (`scripts/lan-urls.ts`, which replaces the
+   server's `printUrls`; see [[modules/tooling]]).
 
 **Code map:** [[modules/tooling]] · [[modules/controller]]

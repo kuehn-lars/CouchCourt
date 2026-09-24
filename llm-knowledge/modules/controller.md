@@ -1,6 +1,6 @@
 ---
 title: "Module: src/controller — the iPhone racket"
-updated: 2026-09-24
+updated: 2026-09-25
 tags: [module, controller, ios]
 status: current
 code:
@@ -37,7 +37,7 @@ verified" below before trusting this page over your own hands.
 | `src/controller/motion.ts` | `requestMotionPermission()` — the iOS permission gate | working, now used by both the controller and the recorder |
 | `src/controller/index.html` | The controller page | built — permission gate + play screen + settings sheet; redesigned 2026-09-23 |
 | `src/controller/controller.css` | Every controller style, including the platform rules (touch-action, safe areas) | — |
-| `src/controller/icons.ts` | Phosphor glyphs; fills `[data-icon]` placeholders | no |
+| `src/controller/icons.ts` | Phosphor glyphs plus the two-colour `logo` ([[0021-couchcourt-name-and-mark]]); fills `[data-icon]` placeholders | no |
 | `src/controller/view.ts` | `racketView`: what the racket says for each match state, from your own side | **yes**, `view.test.ts` |
 | `src/controller/racket.ts` | The match screen: the racket drawn on a 2D canvas — strings, stencil, frame, ball, stamps | no (drawing) |
 | `src/controller/record.html` | The trace recorder UI | working, dev tool, unchanged |
@@ -178,7 +178,7 @@ connection state ──────────┘        once a frame, in drawL
 
 stream.level / stream.current ──▶ racket.level()     frame glow, strings bow
 stream.push → Swing ──▶ showSwing ──▶ racket.swing()  frame charges; ball tossed
-session.onFeedback ──▶ flash()  ──▶ racket.hit/point/miss  + colour wash + haptic
+session.onFeedback ──▶ flash()  ──▶ racket.hit/point/miss  + colour wash
 devicemotion gravity ──▶ racket.tilt()                stencil parallax
 ```
 
@@ -196,9 +196,8 @@ on `TOSS_APEX`. The host's `ball: "toss"` is the fallback.
 
 Kept from before, unchanged: one swing arrives as several peaks, so the
 strongest in 400ms is the one shown (and the one the host plays); swings are
-sent only while `playing`; the flash wash and the iOS 18 switch-label haptic
-(**iOS Safari has no `navigator.vibrate`**; the haptic trick is still
-unverified on a phone). The stroke readout (a setting) now reads along the
+sent only while `playing`; the flash wash. **There is no haptic feedback** —
+removed 2026-09-25, see [[ios-web-haptics]]. The stroke readout (a setting) now reads along the
 throat.
 
 **Why the strings are opaque:** a stencil drawn `source-atop` onto
@@ -215,7 +214,7 @@ An animated swing (a phone on an arm meeting a ball at the top of its arc),
 their own until touched, and one button. The permission rules above are
 untouched: the button's handler is byte-for-byte the same. **The cards needed
 a `touch-action` change** — [[touch-action-is-an-intersection]]. Settings
-(gear, bottom corner beside the throat): screen flash, haptic tick, stroke
+(gear, bottom corner beside the throat): screen flash and stroke
 readout, kept in `localStorage` through `shared/prefs.ts`.
 
 Seen in headless Chrome at 390x844, driven by a fake host over the real relay

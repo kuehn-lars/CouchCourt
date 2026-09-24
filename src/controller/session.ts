@@ -20,7 +20,7 @@ import {
 	type Side,
 } from "../shared/protocol.ts";
 
-const SESSION_KEY = "swingcourt-player-id";
+const SESSION_KEY = "couchcourt-player-id";
 
 export type SessionState =
 	| "connecting"
@@ -49,8 +49,7 @@ export function createSession(handlers: {
 	/** The host's match state, relayed. The phone renders it and decides
 	 * nothing from it — `llm-knowledge/decisions/0002-host-authoritative-simulation.md`. */
 	onMatch?: (match: MatchInfo) => void;
-	/** `hit` / `miss` / `point`, for the screen and, where the platform has
-	 * one, the vibration motor. */
+	/** `hit` / `miss` / `point`, for the screen. */
 	onFeedback?: (kind: FeedbackKind) => void;
 }): Session {
 	let socket: WebSocket | null = null;

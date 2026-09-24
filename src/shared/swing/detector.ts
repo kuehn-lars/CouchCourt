@@ -59,9 +59,8 @@ export const POWER_CEIL_DEG_S = 1400;
 
 /**
  * `power` never reads as 0 for a detected swing — a swing that cleared
- * `MIN_SWING_DURATION_MS` was a real swing attempt, and PRODUCT.md asks for
- * generous input: "when in doubt about what a player meant, guess in their
- * favour."
+ * `MIN_SWING_DURATION_MS` was a real swing attempt, and input is meant to be
+ * generous: when in doubt about what a player meant, guess in their favour.
  */
 export const POWER_FLOOR = 0.15;
 

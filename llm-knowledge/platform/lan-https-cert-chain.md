@@ -1,10 +1,11 @@
 ---
 title: local-ip.co's published chain does not match its leaf
-updated: 2026-09-19
+updated: 2026-09-24
 tags: [platform, https, ios, certificates]
 status: current
 code:
-  - `scripts/setup-certs.mjs`
+  - `scripts/setup-certs.ts`
+  - `scripts/cert-chain.ts`
 ---
 
 # local-ip.co's published chain does not match its leaf
@@ -64,6 +65,12 @@ Fetch that (DER — convert to PEM), concatenate onto the leaf, and verify befor
 writing. `npm run certs` does this, and refuses to write a chain that does not
 verify. Reading AIA follows whatever issuer is current, so it survives the next
 rotation instead of hard-coding this one.
+
+Since 2026-09-24 the script does this without `openssl`, on `node:crypto`
+(`scripts/cert-chain.ts`), so it runs on Windows. The `openssl` commands here
+are still the way to check by hand. Node's `X509Certificate` does no AIA
+fetching either: like iOS, and unlike macOS, it rejects a leaf-only chain
+rather than repairing it, and a unit test pins that.
 
 Correct result:
 

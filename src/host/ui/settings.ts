@@ -34,7 +34,7 @@ const DEFAULTS: Settings = {
 
 const OPPONENTS: readonly Opponent[] = ["relaxed", "match", "tough"];
 
-const KEY = "swingcourt.host.settings";
+const KEY = "couchcourt.host.settings";
 
 export const CAMERA_LABEL: Readonly<Record<CameraMode, string>> = {
 	broadcast: "Broadcast",

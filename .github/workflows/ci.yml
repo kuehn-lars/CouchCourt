@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Run from the Actions tab on any branch, without opening a pull request.
+  workflow_dispatch:
 
 # A new push makes the previous run's answer irrelevant.
 concurrency:
@@ -15,19 +17,27 @@ permissions:
 
 jobs:
   verify:
-    name: verify
-    runs-on: ubuntu-latest
+    # Every OS the host can run on. Nothing here is OS-specific on purpose —
+    # `npm run certs` dropped `openssl` so Windows could host — and this is
+    # what keeps it that way. fail-fast off: one OS failing should not hide
+    # whether the others pass.
+    name: verify (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
 
-      # `if: '!cancelled()'` on every step below: one job keeps CI fast and
+      # `if: '!cancelled()'` on every step below: one job per OS keeps CI
       # simple, but without this a lint error would mask every test failure and
       # you would fix them one push at a time. This way one run reports
       # everything that is wrong.

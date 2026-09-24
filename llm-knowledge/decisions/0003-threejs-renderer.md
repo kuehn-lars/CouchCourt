@@ -12,7 +12,7 @@ code:
 
 ## Context
 
-`PRODUCT.md` left this open pending prototyping. It was decided without a
+The product brief left this open pending prototyping. It was decided without a
 prototype, for the reason below.
 
 ## Decision
@@ -29,8 +29,8 @@ being rendered.
 The usual reason to pick Phaser is its sprite and 2D-physics workflow. That
 advantage is worth nothing here, because there is no artist and no sprites. The
 court, ball, net and players are procedural primitives — a plane, a sphere,
-capsules — which also satisfies the "own assets only" principle in `PRODUCT.md`
-for free, with no licensing question to think about.
+capsules — so every asset is our own for free, with no licensing question
+to think about.
 
 ## The camera follows from the same argument
 

@@ -1,6 +1,6 @@
 ---
 title: "Module: src/host — the Mac display"
-updated: 2026-09-24
+updated: 2026-09-25
 tags: [module, host, rendering]
 status: current
 code:
@@ -15,6 +15,7 @@ code:
   - `src/host/ui/dom.ts`
   - `src/host/ui/icons.ts`
   - `src/host/host.css`
+  - `src/host/styles/`
   - `src/host/raw.d.ts`
   - `src/host/audio/index.ts`
   - `src/host/index.html`
@@ -53,8 +54,9 @@ currently wired end to end.
 | `src/host/ui/lobby.ts` | Title screen (join QR, two seats, how-to slides), countdown, "Play", pause, result | no |
 | `src/host/ui/settings.ts` | `<dialog>` settings sheet and the two corner buttons; prefs in `localStorage` through `shared/prefs.ts` | parsing only, `src/shared/prefs.test.ts` |
 | `src/host/ui/dom.ts` | `el`, write-on-change `setText`, reduced-motion-aware `play` | no |
-| `src/host/ui/icons.ts` | Phosphor glyphs as `?raw` strings ([[0017-phosphor-icons-and-the-visual-system]]) | no |
-| `src/host/host.css` | Every style on the host page: tokens, lobby, scorebug, sheet | — |
+| `src/host/ui/icons.ts` | Phosphor glyphs as `?raw` strings ([[0017-phosphor-icons-and-the-visual-system]]), plus the CouchCourt `logo` from `src/logo.svg` ([[0021-couchcourt-name-and-mark]]) | no |
+| `src/host/host.css` | The page's one stylesheet: an ordered `@import` list that Vite inlines at build time | — |
+| `src/host/styles/` | `base` (tokens, buttons, overlay), `lobby`, `match` (countdown, pause, result, scorebug, calls), `settings`, and `adapt` (narrow windows, reduced motion and transparency), which must stay last because its media queries override the rest | — |
 | `src/host/audio/index.ts` | Synthesised hit / bounce / point. No asset files | no |
 | `src/host/index.html` | `#scene` canvas, `#ui` div, loads `main.ts` | — |
 
@@ -144,7 +146,7 @@ used to be one input per tick so a `hit`/`miss` could be pinned on the swing
 that caused it — but under [[0015-contact-model]] an early swing is held until
 the ball arrives, and one real swing arrives as several peaks, so the tick a
 swing lands on says nothing about whether it connected. A revised stroke keeps
-its `at` and does not buzz twice.
+its `at` and does not send `feedback` twice.
 
 **Events are accumulated across every tick in a frame**, not read off the last
 one, or an event is lost whenever two ticks land in one rAF frame.
@@ -215,7 +217,7 @@ player's own frame (`poses.ts` states it) and never mirrored per side.
 A late swing is resolved in the past, so the ball the sim returns is already
 down the court. On a `hit` event `ball.ts` starts the drawn ball at
 `stroke.from` and closes on the sim ball with a 60ms time constant; a revised
-hit does the same without a second swing, burst or buzz. A jump over 3m with
+hit does the same without a second swing or burst. A jump over 3m with
 no hit is a new point and snaps (and clears the trail).
 
 ## Renderer rules — the ceiling on how this is built

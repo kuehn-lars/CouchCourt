@@ -47,7 +47,7 @@ believe the peak has passed.
 The first row is a floor, not an implementation detail. `EPISODE_MERGE_GAP_MS`
 is 800, so the batch detector cannot know an episode has ended until 800ms of
 quiet have passed. Any faithful streaming wrapper inherits that wait.
-`PRODUCT.md` asks for a delay "not something a player notices"; a second is
+The bar is a delay "not something a player notices"; a second is
 not that.
 
 The p90 is the number worth guarding, and `stream.test.ts` asserts it stays at
@@ -63,7 +63,7 @@ trace sustains `SWING_ROT_THRESHOLD_DEG_S` for 300ms, and a streaming detector
 applies that gate identically to a batch one. See
 [[2026-09-19-swing-detector-tuning]] for where that threshold came from.
 
-This matters more than latency. `PRODUCT.md`: "setting the phone down
+This matters more than latency. The bar: "setting the phone down
 mid-conversation **never** reads as a shot."
 
 ## What streaming gets wrong: it fires on the backswing
@@ -99,7 +99,7 @@ forehand produces a **byte-identical shot** — two of the three failures above
 are invisible to the game. Only the serve case changes anything.
 
 The real residual cost is an under-read `power` (0.22 where 0.42 was meant),
-which `POWER_FLOOR` and `PRODUCT.md`'s "guess in their favour" already soften.
+which `POWER_FLOOR` and the "guess in their favour" principle already soften.
 
 ## What failed
 

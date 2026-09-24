@@ -17,6 +17,8 @@ import tennisBall from "@phosphor-icons/core/assets/regular/tennis-ball.svg?raw"
 import trophy from "@phosphor-icons/core/assets/regular/trophy.svg?raw";
 import wifiSlash from "@phosphor-icons/core/assets/regular/wifi-slash.svg?raw";
 import x from "@phosphor-icons/core/assets/regular/x.svg?raw";
+// Not Phosphor: the CouchCourt mark, two-colour, so it ignores `currentColor`.
+import logo from "../../logo.svg?raw";
 
 export const ICON = {
 	arrowsIn,
@@ -26,6 +28,7 @@ export const ICON = {
 	deviceMobile,
 	gear,
 	handGrabbing,
+	logo,
 	qrCode,
 	robot,
 	tennisBall,

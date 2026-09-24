@@ -45,8 +45,8 @@ Scored in plain numbers, not 15/30/40.
 
 ## Match
 
-v1 scope is a single set. Best-of-three is not in `PRODUCT.md` and should not be
-built until it is.
+v1 scope is a single set. Best-of-three is out of scope ([[architecture]]) and should
+not be built until it is in.
 
 ## Serving
 
@@ -59,12 +59,12 @@ built until it is.
   crosses the net plane still above the band (a clip, not a block), it
   carries on over, damped by `NET_CLIP_DAMPING`, rather than being treated as
   a fault. Real tennis replays a let; replaying it in a motion game means a
-  player swings and nothing happens, which feels broken, so SwingCourt does
+  player swings and nothing happens, which feels broken, so CouchCourt does
   not replay it.
 
 ## Deliberately simplified
 
-Per the non-goals in `PRODUCT.md`, SwingCourt is not a simulation of tennis.
+CouchCourt is not a simulation of tennis: feel beats fidelity.
 Not modelled, and not to be added without a reason:
 
 - Foot faults, time violations, challenges.

@@ -108,8 +108,8 @@ describe("createSwingStream", () => {
 		expect(swingTraces.length).toBeGreaterThanOrEqual(15);
 	});
 
-	// PRODUCT.md: "setting the phone down mid-conversation never reads as a
-	// shot." A phone lying still or in a pocket never gets near a swing.
+	// Setting the phone down mid-conversation must never read as a shot. A
+	// phone lying still or in a pocket never gets near a swing.
 	const resting = files.filter((n) =>
 		["idle", "pocket"].includes(load(n).label),
 	);
