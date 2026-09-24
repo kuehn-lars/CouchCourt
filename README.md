@@ -14,9 +14,9 @@
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-7-3178C6?style=plastic&logo=typescript&logoColor=white" />
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-24-5FA04E?style=plastic&logo=nodedotjs&logoColor=white" />
   <img alt="Three.js" src="https://img.shields.io/badge/Three.js-r186-000000?style=plastic&logo=threedotjs&logoColor=white" />
-  <img alt="Vite" src="https://img.shields.io/badge/Vite-7-646CFF?style=plastic&logo=vite&logoColor=white" />
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-8-646CFF?style=plastic&logo=vite&logoColor=white" />
   <img alt="ws" src="https://img.shields.io/badge/ws-8-010101?style=plastic" />
-  <img alt="Vitest" src="https://img.shields.io/badge/Vitest-3-6E9F18?style=plastic&logo=vitest&logoColor=white" />
+  <img alt="Vitest" src="https://img.shields.io/badge/Vitest-5-6E9F18?style=plastic&logo=vitest&logoColor=white" />
   <img alt="Biome" src="https://img.shields.io/badge/Biome-2-60A5FA?style=plastic&logo=biome&logoColor=white" />
   <img alt="Phosphor Icons" src="https://img.shields.io/badge/Phosphor_Icons-2-5ac8fa?style=plastic" />
   <img alt="qrcode-generator" src="https://img.shields.io/badge/qrcode--generator-2-ff5d73?style=plastic" />

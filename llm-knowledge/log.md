@@ -543,3 +543,11 @@ It never fired on an iPhone: iOS Safari has no `navigator.vibrate`, and the
 gesture, which a swing is not). Removed the `buzz`, the hidden switch, its CSS
 and the "Haptic tick" setting. A stored `haptic` pref is ignored by
 `parsePrefs`. Promoted: [[ios-web-haptics]].
+
+## [2026-09-25] process | Session logs open with a handover
+
+Each session log now starts with a `## Handover` section (goal, state, open,
+next), rewritten after every response, so a new chat can resume from the
+newest log even when the last one ended mid-session. The iterations below it
+stay append-only. Rules are in `CLAUDE.md` §2. Also bumped the README badges to
+Vite 8 and Vitest 5.
