@@ -1,0 +1,4 @@
+# LF everywhere, on every OS. Git for Windows checks text out as CRLF by
+# default, which fails Biome's format check on every file and breaks the
+# vault checker's line-based frontmatter parsing. CI runs on Windows too.
+* text=auto eol=lf
