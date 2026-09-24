@@ -551,3 +551,10 @@ next), rewritten after every response, so a new chat can resume from the
 newest log even when the last one ended mid-session. The iterations below it
 stay append-only. Rules are in `CLAUDE.md` §2. Also bumped the README badges to
 Vite 8 and Vitest 5.
+
+## [2026-09-25] verify | QR join from the printed URL works
+
+Reported by the user: a phone scanning the join QR code from a host opened at
+the local-ip.co URL that `npm run dev` / `npm start` now print joins
+correctly. This closes the "Not verified" in the pre-pin review entry above.
+Still not verified: a real Windows host.
