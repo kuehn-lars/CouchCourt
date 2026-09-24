@@ -163,7 +163,7 @@ errors, or not at all. Changing one alone was measured to do nothing.
 
 ## Deliberately not modelled
 
-Manual movement (`PRODUCT.md` scope); lets as replays; foot faults; doubles;
+Manual movement (out of scope, [[architecture]]); lets as replays; foot faults; doubles;
 best-of-three; a spin vector or Magnus force (spin is a gravity multiplier).
 
 ## See also

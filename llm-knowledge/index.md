@@ -5,7 +5,7 @@ tags: [meta]
 status: current
 ---
 
-# SwingCourt knowledge index
+# CouchCourt knowledge index
 
 **Read this first.** It is the catalog: every note in the vault, one line
 each. Find the rows that touch your task, open those, ignore the rest.
@@ -62,6 +62,7 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0018-stylised-stadium-renderer]] | **The look.** Cel-shaded outlined athletes under real light, bloom and a grade, real player shadows, articulated rigs with layered poses, a living stadium. Overturns renderer rules 3, 5, 6 |
 | [[0019-split-screen]] | Two people, two halves, each from behind their own player — and why the sim needed a per-side "screen-left" |
 | [[0020-the-phone-is-the-string-bed]] | The match screen is a racket: stencil on the strings, ripples, a charging frame, a ball you toss. The score line on the wire |
+| [[0021-couchcourt-name-and-mark]] | Renamed to CouchCourt; the "CC" ball-seam mark and the three marks rejected; favicon is now a file; where `PRODUCT.md`'s binding parts went |
 
 ## Platform
 

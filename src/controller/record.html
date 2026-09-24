@@ -2,18 +2,8 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<!--
-			A tennis ball, inline as a data URI rather than a file in `public/`.
-			Without any icon link at all the browser still asks for
-			`/favicon.ico` and gets a 404 — the last console error on the
-			shipping build, and a generic tab icon on the host screen someone
-			is about to show a room. Inline keeps it to zero new files and no
-			asset pipeline; `#` has to be written `%23` inside a data URI.
-		-->
-		<link
-			rel="icon"
-			href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="%23d8f24a"/><path d="M4.5 5.5a16 16 0 0 1 0 21M27.5 5.5a16 16 0 0 0 0 21" fill="none" stroke="%230a1a2e" stroke-width="2.2"/></svg>'
-		/>
+		<!-- Without an icon link the browser asks for /favicon.ico and 404s. -->
+		<link rel="icon" type="image/svg+xml" href="../logo.svg" />
 		<!--
 			user-scalable=no and viewport-fit=cover matter here: a player is
 			swinging the phone, and a stray pinch-zoom or a control under the
@@ -25,7 +15,7 @@
 		/>
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="theme-color" content="#0b1d13" />
-		<title>SwingCourt Trace Recorder</title>
+		<title>CouchCourt Trace Recorder</title>
 		<style>
 			html,
 			body {
@@ -139,7 +129,7 @@
 					Tapping "Enable motion" makes iOS show its own system prompt asking
 					whether this page can read the phone's motion &amp; orientation
 					sensors. Choose <strong>Allow</strong>. This page and the real
-					SwingCourt controller share an origin, so a "Don't Allow" here also
+					CouchCourt controller share an origin, so a "Don't Allow" here also
 					blocks motion for the actual game, and undoing that means Settings
 					&gt; Safari &gt; Clear History and Website Data.
 				</p>

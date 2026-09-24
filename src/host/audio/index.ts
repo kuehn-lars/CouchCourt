@@ -1,7 +1,6 @@
 /**
  * Sound, synthesised. No files, no `fetch`, no decode step and nothing to
- * license — `PRODUCT.md`'s "own assets only" for free, and the whole module
- * is smaller than a single short wav would be.
+ * license, and the whole module is smaller than a single short wav would be.
  *
  * Driven by the same `RenderEvent[]` the renderer draws from, so a sound can
  * never disagree with the picture: one derivation of "a hit happened", in

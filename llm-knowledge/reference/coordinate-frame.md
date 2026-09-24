@@ -92,7 +92,7 @@ not the net.
 
 `SINGLES_HALF_WIDTH` is the only width. The doubles alleys do not exist, and
 the net posts are the **singles** post positions. v1 is singles —
-`PRODUCT.md`'s out-of-scope list is binding.
+the out-of-scope list in [[architecture]] is binding.
 
 ## See also
 

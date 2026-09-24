@@ -57,7 +57,7 @@ const CONNECTION_RIM: Record<SessionState, string | null> = {
 // ------------------------------------------------------------- settings
 
 /** Kept on this phone. Stored JSON is untrusted (`shared/prefs.ts`). */
-const PREFS_KEY = "swingcourt.controller.prefs";
+const PREFS_KEY = "couchcourt.controller.prefs";
 const PREF_DEFAULTS = { flash: true, haptic: true, readout: true };
 type Prefs = typeof PREF_DEFAULTS;
 

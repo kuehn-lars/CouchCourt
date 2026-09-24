@@ -31,8 +31,8 @@ export interface Ball {
 /**
  * v1 has no manual movement: the sim places each player itself. Both `x` and
  * `z` move — a player runs in from the baseline for a short ball and stays
- * back for a deep one, which is the whole of `PRODUCT.md`'s "ball physics
- * with automatic player movement".
+ * back for a deep one. The player only swings; getting to the ball is the
+ * sim's job.
  *
  * `z` was added on 2026-09-21. Before it, a player slid along their own
  * baseline and their position was decoration: contact was taken at the

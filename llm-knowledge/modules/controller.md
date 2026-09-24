@@ -37,7 +37,7 @@ verified" below before trusting this page over your own hands.
 | `src/controller/motion.ts` | `requestMotionPermission()` — the iOS permission gate | working, now used by both the controller and the recorder |
 | `src/controller/index.html` | The controller page | built — permission gate + play screen + settings sheet; redesigned 2026-09-23 |
 | `src/controller/controller.css` | Every controller style, including the platform rules (touch-action, safe areas) | — |
-| `src/controller/icons.ts` | Phosphor glyphs; fills `[data-icon]` placeholders | no |
+| `src/controller/icons.ts` | Phosphor glyphs plus the two-colour `logo` ([[0021-couchcourt-name-and-mark]]); fills `[data-icon]` placeholders | no |
 | `src/controller/view.ts` | `racketView`: what the racket says for each match state, from your own side | **yes**, `view.test.ts` |
 | `src/controller/racket.ts` | The match screen: the racket drawn on a 2D canvas — strings, stencil, frame, ball, stamps | no (drawing) |
 | `src/controller/record.html` | The trace recorder UI | working, dev tool, unchanged |

@@ -80,7 +80,7 @@ one thing that can go without anyone noticing; a dropped frame is felt.
 ## Alternatives rejected
 
 - **glTF characters and animation clips.** Needs an artist or borrowed assets
-  (`PRODUCT.md`: own assets only), a loader, files to fetch over party Wi-Fi,
+  (the project uses its own assets only), a loader, files to fetch over party Wi-Fi,
   and a pipeline. The primitives-plus-toon approach reads as a style rather
   than as a placeholder once it has outlines, rim light and good poses.
 - **A screen-space outline pass** (`OutlinePass` or a depth/normal edge

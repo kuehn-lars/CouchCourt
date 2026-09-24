@@ -16,8 +16,8 @@
  * is affordable because the host has changed what a swing *means*: nothing
  * happens unless a ball is at the player's contact point, or the player is
  * about to serve (where a stray swing tosses the ball, which is caught). A
- * phone lying still or in a pocket still never gets near a swing — the bar
- * `PRODUCT.md` actually sets.
+ * phone lying still or in a pocket still never gets near a swing, and that
+ * is the guarantee that matters: setting it down never reads as a shot.
  *
  * **One swing, several peaks.** A backswing, the swing and the
  * follow-through can each fire. The host plays the hardest one inside the

@@ -75,7 +75,7 @@ correctly-classified episode (392.1-1401.4°/s — 400 rounds up slightly to
 leave the lowest real swing just above the floor rather than jammed against
 it).
 
-The 0.15 floor, not 0, is a feel decision: PRODUCT.md asks to "guess in
+The 0.15 floor, not 0, is a feel decision: the design principle is to "guess in
 [the player's] favour", and a swing that cleared `MIN_SWING_DURATION_MS` was
 a real attempt — it should never read as nothing. The exact floor and curve
 shape (currently linear) are the most likely things a future session

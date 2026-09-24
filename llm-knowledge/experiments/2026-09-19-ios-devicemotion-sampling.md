@@ -111,7 +111,7 @@ Peak `|rotationRate|` per capture, deg/s:
 A peak-angular-velocity threshold alone **cannot** separate a soft backhand from
 someone talking with their hands, and there is no value that can be chosen to
 make it. Any threshold above 866 loses real backhands; anything below it fires
-while a guest gesticulates. `PRODUCT.md` asks for exactly this: *"a swing that
+while a guest gesticulates. The product bar is exactly this: *"a swing that
 felt like a forehand reads as a forehand, and setting the phone down mid-
 conversation never reads as a shot."*
 

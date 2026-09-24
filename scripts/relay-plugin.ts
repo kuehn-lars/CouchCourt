@@ -32,7 +32,7 @@ function attach(httpServer: HttpServer | HttpsServer | null): void {
 
 export function relayPlugin(): Plugin {
 	return {
-		name: "swingcourt-relay",
+		name: "couchcourt-relay",
 		apply: "serve",
 		configureServer(server) {
 			attach(server.httpServer as HttpServer | HttpsServer | null);

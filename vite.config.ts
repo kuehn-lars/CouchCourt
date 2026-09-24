@@ -28,8 +28,8 @@ function devServerHttps() {
 	const cert = fromRoot("./certs/cert.pem");
 	if (!existsSync(key) || !existsSync(cert)) {
 		console.warn(
-			"\n[swingcourt] No certificates in ./certs — serving over HTTP.\n" +
-				"[swingcourt] iOS will refuse motion sensors. Run `npm run certs` first.\n",
+			"\n[couchcourt] No certificates in ./certs — serving over HTTP.\n" +
+				"[couchcourt] iOS will refuse motion sensors. Run `npm run certs` first.\n",
 		);
 		return undefined;
 	}

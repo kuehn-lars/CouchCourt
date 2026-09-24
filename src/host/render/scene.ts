@@ -18,7 +18,7 @@
  *
  * ## Frame rate
  *
- * Feel beats fidelity (`PRODUCT.md`), and a dropped frame is felt. The pixel
+ * Feel beats fidelity, and a dropped frame is felt. The pixel
  * ratio steps down when frames run long and back up when they are cheap —
  * resolution is the one thing that can be given up without anyone noticing.
  */

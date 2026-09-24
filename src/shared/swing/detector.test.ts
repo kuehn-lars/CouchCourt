@@ -312,8 +312,7 @@ describe("detectSwings against the committed motion traces", () => {
 		expect(detectSwings(trace.samples).length).toBeGreaterThan(0);
 	});
 
-	// "A swing that felt like a forehand reads as a forehand, and setting the
-	// phone down mid-conversation never reads as a shot." — PRODUCT.md
+	// Setting the phone down mid-conversation must never read as a shot.
 	it.each(negativeFiles)("%s: never reads as a swing", (name) => {
 		const trace = load(name);
 		expect(detectSwings(trace.samples)).toEqual([]);

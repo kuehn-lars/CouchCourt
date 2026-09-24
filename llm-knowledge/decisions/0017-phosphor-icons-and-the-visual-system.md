@@ -39,7 +39,7 @@ plain DOM that works. A framework would be a second rendering model beside
 Three.js on the host and a larger bundle on the phone that has to load over
 party Wi-Fi, for no behaviour the platform does not already have.
 
-**A webfont.** `PRODUCT.md` says local first, and the only screens this runs
+**A webfont.** The game is local first, and the only screens this runs
 on are a Mac and iPhones, which already ship SF Pro. `system-ui` *is* the
 Apple typeface on the target hardware; on anything else it degrades to that
 platform's UI font, which is an acceptable failure for a page nobody is

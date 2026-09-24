@@ -51,7 +51,7 @@ the plugin — see [[architecture]], "Three participants, one port".
 ## What it costs
 
 - **Vite is required at runtime**, so it can never move to `dependencies`-only
-  deployment. Acceptable: `PRODUCT.md` is explicit that this runs on the
+  deployment. Acceptable: this is designed to run on the
   host's own Mac, on the LAN, from a checkout. There is no deployment.
 - **`vite preview` is documented as a preview tool, not a production server.**
   The caveat is about exposing it to the internet. This never leaves the LAN.

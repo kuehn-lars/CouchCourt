@@ -165,9 +165,9 @@ function playerIdFor(side: Side): PlayerId | undefined {
  * The side of a human player whose phone is not currently connected, or
  * `null`. While this is set mid-match the simulation is frozen: iOS drops
  * the socket whenever the phone locks or takes a notification
- * (`llm-knowledge/platform/ios-safari-tab-suspension.md`), and `PRODUCT.md`
- * asks that such a player come back as the same player rather than as a
- * spectator who lost four games in the meantime.
+ * (`llm-knowledge/platform/ios-safari-tab-suspension.md`), and that player
+ * has to come back as the same player, not as a spectator who lost four
+ * games in the meantime.
  */
 function waitingFor(): Side | null {
 	for (const player of players) {

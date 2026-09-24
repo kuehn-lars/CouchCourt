@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="t d">
+<title id="t">CouchCourt</title>
+<desc id="d">Living-room tennis where your phone is the racket.</desc>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1280" y2="320" gradientUnits="userSpaceOnUse"><stop offset="0.3" stop-color="#05080c"/><stop offset="1" stop-color="#1a5fa3"/></linearGradient>
+<clipPath id="r"><rect width="1280" height="320" rx="24"/></clipPath>
+</defs>
+<g clip-path="url(#r)">
+<rect width="1280" height="320" fill="url(#bg)"/>
+<g fill="none" stroke="#f3f6ef" stroke-linecap="round">
+<path stroke-opacity="0.22" stroke-width="3" d="M1010 36 H1170 M1010 36 L850 356 M1170 36 L1330 356 M995 66 H1185 M933 190 H1247 M1090 66 V190"/>
+<path stroke-opacity="0.5" stroke-width="4" d="M962 110 H1218"/>
+</g>
+<circle cx="1128" cy="84" r="10" fill="#dcff4a"/>
+<g transform="translate(96 88) scale(2.25)"><circle cx="32" cy="32" r="28" fill="#272f16"/><path fill="#dcff4a" d="M41.58 5.69A28 28 0 1 0 41.58 58.31A30 30 0 0 1 33.58 51.94A20 20 0 1 1 33.58 12.06A30 30 0 0 1 41.58 5.69ZM48.33 9.26A24 24 0 0 0 48.33 54.74A28 28 0 0 0 55 47.97A16 16 0 0 1 55 16.03A28 28 0 0 0 48.33 9.26Z"/></g>
+<text x="268" y="170" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="92" font-weight="800" letter-spacing="-3" fill="#f3f6ef">CouchCourt</text>
+<text x="272" y="222" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="28" font-weight="500" fill="#f3f6ef" fill-opacity="0.72">Living-room tennis where your phone is the racket.</text>
+</g>
+</svg>

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-How to work in this repository. **What** the project is lives in `PRODUCT.md`;
+How to work in this repository. **What** the project is lives in `README.md`;
 **how the code fits together** lives in `llm-knowledge/architecture.md`; **why
 things are the way they are** lives in the rest of the knowledge vault. This
 file is only the working contract.
@@ -242,11 +242,10 @@ locally before pushing; do not use CI as your test runner.
 
 ## 8. Scope
 
-Build what was asked. `PRODUCT.md` lists what v1 is not — do not build those,
-and do not add abstractions in anticipation of them. No interface with one
-implementation, no config for a value that never changes, no scaffolding for
-later. `llm-knowledge/architecture.md`'s "What is deliberately not here" is the
-engineering half of the same list.
+Build what was asked. `llm-knowledge/architecture.md`'s "What is deliberately
+not here" lists what v1 is not — do not build those, and do not add
+abstractions in anticipation of them. No interface with one implementation, no
+config for a value that never changes, no scaffolding for later.
 
 If you think something is out of scope or wrongly specified, say so in a
 sentence and then deliver the full request anyway. Narrowing the work is the

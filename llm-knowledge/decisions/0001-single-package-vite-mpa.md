@@ -13,7 +13,7 @@ code:
 
 ## Context
 
-SwingCourt ships three things: a Node server, a host page for the Mac, and a
+CouchCourt ships three things: a Node server, a host page for the Mac, and a
 controller page for the phone. They share the wire protocol and the swing and
 physics maths.
 

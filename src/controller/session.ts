@@ -20,7 +20,7 @@ import {
 	type Side,
 } from "../shared/protocol.ts";
 
-const SESSION_KEY = "swingcourt-player-id";
+const SESSION_KEY = "couchcourt-player-id";
 
 export type SessionState =
 	| "connecting"

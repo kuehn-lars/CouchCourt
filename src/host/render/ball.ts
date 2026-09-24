@@ -22,8 +22,8 @@ import { BALL_RADIUS } from "../../shared/sim/court.ts";
 import type { Ball, Vec3 } from "../../shared/sim/state.ts";
 import { ballTexture } from "./textures.ts";
 
-// A real tennis ball is 3.35cm — invisible from a broadcast camera. "Feel
-// beats fidelity" (`PRODUCT.md`).
+// A real tennis ball is 3.35cm — invisible from a broadcast camera. Feel
+// beats fidelity.
 export const BALL_VISUAL_RADIUS = BALL_RADIUS * 4.2;
 
 const SHADOW_MAX_RADIUS = BALL_VISUAL_RADIUS * 1.9;

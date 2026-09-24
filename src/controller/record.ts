@@ -20,8 +20,8 @@ import { requestMotionPermission } from "./motion.ts";
 import { keepAwake, type WakeLockHandle } from "./wake-lock.ts";
 
 const COUNTDOWN_SECONDS = 5;
-const DEVICE_KEY = "swingcourt-recorder-device";
-const IOS_KEY = "swingcourt-recorder-ios";
+const DEVICE_KEY = "couchcourt-recorder-device";
+const IOS_KEY = "couchcourt-recorder-ios";
 
 /**
  * Takes the constructor rather than a bare type parameter so the check is real.
