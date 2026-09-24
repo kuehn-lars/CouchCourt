@@ -1,6 +1,6 @@
 ---
 title: Project log
-updated: 2026-09-24
+updated: 2026-09-25
 tags: [meta]
 status: current
 ---
@@ -26,8 +26,8 @@ Kinds: `build` (something shipped), `fix`, `tune` (constants moved), `doc`
 ## [2026-09-19] build | Repository harness, CI and the vault
 
 Single package, Vite MPA, Biome, Vitest, three-project typecheck, five-step
-CI. `src/shared/protocol.ts` with runtime guards and 12 tests. `PRODUCT.md`
-rewritten around the actual thesis; `CLAUDE.md` written as a working contract.
+CI. `src/shared/protocol.ts` with runtime guards and 12 tests. The product
+brief rewritten around the actual thesis; `CLAUDE.md` written as a working contract.
 
 Promoted: ADRs [[0001-single-package-vite-mpa]] through
 [[0005-raw-websockets-over-socket-io]], four platform notes, [[wire-protocol]],
@@ -454,3 +454,74 @@ bloom spread the NaN into blocks. The base is now clamped. With the host read
 back on the real Metal GPU in the lobby, frames with NaN went from 3–7 in
 100–150 to 0 in 251. Promoted: [[nan-pixels-become-bloom-blocks]]. Not
 verified: a full match and the split screen on the real GPU.
+
+## [2026-09-24] build | CouchCourt: renamed, a logo, a README, and PRODUCT.md retired
+
+SwingCourt is now CouchCourt everywhere, including the storage keys. The mark
+is a tennis ball whose rim and seam are two Cs (`src/logo.svg`). It was
+chosen from four drawn in parallel, and it is now the favicon and both brand
+headers. `PRODUCT.md` was deleted: its out-of-scope list moved into
+[[architecture]], and ~35 citations were rewritten to stand alone. The README
+was rewritten with an SVG header, real screenshots (host on the Metal GPU,
+controller at iPhone size), and a section on the persistent-memory experiment.
+MIT `LICENSE` added. Promoted: [[0021-couchcourt-name-and-mark]]. Not
+verified: the README as GitHub renders it (Mermaid, badges, header fonts on
+non-Apple systems).
+
+**Reported by the user the same day:** played end to end on an iPhone 14 Pro and
+an iPhone 16e, working on both. That is the first real-phone play recorded
+here. [[architecture]] and the README status were updated. Nothing was measured
+(misread rate, latency, balance).
+
+## [2026-09-24] build | `npm run certs` without openssl, so the host can be Windows
+
+The only thing tying the host to macOS or Linux was `setup-certs.mjs`
+shelling out to `openssl`. The certificate work moved to `scripts/cert-chain.ts`
+on `node:crypto`, test-first against a throwaway chain in `tests/fixtures/certs/`
+(11 tests; the hostname and expiry guards were each broken on purpose and
+caught). Run live with only `node` on the PATH, it rebuilt a byte-identical
+`cert.pem`. `vitest` and `tsconfig.test.json` now include `scripts/**/*.test.ts`.
+Updated [[modules/tooling]] and [[lan-https-cert-chain]]. Not verified: an
+actual Windows machine, including the firewall prompt the README now warns
+about.
+
+## [2026-09-24] build | CI on Linux, Windows and macOS
+
+`verify` is now a three-OS matrix, and `.gitattributes` forces LF so Windows
+checkouts pass Biome and the vault checker. The workflow validates against the
+Actions schema. Not yet run: it needs a push. [[modules/tooling]].
+
+
+## [2026-09-25] refactor | Review fixes: certs checked before writing, setup-certs is TypeScript
+
+From a code-quality review of the rebrand. `npm run certs` now checks the chain
+in memory and writes only one that passes; a failing chain already on disk is
+deleted before the rebuild, so `./certs` only ever holds a checked chain. The
+script is `setup-certs.ts`, typechecked by `tsconfig.node.json`; `engines` is
+`>=24.3` because type stripping warns through 24.2.0 (bisected), which lets
+the `--disable-warning` flag go. `issuerUrl` throws on a non-certificate
+instead of reporting "no AIA". Dead `color` rules on the logo and the favicon
+comments trimmed. A PII sweep of the tree and history found nothing beyond one
+RFC1918 LAN address, replaced in the tree; history was not rewritten. All three
+cert paths run live on Node 24.3.0. [[modules/tooling]].
+
+## [2026-09-25] fix | Pre-pin review: guards proven, the right URLs printed, host.css split
+
+`npm run dev` and `npm start` printed Vite's `https://<ip>:5173/`, which the
+certificate does not cover, and the host puts its own origin in the QR code.
+`scripts/lan-urls.ts` now replaces `printUrls` in both servers with the
+local-ip.co Host and Controller URLs (test-first; both servers started, the
+printed URL answered 200 with a verified chain). `setup-certs` shares its
+hostname and output lines, and checks the downloaded key matches the leaf
+(`keyProblem`). A mutation run showed that removing the signature,
+root-validity or not-before check in `chainProblem` left every test green;
+new fixtures (an impostor intermediate, a short-lived root) make each one
+fail. `host.css` (1256 lines) is now an `@import` list over
+`src/host/styles/`, with the built CSS proven identical apart from one moved
+rule. `chunkSizeWarningLimit` 700, because three.js alone is 543 kB.
+`.nvmrc` → `lts/krypton`. The README drops "vibe coding", stale counts, "v1",
+and the Network-line advice, and says what the public key costs. Comments
+that still quoted `PRODUCT.md` now state their reason. [[modules/tooling]],
+[[modules/host]], [[0004-lan-https-via-local-ip-co]]. The GitHub repo was
+renamed to `CouchCourt` the same day, matching the CI badge. Not verified: a
+phone scanning the QR from a host opened at the printed URL.
