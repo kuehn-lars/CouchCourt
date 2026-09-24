@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { lanUrlsPlugin } from "./scripts/lan-urls.ts";
 import { relayPlugin } from "./scripts/relay-plugin.ts";
 import { traceEndpoint } from "./scripts/trace-endpoint.ts";
 
@@ -55,12 +56,17 @@ export default defineConfig(({ command, mode, isPreview }) => {
 		// Vitest also runs as command "serve" (with mode "test"), which is
 		// exactly the case `serving` exists to exclude. Without this gate a
 		// filesystem-writing endpoint would come alive on every `vitest run`.
-		// The relay belongs to both serve-time servers (dev and preview); the
-		// recorder writes to the repo's fixture folder and belongs only to dev.
+		// The relay and the printed URLs belong to both serve-time servers (dev
+		// and preview); the recorder writes to the repo's fixture folder and
+		// belongs only to dev.
 		plugins: serving
-			? isPreview
-				? [relayPlugin()]
-				: [traceEndpoint(fromRoot("./tests/fixtures/motion")), relayPlugin()]
+			? [
+					...(isPreview
+						? []
+						: [traceEndpoint(fromRoot("./tests/fixtures/motion"))]),
+					relayPlugin(),
+					lanUrlsPlugin(),
+				]
 			: [],
 		build: {
 			outDir: fromRoot("./dist"),
