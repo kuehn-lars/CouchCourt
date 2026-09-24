@@ -10,7 +10,7 @@ code:
   - `tsconfig.node.json`
   - `tsconfig.test.json`
   - `biome.json`
-  - `scripts/setup-certs.mjs`
+  - `scripts/setup-certs.ts`
   - `scripts/trace-endpoint.ts`
   - `scripts/relay-plugin.ts`
   - `scripts/check-vault.mjs`
@@ -113,7 +113,7 @@ Other things this file decides:
   Unit tests, the host page and the lobby are all workable over plain HTTP;
   only motion input actually needs TLS.
 - The port is read from `package.json`'s `config.port`, the single source of
-  truth shared with `scripts/setup-certs.mjs`.
+  truth shared with `scripts/setup-certs.ts`.
 - `test.environment: "node"` — no jsdom. Everything worth testing is pure or
   server-side.
 
@@ -121,11 +121,11 @@ Other things this file decides:
 
 | Script | Runs when | Does |
 | --- | --- | --- |
-| `scripts/setup-certs.mjs` | `npm run certs` | Fetches the leaf, **rebuilds the chain from its AIA extension**, verifies before writing, and diagnoses router DNS rebind protection |
+| `scripts/setup-certs.ts` | `npm run certs` | Fetches the leaf, **rebuilds the chain from its AIA extension**, verifies before writing, and diagnoses router DNS rebind protection |
 | `scripts/trace-endpoint.ts` | dev only, gated on `serving` | POST endpoint that validates a trace and writes it into `tests/fixtures/motion/` |
 | `scripts/relay-plugin.ts` | dev only | Attaches `attachRelay` to Vite's own `httpServer` — one port, one code path |
 
-`setup-certs.mjs` must not use local-ip.co's published `chain.pem`: it is
+`setup-certs.ts` must not use local-ip.co's published `chain.pem`: it is
 stale relative to the leaf and produces a chain macOS silently repairs by AIA
 fetching while **iOS rejects it**. [[lan-https-cert-chain]] is the write-up,
 and the transferable lesson in it is worth more than the fix.

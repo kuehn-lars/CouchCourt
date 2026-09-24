@@ -7,7 +7,7 @@ import { traceEndpoint } from "./scripts/trace-endpoint.ts";
 const fromRoot = (path: string) =>
 	fileURLToPath(new URL(path, import.meta.url));
 
-/** Single source of truth for the port, shared with scripts/setup-certs.mjs. */
+/** Single source of truth for the port, shared with scripts/setup-certs.ts. */
 const PORT: number = JSON.parse(
 	readFileSync(fromRoot("./package.json"), "utf8"),
 ).config.port;
@@ -96,7 +96,11 @@ export default defineConfig(({ command, mode, isPreview }) => {
 			environment: "node",
 			// Relative to the repo, not to `root` above.
 			root: fromRoot("."),
-			include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+			include: [
+				"src/**/*.test.ts",
+				"scripts/**/*.test.ts",
+				"tests/**/*.test.ts",
+			],
 		},
 	};
 });

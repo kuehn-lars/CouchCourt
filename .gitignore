@@ -6,7 +6,7 @@ dist/
 *.tsbuildinfo
 
 # Local TLS material — regenerate with `npm run certs`, never commit
-certs/
+/certs/
 
 # Session-specific: scratch that does not belong to the repo
 docs/superpowers/

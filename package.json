@@ -6,7 +6,7 @@
 	"description": "Motion controlled tennis for your living room, no console required.",
 	"license": "MIT",
 	"engines": {
-		"node": ">=24"
+		"node": ">=24.3"
 	},
 	"config": {
 		"port": 5173
@@ -20,7 +20,7 @@
 		"typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"certs": "node scripts/setup-certs.mjs",
+		"certs": "node scripts/setup-certs.ts",
 		"vault:check": "node scripts/check-vault.mjs"
 	},
 	"dependencies": {

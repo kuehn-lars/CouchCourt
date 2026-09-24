@@ -4,7 +4,7 @@ updated: 2026-09-19
 tags: [platform, networking, dns, https]
 status: current
 code:
-  - `scripts/setup-certs.mjs`
+  - `scripts/setup-certs.ts`
 ---
 
 # Home routers block LAN hostnames (DNS rebind protection)
