@@ -1,0 +1,419 @@
+/* The title screen: join panel, QR code, the two seats, actions and the
+   how-to-play slides. */
+
+/* ---------------------------------------------------------- lobby */
+
+.lobby {
+	display: grid;
+	grid-template-columns: minmax(0, 40rem) 1fr;
+	grid-template-rows: auto 1fr auto;
+	padding: 1.75rem 2.25rem 1.75rem 3.5rem;
+}
+/* A scrim, not a blur: the court stays sharp on the right and the panel
+   reads on the left. */
+.lobby::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	background:
+		linear-gradient(
+			90deg,
+			rgba(5, 8, 12, 0.94) 0%,
+			rgba(5, 8, 12, 0.86) 28%,
+			rgba(5, 8, 12, 0.35) 52%,
+			rgba(5, 8, 12, 0) 70%
+		),
+		linear-gradient(0deg, rgba(5, 8, 12, 0.7) 0%, rgba(5, 8, 12, 0) 26%);
+}
+
+.brand {
+	grid-column: 1;
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	font-size: 1.15rem;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+.brand .icon {
+	width: 1.6rem;
+	height: 1.6rem;
+}
+
+.join {
+	grid-column: 1;
+	align-self: center;
+	display: flex;
+	flex-direction: column;
+	gap: 2rem;
+	pointer-events: auto;
+}
+
+.headline {
+	margin: 0;
+	font-size: 4.4rem;
+	line-height: 0.98;
+	font-weight: 700;
+	letter-spacing: -0.045em;
+	max-width: 11ch;
+	text-wrap: balance;
+}
+.headline .hl {
+	color: var(--accent);
+}
+.lede {
+	margin: -0.9rem 0 0;
+	max-width: 30ch;
+	font-size: 1.2rem;
+	line-height: 1.45;
+	color: var(--ink-2);
+	letter-spacing: -0.005em;
+}
+
+.join-row {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 1.5rem;
+	align-items: stretch;
+}
+
+.qr-card {
+	margin: 0;
+	display: grid;
+	gap: 0.7rem;
+	justify-items: center;
+}
+.qr {
+	position: relative;
+	width: 13.5rem;
+	aspect-ratio: 1;
+	padding: 0.85rem;
+	border-radius: var(--r-card);
+	background: #f6f8f2;
+	overflow: hidden;
+	box-shadow:
+		0 0 0 1px rgba(255, 255, 255, 0.4),
+		0 1.5rem 3.5rem -1rem rgba(0, 0, 0, 0.7),
+		0 0 0 0.5rem rgba(220, 255, 74, 0.08);
+}
+.qr svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+.qr svg path,
+.qr svg rect[fill="black"] {
+	fill: #0b0f0a;
+}
+/* A glint that crosses the code every few seconds, the one thing on the
+   screen that moves on its own: the code is what a guest should look at. */
+.qr::after {
+	content: "";
+	position: absolute;
+	inset: -40%;
+	background: linear-gradient(
+		105deg,
+		transparent 40%,
+		rgba(220, 255, 74, 0.28) 48%,
+		rgba(255, 255, 255, 0.5) 50%,
+		rgba(220, 255, 74, 0.28) 52%,
+		transparent 60%
+	);
+	transform: translateX(-70%);
+	animation: glint 5.5s var(--ease) 1.2s infinite;
+	mix-blend-mode: multiply;
+	pointer-events: none;
+}
+@keyframes glint {
+	0% {
+		transform: translateX(-70%);
+	}
+	30%,
+	100% {
+		transform: translateX(70%);
+	}
+}
+.url {
+	font: 500 0.78rem / 1.3 var(--font-mono);
+	color: var(--ink-3);
+	letter-spacing: 0;
+	max-width: 13.5rem;
+	text-align: center;
+	overflow-wrap: anywhere;
+}
+
+/* ----------------------------------------------------- the two seats */
+
+.roster {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	align-content: center;
+	gap: 0.6rem;
+}
+.seat {
+	--side: var(--near);
+	position: relative;
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 0.9rem;
+	padding: 0.9rem 1rem;
+	border-radius: var(--r-card);
+	background: rgba(255, 255, 255, 0.04);
+	box-shadow: inset 0 0 0 1px var(--hairline);
+	transition:
+		background-color 400ms var(--ease),
+		box-shadow 400ms var(--ease);
+}
+.seat[data-side="far"] {
+	--side: var(--far);
+}
+.seat-avatar {
+	position: relative;
+	padding: 0.8rem;
+	display: grid;
+	place-items: center;
+	width: 3rem;
+	height: 3rem;
+	border-radius: 50%;
+	color: color-mix(in srgb, var(--side) 70%, var(--ink-3));
+	font-size: 1.3rem;
+	box-shadow: inset 0 0 0 1.5px var(--hairline-2);
+	transition:
+		background-color 400ms var(--ease),
+		color 400ms var(--ease),
+		box-shadow 400ms var(--ease);
+}
+.seat-avatar svg,
+.btn-round > svg {
+	width: 100%;
+	height: 100%;
+}
+.btn-round > svg {
+	width: 1.2rem;
+	height: 1.2rem;
+}
+/* An empty seat breathes: it is waiting to be filled. */
+.seat[data-state="empty"] .seat-avatar::after {
+	content: "";
+	position: absolute;
+	inset: -1px;
+	border-radius: 50%;
+	border: 1.5px dashed color-mix(in srgb, var(--side) 55%, transparent);
+	animation: turn 14s linear infinite;
+}
+@keyframes turn {
+	to {
+		transform: rotate(1turn);
+	}
+}
+.seat-name {
+	font-size: 1.1rem;
+	font-weight: 650;
+	letter-spacing: -0.015em;
+}
+.seat-status {
+	margin-top: 0.15rem;
+	font-size: 0.88rem;
+	color: var(--ink-3);
+	transition: color 400ms var(--ease);
+}
+.seat-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	height: 1.9rem;
+	padding: 0 0.8rem;
+	border-radius: 999px;
+	font-size: 0.82rem;
+	font-weight: 650;
+	opacity: 0;
+	transform: scale(0.8);
+	transition:
+		opacity 300ms var(--ease),
+		transform 500ms var(--spring);
+}
+
+.seat[data-state="joining"] .seat-avatar,
+.seat[data-state="away"] .seat-avatar {
+	color: var(--side);
+	box-shadow: inset 0 0 0 1.5px var(--side);
+}
+.seat[data-state="joining"] .seat-status,
+.seat[data-state="away"] .seat-status {
+	color: var(--ink-2);
+}
+
+.seat[data-state="ready"],
+.seat[data-state="bot"] {
+	background: color-mix(in srgb, var(--side) 9%, rgba(255, 255, 255, 0.03));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--side) 45%, transparent);
+}
+.seat[data-state="ready"] .seat-avatar,
+.seat[data-state="bot"] .seat-avatar {
+	background: var(--side);
+	color: #0b0f14;
+	box-shadow: 0 0.4rem 1.4rem -0.3rem
+		color-mix(in srgb, var(--side) 70%, transparent);
+}
+.seat[data-state="ready"] .seat-status,
+.seat[data-state="bot"] .seat-status {
+	color: var(--ink-2);
+}
+.seat[data-state="ready"] .seat-tag {
+	opacity: 1;
+	transform: none;
+	background: color-mix(in srgb, var(--side) 18%, transparent);
+	color: var(--side);
+}
+.seat[data-state="away"] .seat-avatar {
+	animation: pulse 1.4s var(--ease) infinite;
+}
+@keyframes pulse {
+	50% {
+		opacity: 0.45;
+	}
+}
+
+/* ---------------------------------------------------------- actions */
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.75rem;
+}
+.actions .note-inline {
+	flex-basis: 100%;
+	margin: 0.1rem 0 0 0.25rem;
+	font-size: 0.85rem;
+	color: var(--ink-3);
+}
+
+.keys {
+	grid-column: 1;
+	grid-row: 3;
+	display: flex;
+	gap: 1.25rem;
+	font-size: 0.8rem;
+	color: var(--ink-3);
+}
+.keys span {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+}
+kbd {
+	display: inline-grid;
+	place-items: center;
+	min-width: 1.5rem;
+	height: 1.5rem;
+	padding: 0 0.35rem;
+	border-radius: 0.4rem;
+	font: 600 0.72rem / 1 var(--font);
+	color: var(--ink-2);
+	background: rgba(255, 255, 255, 0.06);
+	box-shadow:
+		inset 0 0 0 1px var(--hairline-2),
+		inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ------------------------------------------------ how-to-play slides */
+
+.tips {
+	grid-column: 2;
+	grid-row: 3;
+	justify-self: end;
+	align-self: end;
+	width: 22rem;
+	padding: 1.1rem 1.25rem 1.25rem;
+	border-radius: var(--r-panel);
+	background: var(--glass);
+	backdrop-filter: blur(28px) saturate(170%);
+	-webkit-backdrop-filter: blur(28px) saturate(170%);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.08),
+		inset 0 0 0 1px var(--hairline),
+		0 1.5rem 3rem -1.5rem rgba(0, 0, 0, 0.6);
+}
+.tips-progress {
+	display: grid;
+	grid-auto-flow: column;
+	gap: 0.3rem;
+	margin-bottom: 1rem;
+}
+.tips-progress i {
+	--fill: 0;
+	height: 3px;
+	border-radius: 2px;
+	background: linear-gradient(
+		90deg,
+		var(--ink) calc(var(--fill) * 100%),
+		rgba(255, 255, 255, 0.16) 0
+	);
+}
+.tips-progress i.done {
+	--fill: 1;
+}
+.tips-progress i.active {
+	animation: fill var(--tip-ms, 6000ms) linear forwards;
+}
+@keyframes fill {
+	to {
+		--fill: 1;
+	}
+}
+.tips-stage {
+	display: grid;
+}
+.tip {
+	grid-area: 1 / 1;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0.3rem 1rem;
+	align-items: start;
+	opacity: 0;
+	transform: translateY(0.6rem);
+	transition:
+		opacity 420ms var(--ease),
+		transform 620ms var(--ease);
+}
+.tip.on {
+	opacity: 1;
+	transform: none;
+	transition-delay: 120ms;
+}
+.tip .icon {
+	grid-row: span 2;
+	width: 2.6rem;
+	height: 2.6rem;
+	padding: 0.55rem;
+	border-radius: 0.85rem;
+	color: var(--accent);
+	background: rgba(220, 255, 74, 0.1);
+}
+.tip b {
+	font-size: 1.02rem;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+.tip span {
+	font-size: 0.88rem;
+	line-height: 1.4;
+	color: var(--ink-2);
+}
+
+/* The panel slides away as the countdown takes the screen. */
+.lobby .join,
+.lobby .tips {
+	transition: transform 800ms var(--ease);
+}
+.lobby:not(.on) .join {
+	transform: translateX(-3rem);
+}
+.lobby:not(.on) .tips {
+	transform: translateY(2rem);
+}

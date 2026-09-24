@@ -7,7 +7,7 @@
  * Plain DOM over the canvas, for the same reason the score overlay is
  * (`render/ui.ts`): crisp text at any resolution, and no reason to fight a
  * GPU for something the browser already does perfectly. Styles live in
- * `host.css`; this file only builds nodes and flips classes.
+ * `styles/lobby.css`; this file only builds nodes and flips classes.
  *
  * The bar for this screen is the only one that matters — a guest
  * who has never seen the game goes from scanning to swinging in under a

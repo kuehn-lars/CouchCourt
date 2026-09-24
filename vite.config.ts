@@ -71,6 +71,12 @@ export default defineConfig(({ command, mode, isPreview }) => {
 		build: {
 			outDir: fromRoot("./dist"),
 			emptyOutDir: true,
+			// The host bundle is ~665 kB and three.js is 543 kB of it, so no
+			// split gets under Vite's default 500 kB (measured 2026-09-25 with a
+			// `three` manualChunk). It is fetched once, over the LAN, from the
+			// laptop it runs on. The limit sits just above today's size so the
+			// warning still means "this grew".
+			chunkSizeWarningLimit: 700,
 			rollupOptions: {
 				// Three pages, one build: the redirect, the court, and the racket.
 				input: {

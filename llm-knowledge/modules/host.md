@@ -1,6 +1,6 @@
 ---
 title: "Module: src/host — the Mac display"
-updated: 2026-09-24
+updated: 2026-09-25
 tags: [module, host, rendering]
 status: current
 code:
@@ -15,6 +15,7 @@ code:
   - `src/host/ui/dom.ts`
   - `src/host/ui/icons.ts`
   - `src/host/host.css`
+  - `src/host/styles/`
   - `src/host/raw.d.ts`
   - `src/host/audio/index.ts`
   - `src/host/index.html`
@@ -53,8 +54,9 @@ currently wired end to end.
 | `src/host/ui/lobby.ts` | Title screen (join QR, two seats, how-to slides), countdown, "Play", pause, result | no |
 | `src/host/ui/settings.ts` | `<dialog>` settings sheet and the two corner buttons; prefs in `localStorage` through `shared/prefs.ts` | parsing only, `src/shared/prefs.test.ts` |
 | `src/host/ui/dom.ts` | `el`, write-on-change `setText`, reduced-motion-aware `play` | no |
-| `src/host/ui/icons.ts` | Phosphor glyphs as `?raw` strings ([[0017-phosphor-icons-and-the-visual-system]]) | no |
-| `src/host/host.css` | Every style on the host page: tokens, lobby, scorebug, sheet | — |
+| `src/host/ui/icons.ts` | Phosphor glyphs as `?raw` strings ([[0017-phosphor-icons-and-the-visual-system]]), plus the CouchCourt `logo` from `src/logo.svg` ([[0021-couchcourt-name-and-mark]]) | no |
+| `src/host/host.css` | The page's one stylesheet: an ordered `@import` list that Vite inlines at build time | — |
+| `src/host/styles/` | `base` (tokens, buttons, overlay), `lobby`, `match` (countdown, pause, result, scorebug, calls), `settings`, and `adapt` (narrow windows, reduced motion and transparency), which must stay last because its media queries override the rest | — |
 | `src/host/audio/index.ts` | Synthesised hit / bounce / point. No asset files | no |
 | `src/host/index.html` | `#scene` canvas, `#ui` div, loads `main.ts` | — |
 
