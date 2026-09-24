@@ -535,3 +535,11 @@ Vitest 5, `actions/checkout@v7` and `actions/setup-node@v7`; all checks green
 and dev/preview smoke-run. Declined `@types/node` 26: the runtime is Node 24,
 and Dependabot now ignores its majors. [[modules/tooling]],
 [[vite-https-is-http2]].
+
+## [2026-09-25] fix | Haptic feedback removed
+
+It never fired on an iPhone: iOS Safari has no `navigator.vibrate`, and the
+`<input switch>` label-click trick was closed in iOS 26.5 (and needed a user
+gesture, which a swing is not). Removed the `buzz`, the hidden switch, its CSS
+and the "Haptic tick" setting. A stored `haptic` pref is ignored by
+`parsePrefs`. Promoted: [[ios-web-haptics]].

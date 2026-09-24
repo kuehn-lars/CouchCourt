@@ -1,6 +1,6 @@
 ---
 title: Index
-updated: 2026-09-24
+updated: 2026-09-25
 tags: [meta]
 status: current
 ---
@@ -72,6 +72,7 @@ around. **These are the ones that cost an afternoon if you skip them.**
 | | |
 | --- | --- |
 | [[ios-motion-permission]] | HTTPS *and* a tap, or no sensors at all. Missing either is silent |
+| [[ios-web-haptics]] | No `navigator.vibrate`, and the switch-label trick died in iOS 26.5. Why the phone has no haptics |
 | [[lan-https-dns-rebind]] | Why the QR code may not resolve on a home router |
 | [[lan-https-cert-chain]] | Why it can still fail on the phone once it does, and why macOS hides it |
 | [[ios-safari-tab-suspension]] | The phone will drop its socket. By design, not as an edge case |
@@ -140,7 +141,7 @@ Things that are true today and that a session should not be surprised by.
   hand ([[2026-09-22-stroke-classifier]]).
 - **The 2026-09-22 feel rewrite is tuned against a simulated human.** The
   balance constants and `TIMING_IDEAL` (network + display latency) need a real
-  phone and a real person; the iOS 18 switch-haptic trick is untried. See
+  phone and a real person. See
   [[2026-09-22-contact-model-feel]].
 - **Seen running in a browser, never on a phone.** 2026-09-21: the whole
   loop again — lobby, countdown, a game played out, the scoreboard ticking

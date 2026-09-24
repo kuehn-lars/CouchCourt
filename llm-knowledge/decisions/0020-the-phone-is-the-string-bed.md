@@ -56,8 +56,8 @@ swing actually happened, minus the detector's `lag` — and flies on
 for a phone that missed its own swing.
 
 **6. Kept exactly:** the permission gate and its tap handler, the session,
-the swing stream and what is sent, the colour-wash flash, the haptic tick, the
-settings sheet.
+the swing stream and what is sent, the colour-wash flash, the haptic tick (since
+removed, [[ios-web-haptics]]), the settings sheet.
 
 ## Alternatives rejected
 

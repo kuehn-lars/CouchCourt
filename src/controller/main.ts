@@ -40,7 +40,6 @@ const statusEl = requireElement("status", HTMLElement);
 const cardsEl = requireElement("cards", HTMLElement);
 const dotsEl = requireElement("dots", HTMLElement);
 const settingsEl = requireElement("settings", HTMLDialogElement);
-const hapticEl = requireElement("haptic-label", HTMLLabelElement);
 
 fillIcons();
 
@@ -58,14 +57,13 @@ const CONNECTION_RIM: Record<SessionState, string | null> = {
 
 /** Kept on this phone. Stored JSON is untrusted (`shared/prefs.ts`). */
 const PREFS_KEY = "couchcourt.controller.prefs";
-const PREF_DEFAULTS = { flash: true, haptic: true, readout: true };
+const PREF_DEFAULTS = { flash: true, readout: true };
 type Prefs = typeof PREF_DEFAULTS;
 
 function loadPrefs(): Prefs {
 	try {
 		return parsePrefs(localStorage.getItem(PREFS_KEY), PREF_DEFAULTS, {
 			flash: [true, false],
-			haptic: [true, false],
 			readout: [true, false],
 		});
 	} catch {
@@ -197,26 +195,12 @@ function announce(): void {
 	if (statusEl.textContent !== words) statusEl.textContent = words;
 }
 
-/**
- * The screen IS the feedback channel. iOS Safari has no `navigator.vibrate`
- * at all — it is a Chrome/Android API — so a colour flash is not a fallback
- * here, it is the only thing guaranteed to work on the target device.
- * `vibrate` is still called where it exists, and on iOS 18+ toggling a
- * `<input switch>` through its label plays a system haptic tick, which is
- * tried as well. **Unverified on a phone** — if it does nothing, nothing is
- * lost.
- */
+/** The screen is the feedback channel. */
 const FLASH: Record<FeedbackKind, string> = {
 	hit: "#dcff4a",
 	miss: "#ff5a5f",
 	point: "#34d86a",
 };
-
-function buzz(pattern: number | number[]): void {
-	if (!prefs.haptic) return;
-	navigator.vibrate?.(pattern);
-	hapticEl.click();
-}
 
 function flash(kind: FeedbackKind): void {
 	if (prefs.flash) {
@@ -229,7 +213,6 @@ function flash(kind: FeedbackKind): void {
 	if (kind === "hit") racket?.hit(shownPower);
 	else if (kind === "point") racket?.point();
 	else racket?.miss();
-	buzz(kind === "point" ? [40, 60, 40] : 30);
 }
 
 /** How the readout names each stroke, with the way it sends the ball on

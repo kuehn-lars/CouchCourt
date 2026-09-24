@@ -146,7 +146,7 @@ used to be one input per tick so a `hit`/`miss` could be pinned on the swing
 that caused it — but under [[0015-contact-model]] an early swing is held until
 the ball arrives, and one real swing arrives as several peaks, so the tick a
 swing lands on says nothing about whether it connected. A revised stroke keeps
-its `at` and does not buzz twice.
+its `at` and does not send `feedback` twice.
 
 **Events are accumulated across every tick in a frame**, not read off the last
 one, or an event is lost whenever two ticks land in one rAF frame.
@@ -217,7 +217,7 @@ player's own frame (`poses.ts` states it) and never mirrored per side.
 A late swing is resolved in the past, so the ball the sim returns is already
 down the court. On a `hit` event `ball.ts` starts the drawn ball at
 `stroke.from` and closes on the sim ball with a 60ms time constant; a revised
-hit does the same without a second swing, burst or buzz. A jump over 3m with
+hit does the same without a second swing or burst. A jump over 3m with
 no hit is a new point and snaps (and clears the trail).
 
 ## Renderer rules — the ceiling on how this is built

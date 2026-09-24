@@ -65,7 +65,7 @@ export type Side = "near" | "far";
  */
 export type SwingKind = "forehand" | "backhand" | "overhead" | "serve";
 
-/** What the host tells a phone happened, so it can buzz. */
+/** What the host tells a phone happened, so it can show it. */
 export type FeedbackKind = "hit" | "miss" | "point";
 
 /**
@@ -165,7 +165,7 @@ export type ControllerBoundMessage =
 	| { t: "rejected"; reason: "full" | "bad-version" | "unknown-session" }
 	| { t: "lobby"; players: LobbyPlayer[] }
 	| ({ t: "match" } & MatchInfo)
-	/** Drives haptics and on-phone feedback. Not authoritative for anything. */
+	/** Drives on-phone feedback. Not authoritative for anything. */
 	| { t: "feedback"; kind: FeedbackKind };
 
 /** host -> server */

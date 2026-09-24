@@ -95,8 +95,7 @@ html.playing body {
 	touch-action: none;
 }
 
-/* Full-screen colour wash for feedback: the only thing that works on iOS,
-   which has no navigator.vibrate. */
+/* Full-screen colour wash for feedback. */
 body::after {
 	content: "";
 	position: fixed;
@@ -580,13 +579,6 @@ h1 .hl {
 	font-size: 17px;
 	font-weight: 650;
 	background: rgba(255, 255, 255, 0.1);
-}
-
-/* The iOS 18 haptic trick needs a real switch in the page. */
-.haptic {
-	position: fixed;
-	left: -9999px;
-	opacity: 0;
 }
 
 /* Short phones (SE, landscape-ish): the drawing is the first thing to go. */
