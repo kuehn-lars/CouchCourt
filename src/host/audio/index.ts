@@ -30,7 +30,6 @@
  * purpose rather than broken.
  */
 
-import { POWER_SHOT } from "../../shared/swing/detector.ts";
 import type { Callout } from "../arcade.ts";
 import { gradeOf } from "../arcade.ts";
 import type { RenderEvent } from "../render/events.ts";
@@ -300,7 +299,6 @@ export function createAudio(): Audio {
 						// A re-struck ball is the same shot: one crack, not two.
 						if (event.revised) break;
 						const p = event.power;
-						const power = p >= POWER_SHOT;
 						// The strings: a bright click, then the hollow body.
 						burst(now, 0.4 + 0.3 * p, 4200, 0.9, 0.03, {
 							type: "highpass",
@@ -318,7 +316,7 @@ export function createAudio(): Audio {
 							tone(now + 0.04, note * 2, 0.07, 0.35, "sine", { reverb: 0.5 });
 							tone(now + 0.09, note * 3, 0.05, 0.4, "sine", { reverb: 0.5 });
 						}
-						if (power || event.stroke === "smash") {
+						if (event.powerShot || event.stroke === "smash") {
 							tone(now, 90, 0.6, 0.3, "sine", { glideTo: 38, reverb: 0.2 });
 							burst(now, 0.35, 700, 0.7, 0.22, { sweepTo: 2600, reverb: 0.3 });
 						}
@@ -367,6 +365,7 @@ export function createAudio(): Audio {
 							0.3,
 						);
 						break;
+					case "power":
 					case "fire":
 						burst(now, 0.3, 300, 0.8, 0.6, {
 							sweepTo: 5000,

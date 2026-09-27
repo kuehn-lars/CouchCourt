@@ -113,6 +113,18 @@ describe("predictStrike", () => {
 		expect(strike.ball.y).toBeLessThanOrEqual(SMASH_HEIGHT + 0.1);
 	});
 
+	// Overheads were rare (5.5% of returns): a ball had to come down through
+	// 2.3m. One that only floats up to head height is a smash chance too.
+	it("smashes a ball that only floats to 2.1m, on its way down", () => {
+		const incoming = ball([0, 2, -1], [0, 1.3, 8]);
+		const strike = predictStrike(incoming, VACUUM, "near", at("near", 0, 2.5));
+
+		expect(strike.air).toBe(true);
+		expect(strike.t).toBeGreaterThan(0.25);
+		expect(strike.ball.y).toBeGreaterThanOrEqual(1.8);
+		expect(strike.ball.y).toBeLessThanOrEqual(2);
+	});
+
 	it("lets the same high ball bounce when it comes down out of reach", () => {
 		const incoming = ball([0, 4, -1], [0, 1, 7]);
 		const strike = predictStrike(incoming, VACUUM, "near", at("near", 4, 11));

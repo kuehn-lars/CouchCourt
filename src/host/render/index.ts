@@ -12,7 +12,6 @@
 
 import type { Side } from "../../shared/protocol.ts";
 import type { MatchState, Vec3 } from "../../shared/sim/index.ts";
-import { POWER_SHOT } from "../../shared/swing/detector.ts";
 import { type ArcadeFrame, heatOf, TONE, type Tone } from "../arcade.ts";
 import { createBallVisual } from "./ball.ts";
 import { buildCourt } from "./court.ts";
@@ -79,8 +78,6 @@ export function createRenderer(
 
 	/** The crowd's mood, 0..1: up on a point, easing back down. */
 	let excite = 0;
-	/** How long the current rally has gone, in strokes: flashes build. */
-	let rally = 0;
 	/** Seconds to the next burst of confetti on the victory shot. */
 	let confettiIn = 0;
 
@@ -115,7 +112,12 @@ export function createRenderer(
 						ball.style(heat, onFire);
 						if (event.revised) break;
 						const smash = event.stroke === "smash";
-						players.swing(event.side, event.stroke, event.power);
+						players.swing(
+							event.side,
+							event.stroke,
+							event.power,
+							event.position,
+						);
 						effects.hit(
 							event.position,
 							event.power,
@@ -125,8 +127,7 @@ export function createRenderer(
 							onFire,
 						);
 						ball.squash(0.5 + event.power * 0.4);
-						rally += 1;
-						const power = event.power >= POWER_SHOT || heat >= 3;
+						const power = event.powerShot || heat >= 3;
 						if (!attract && (smash || power)) {
 							world.shake(smash ? 0.9 : 0.45);
 							world.punch(smash ? 1 : 0.7);
@@ -150,7 +151,6 @@ export function createRenderer(
 							if (!attract) effects.confetti(winner);
 						}
 						excite = attract ? 0.5 : 1;
-						rally = 0;
 						break;
 					}
 					case "toss":
@@ -186,6 +186,10 @@ export function createRenderer(
 			officials.update(ballPos, dt);
 			court.setSplit(shot === "split");
 
+			// How long the rally has gone, in strokes: flashes build. The
+			// sim's own count, so a fault starts it again; none once the
+			// point is over.
+			const rally = current.phase === "point-over" ? 0 : current.rally;
 			const flashes = Math.min(1, 0.08 + rally * 0.05 + excite * 0.8);
 			stadium.update(
 				dt,

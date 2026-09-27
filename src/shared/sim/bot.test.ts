@@ -8,6 +8,7 @@ import {
 	tick,
 } from "./rally.ts";
 import { TOSS_APEX } from "./serve.ts";
+import { POWER_RALLY, POWER_SHOT } from "./shot.ts";
 
 const DT = 1 / 120;
 
@@ -15,7 +16,8 @@ const DT = 1 / 120;
 function play(ticks: number, near: number, far: number, server: Side = "near") {
 	const bots = { near: createBot("near", near), far: createBot("far", far) };
 	let s: MatchState = createMatch(server);
-	const swings: { side: Side; time: number; swing: Swing }[] = [];
+	const swings: { side: Side; time: number; swing: Swing; rally: number }[] =
+		[];
 	let hits = 0;
 	for (let i = 0; i < ticks; i++) {
 		const inputs: RallyInput[] = [];
@@ -23,7 +25,7 @@ function play(ticks: number, near: number, far: number, server: Side = "near") {
 			const sw = bots[side].swing(s);
 			if (sw) {
 				inputs.push({ side, swing: sw, time: s.time });
-				swings.push({ side, time: s.time, swing: sw });
+				swings.push({ side, time: s.time, swing: sw, rally: s.rally + 1 });
 			}
 		}
 		const next = tick(s, inputs, DT);
@@ -58,9 +60,21 @@ describe("createBot", () => {
 		expect(hits).toBeGreaterThanOrEqual(2);
 	});
 
+	// Five minutes, not three: since hard swings are capped until earned,
+	// rallies are longer and three minutes held only 14 points.
 	it("wins more points the higher its skill", () => {
-		const { final } = play(120 * 60 * 3, 0.95, 0.5);
+		const { final } = play(120 * 60 * 5, 0.95, 0.5);
 		expect(final.score.games.near).toBeGreaterThan(final.score.games.far);
+	});
+
+	// A long rally unlocks the power shot for whoever swings hard, and the
+	// machine knows the rule as well as the player does.
+	it("swings hard once the rally is long", () => {
+		const { swings } = play(120 * 60 * 5, 0.4, 0.4);
+		const late = swings.filter((s) => s.rally > POWER_RALLY);
+		expect(late.length).toBeGreaterThan(0);
+		for (const s of late)
+			expect(s.swing.power).toBeGreaterThanOrEqual(POWER_SHOT);
 	});
 
 	it("is deterministic — the same match twice gives the same swings", () => {

@@ -290,7 +290,7 @@ function onMotion(event: DeviceMotionEvent): void {
 	const swing = stream.push(sample);
 	if (swing === null) return;
 	if (!inRally()) cooldown.reset();
-	else if (!cooldown.admit(swing.at)) {
+	else if (!cooldown.admit(swing.at, swing.power)) {
 		racket?.refused();
 		return;
 	}

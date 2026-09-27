@@ -56,14 +56,18 @@ export const TURN_AXIS = 0;
  * across every correctly-classified swing in the fixtures: 392.1-1401.4.
  * The ceiling sits below the top of that range on purpose (1400 until
  * 2026-09-27): a hard swing, not only the hardest one anyone recorded,
- * should reach a full-power shot. At 1400, 7% of fixture swing peaks were
- * power shots; at 1250, 15% (`stream.test.ts` holds it between 10 and 20). */
+ * should reach a full-power shot. At 1400, 7% of fixture swing peaks
+ * reached `POWER_SHOT` (`sim/shot.ts`); at 1250, 15% (`stream.test.ts`
+ * holds it between 10 and 20). */
 export const POWER_FLOOR_DEG_S = 400;
 export const POWER_CEIL_DEG_S = 1250;
 
-/** `power` from which a shot is a power shot: flat, fast, and called out on
- * the host screen. */
-export const POWER_SHOT = 0.85;
+/** A backhand turns the wrist slower than a forehand swung as hard: the
+ * hardest peak of each rep in the fixtures reads a median 865 deg/s for a
+ * backhand and 1012 for a forehand. Its rotation is scaled by this before
+ * `power` is read, so the same effort hits the same ball either side
+ * (`llm-knowledge/experiments/2026-09-27-power-backhand-overhead.md`). */
+export const BACKHAND_GAIN = 1.15;
 
 /**
  * `power` never reads as 0 for a detected swing — a swing that cleared
@@ -192,7 +196,7 @@ function turnOf(run: Run): MotionSample {
  * gets all ten right. Measured in
  * `llm-knowledge/experiments/2026-09-21-swing-direction-classifier.md`.
  */
-function classify(turn: MotionSample): SwingKind {
+export function classify(turn: MotionSample): SwingKind {
 	return (turn.rot[TURN_AXIS] ?? 0) > 0 ? "forehand" : "backhand";
 }
 
@@ -205,34 +209,33 @@ function spinOf(peak: MotionSample): number {
 	return Math.sign(beta) * scaled;
 }
 
-function powerOf(peakMagnitude: number): number {
+function powerOf(peakMagnitude: number, kind: SwingKind): number {
+	const magnitude =
+		kind === "backhand" ? peakMagnitude * BACKHAND_GAIN : peakMagnitude;
 	const ratio =
-		(peakMagnitude - POWER_FLOOR_DEG_S) /
-		(POWER_CEIL_DEG_S - POWER_FLOOR_DEG_S);
+		(magnitude - POWER_FLOOR_DEG_S) / (POWER_CEIL_DEG_S - POWER_FLOOR_DEG_S);
 	const clamped = Math.min(1, Math.max(0, ratio));
 	return POWER_FLOOR + (1 - POWER_FLOOR) * clamped;
 }
 
 /**
- * A `Swing` from an episode's two defining samples: `peak`, the loudest
- * moment, which sets power, spin and `at`; and `turn`, the fastest turn,
- * which sets forehand or backhand. Split out of `toSwing` so the streaming
- * detector in `stream.ts`, which tracks both incrementally and never holds an
- * episode, decides through exactly this code. Two detectors, one definition
- * of what a swing is — see
- * `llm-knowledge/decisions/0009-streaming-swing-detection.md`.
+ * A `Swing` of `kind` from `peak`, the loudest moment, which sets power,
+ * spin and `at`. Each detector reads the kind its own way — `toSwing` from
+ * the fastest turn (`classify`), `stream.ts` from gravity — and both build
+ * the swing through exactly this code. Two detectors, one definition of what
+ * a swing is — see `llm-knowledge/decisions/0009-streaming-swing-detection.md`.
  */
-export function swingFrom(peak: MotionSample, turn: MotionSample): Swing {
+export function swingFrom(peak: MotionSample, kind: SwingKind): Swing {
 	return {
-		kind: classify(turn),
-		power: powerOf(rotMagnitude(peak.rot)),
+		kind,
+		power: powerOf(rotMagnitude(peak.rot), kind),
 		at: peak.t,
 		spin: spinOf(peak),
 	};
 }
 
 function toSwing(episode: Run): Swing {
-	return swingFrom(peakOf(episode), turnOf(episode));
+	return swingFrom(peakOf(episode), classify(turnOf(episode)));
 }
 
 export function detectSwings(samples: readonly MotionSample[]): Swing[] {

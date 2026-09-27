@@ -49,7 +49,7 @@ currently wired end to end.
 | `src/host/render/stadium.ts` | Walls and LED boards, tiered bowl, ribbon board, roof ring, floodlight towers and beams | no |
 | `src/host/render/crowd.ts` | The crowd (one instanced mesh, animated in the vertex shader) and camera flashes | no |
 | `src/host/render/athlete.ts` | The articulated rig; grounds its own feet | no |
-| `src/host/render/players.ts` | The two players: layered animation, swing smear, ponytail spring, reactions | no |
+| `src/host/render/players.ts` | The two players: layered animation, swing smear, ponytail spring, reactions, and the sidestep to the ball for the stroke actually played (drawn only; [[0023-power-shots-are-earned]]) | no |
 | `src/host/render/officials.ts` | Chair umpire and four ball kids, heads following the ball | no |
 | `src/host/render/ball.ts` | Ball, squash and stretch, crossed ribbon trail, blob shadow | no |
 | `src/host/render/effects.ts` | Sparks, impact star, rings, dust, skid marks, confetti — fixed pools; spark and ring colours follow the shot's heat and a streak | no |
@@ -148,6 +148,19 @@ renderer.render(…, frameEvents)                                             ba
 A callout's `kind` is what everything keys on: the HUD and the frame tint
 take its colour from `TONE[kind]`, and the audio plays one sting per kind.
 Never match on a callout's `text` — it is wording, free to change.
+
+**A power shot is the event's `powerShot`, never `power >= POWER_SHOT`.**
+The sim decides it ([[0023-power-shots-are-earned]]); pops, the frame flash
+and the audio all read the flag. The arcade calls POWER UP! (kind `power`)
+when its rally count reaches the sim's `POWER_RALLY` — a count that restarts
+at a first-serve fault, as the sim's does, or the call comes two strokes
+before the unlock — and grades PERFECT with the sim's `PERFECT_TIMING` — the
+grade and the power rule cannot drift.
+
+**The stadium flashes read the sim's `MatchState.rally`** (0 once the point
+is over), not a count of the renderer's own: the lobby's demo rally never
+reaches the arcade, so the arcade's count cannot serve, and a third,
+separate count did not reset after a faulted serve.
 
 `renderer.arcade` must come **before** `render`: a hit's trail and sparks
 burn only if the renderer already knows its side is on fire. The lobby's demo

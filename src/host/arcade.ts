@@ -12,22 +12,25 @@
  */
 
 import type { Side } from "../shared/protocol.ts";
-import { SAFE_TIMING } from "../shared/sim/shot.ts";
+import {
+	PERFECT_TIMING,
+	POWER_RALLY,
+	SAFE_TIMING,
+} from "../shared/sim/shot.ts";
 import type { Vec3 } from "../shared/sim/state.ts";
-import { POWER_SHOT } from "../shared/swing/detector.ts";
 import type { RenderEvent } from "./render/events.ts";
 
 export type Grade = "perfect" | "great" | "good" | "early" | "late";
 
-/** `|timing|` inside which a hit is perfect, and great. Past `SAFE_TIMING`
- * a groundstroke may not land in (`sim/shot.ts`), so that is where "good"
- * ends and the grade starts naming the mistake instead. */
-const PERFECT = 0.12;
+/** `|timing|` inside which a hit is great. Perfect is the sim's own
+ * `PERFECT_TIMING`, because a hard swing timed that well is a power shot.
+ * Past `SAFE_TIMING` a groundstroke may not land in (`sim/shot.ts`), so that
+ * is where "good" ends and the grade starts naming the mistake instead. */
 const GREAT = 0.25;
 
 export function gradeOf(timing: number): Grade {
 	const off = Math.abs(timing);
-	if (off <= PERFECT) return "perfect";
+	if (off <= PERFECT_TIMING) return "perfect";
 	if (off <= GREAT) return "great";
 	if (off <= SAFE_TIMING) return "good";
 	return timing < 0 ? "early" : "late";
@@ -66,6 +69,7 @@ export interface Pop {
  * words can change without its sound changing with them. */
 export type CalloutKind =
 	| "rally"
+	| "power"
 	| "record"
 	| "ace"
 	| "winner"
@@ -78,6 +82,7 @@ export type Tone = "gold" | "hot" | "cool" | "bad" | "side";
 /** The colour family each kind is drawn in (`styles/arcade.css`). */
 export const TONE: Readonly<Record<CalloutKind, Tone>> = {
 	rally: "cool",
+	power: "hot",
 	record: "gold",
 	ace: "gold",
 	winner: "side",
@@ -186,6 +191,10 @@ export function createArcade(): Arcade {
 								side: null,
 							});
 						}
+						// From the next stroke a hard swing is a power shot.
+						if (rally === POWER_RALLY) {
+							callouts.push({ kind: "power", text: "POWER UP!", side: null });
+						}
 					}
 					if (kmh > best.kmh) {
 						if (sessionHits > RECORD_WARMUP) {
@@ -203,10 +212,12 @@ export function createArcade(): Arcade {
 						kmh,
 						grade,
 						heat: heatOf(kmh),
-						power: event.power >= POWER_SHOT,
+						power: event.powerShot,
 						revised: event.revised,
 					});
 				} else if (event.kind === "fault") {
+					// The second serve starts the point again, as in the sim.
+					rally = 0;
 					callouts.push({ kind: "miss", text: "FAULT", side: event.side });
 				} else if (event.kind === "point" && event.winner !== null) {
 					const winner = event.winner;

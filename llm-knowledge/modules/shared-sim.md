@@ -1,6 +1,6 @@
 ---
 title: "Module: src/shared/sim — the game"
-updated: 2026-09-24
+updated: 2026-09-27
 tags: [module, sim, core]
 status: current
 code:
@@ -30,7 +30,7 @@ is [[0015-contact-model]]; where it then goes is
 | File | Holds |
 | --- | --- |
 | `src/shared/sim/rally.ts` | `tick`, `MatchState`, the phase machine, the contact model (plan, arm, strike, rewind, revise), point resolution |
-| `src/shared/sim/shot.ts` | Timing windows, `timingOf`, `SCREEN_LEFT`, and the launch solvers `groundstroke` / `smash` / `serveShot`. The feel core |
+| `src/shared/sim/shot.ts` | Timing windows, `timingOf`, `SCREEN_LEFT`, `isPowerShot`, and the launch solvers `groundstroke` / `smash` / `serveShot`. The feel core |
 | `src/shared/sim/serve.ts` | The toss, `TOSS_APEX`, deuce/ad positions and serve aim |
 | `src/shared/sim/players.ts` | `predictStrike` — where and when a player meets the ball, including the overhead chance at `SMASH_HEIGHT`; stance, recovery, `movePlayer` |
 | `src/shared/sim/ball.ts` | `stepBall` — integration, net and bounce crossings |
@@ -53,11 +53,15 @@ serve.ts  ── imports ──▶  ball.ts, court.ts, scoring.ts (types), shot.
 shot.ts   ── imports ──▶  ball.ts (stepBall — the solver flies the real physics), court.ts
 players.ts ── imports ──▶ ball.ts (stepBall — the SAME physics), court.ts
 bot.ts    ── imports ──▶  rally.ts (MatchState type), serve.ts (TOSS_APEX),
-                          shot.ts (SCREEN_LEFT, TIMING_IDEAL), players.ts (SMASH_HEIGHT)
+                          shot.ts (SCREEN_LEFT, TIMING_IDEAL, POWER_RALLY, POWER_SHOT),
+                          players.ts (SMASH_HEIGHT)
 ```
 
-Nothing in `sim/` imports anything outside `src/shared/`. The consumers are
-`src/host/main.ts` and `src/host/render/` — see [[modules/host]].
+Nothing in `sim/` imports anything outside `src/shared/`, nor from
+`swing/`: `POWER_SHOT` is a rule of the game and lives in `shot.ts`, and the
+lobby, the phone's racket and `swing/stream.test.ts` import it from there.
+The consumers are `src/host/main.ts` and `src/host/render/` — see
+[[modules/host]].
 
 ## What one `tick` does, in order
 
@@ -91,6 +95,13 @@ Nothing in `sim/` imports anything outside `src/shared/`. The consumers are
 - **Every predictor and solver reuses `stepBall`**, with the env of the shot in
   question (`envForSpin`). `shot.ts` lands balls on target only because it flies
   the same integrator at the same step the live ball does.
+- **A power shot is earned, and decided in exactly two places**: `strike`
+  (stroke number `rally + 1`) and `revise` (the same stroke, `rally`), both
+  through `isPowerShot` and `shoot`. `Stroke.power` stays the phone's raw
+  reading — `revise` compares raw peaks — and `Stroke.powerShot` is what the
+  host shows. An unearned swing's cap takes pace only: `groundstroke`'s late
+  term still uses the full power, or hard swinging becomes risk-free
+  ([[0023-power-shots-are-earned]]).
 - **`stroke.at` identifies a shot.** A new `at` is a new hit; the same `at` with
   a new object is a `revise` — `events.ts` and `main.ts` both rely on it to
   avoid a second animation, sound and "hit" flash.
@@ -123,7 +134,9 @@ errors are whatever the shot rules make of that, as a person's are. The
 0015 error *rate* is gone ([[2026-09-22-stroke-direction-balance]]).
 
 Two skill-1 bots now finish sets on winners; 0.85 v 0.6 and 0.95 v 0.5 are
-won by the better bot, 0.7 v 0.7 is even. Solo mode plays 0.65.
+won by the better bot, 0.7 v 0.7 is even. Solo mode plays 0.65. Once the
+rally reaches `POWER_RALLY` it swings at least `POWER_SHOT`: the power shot
+is unlocked for both sides and the bot knows it.
 
 ## Constants, and which kind each is
 
@@ -131,7 +144,7 @@ won by the better bot, 0.7 v 0.7 is even. Solo mode plays 0.65.
 | --- | --- | --- |
 | **Cited** — ITF rulebook figures | `src/shared/sim/court.ts` | Only if the rulebook is wrong |
 | **Derived** — from the ball's own physical numbers | `DRAG_K` in `src/shared/sim/ball.ts` | Redo the arithmetic in its comment |
-| **Balance** — tuned against a simulated human | `src/shared/sim/shot.ts`, `src/shared/sim/players.ts`, `REACTION` in `src/shared/sim/rally.ts`, `src/shared/sim/bot.ts` | Re-run the harness in [[2026-09-22-stroke-direction-balance]] (it extends [[2026-09-22-contact-model-feel]]'s); they interact |
+| **Balance** — tuned against a simulated human | `src/shared/sim/shot.ts` (incl. `PERFECT_TIMING`, `POWER_RALLY`, `POWER_CAP`), `src/shared/sim/players.ts` (incl. `SMASH_HEIGHT` 1.9, `SMASH_SLACK` 0.3), `REACTION` in `src/shared/sim/rally.ts`, `src/shared/sim/bot.ts` | Re-run the harness in [[2026-09-22-stroke-direction-balance]] (it extends [[2026-09-22-contact-model-feel]]'s; [[2026-09-27-power-backhand-overhead]] fixes a bug in it); they interact |
 | **Calibration** — needs a real phone and screen | `TIMING_IDEAL` in `src/shared/sim/shot.ts` | Tune by whether on-time swings go down the middle |
 
 The balance constants are coupled: movement speed, reach, reaction, recovery,
@@ -159,7 +172,10 @@ errors, or not at all. Changing one alone was measured to do nothing.
   beatable. The gradient comes from timing changing *both* width and pace.
 - **A smash plan flipped back to a groundstroke** while the player stood
   under the ball: its reaction slack was being charged with no running left
-  (`canSmash`).
+  (`canSmash`). About one planned smash in five still flips; keep
+  `SMASH_SLACK` at or above `REACTION`.
+- **Capping a hard swing's whole power made it safer.** The late-long term
+  has to see the full swing ([[0023-power-shots-are-earned]]).
 
 ## Deliberately not modelled
 

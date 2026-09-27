@@ -34,6 +34,12 @@ ambiguous: in the 30s captures a rep is every ~3s, so a 517 inside a run of
 `SWING_GROUP_MS = 600` — shorter and the cooldown drops the real swing behind
 its own backswing, which is the one failure it must never have.
 
+**Incomplete, found the same evening** ([[2026-09-27-power-backhand-overhead]]):
+the gaps above are between *consecutive* peaks. A take-back can open the
+group and the swing land 650–1017ms after it, past 600, with a weaker peak
+in between. Five real swings in the 30s captures were refused. The gate now
+restarts from a harder peak past the group; `SWING_GROUP_MS` is unchanged.
+
 **Caveat, inherited from every fixture here:** multi-rep captures, recorded
 faster than gameplay ([[2026-09-20-streaming-swing-latency]]). Real rally
 spacing would only widen the gap between reps.

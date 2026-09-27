@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Side } from "../shared/protocol.ts";
+import { PERFECT_TIMING, POWER_RALLY } from "../shared/sim/shot.ts";
 import {
 	createArcade,
 	gradeOf,
@@ -20,6 +21,7 @@ const hit = (
 	position: { x: 0, y: 1, z: side === "near" ? 11 : -11 },
 	stroke: "forehand",
 	power: 0.6,
+	powerShot: false,
 	revised: false,
 	speed,
 	timing: 0,
@@ -38,7 +40,8 @@ const texts = (out: { callouts: readonly { text: string }[] }) =>
 describe("gradeOf", () => {
 	it("grades timing from dead on to either edge of the window", () => {
 		expect(gradeOf(0)).toBe("perfect");
-		expect(gradeOf(0.1)).toBe("perfect");
+		expect(gradeOf(PERFECT_TIMING)).toBe("perfect");
+		expect(gradeOf(PERFECT_TIMING + 0.01)).toBe("great");
 		expect(gradeOf(-0.2)).toBe("great");
 		expect(gradeOf(0.33)).toBe("good");
 		expect(gradeOf(-0.6)).toBe("early");
@@ -58,7 +61,9 @@ describe("heatOf", () => {
 describe("createArcade", () => {
 	it("pops the shot's speed in km/h, its grade and whether it was a power shot", () => {
 		const arcade = createArcade();
-		const { pops } = arcade.step([hit("near", 30, { power: 0.9 })]);
+		const { pops } = arcade.step([
+			hit("near", 30, { power: 0.9, powerShot: true }),
+		]);
 		expect(pops).toEqual([
 			{
 				side: "near",
@@ -70,6 +75,38 @@ describe("createArcade", () => {
 				revised: false,
 			},
 		]);
+	});
+
+	// A hard swing is only a power shot when the sim says it earned one.
+	it("pops no power shot for a hard swing that did not earn it", () => {
+		const { pops } = createArcade().step([hit("near", 30, { power: 1 })]);
+		expect(pops[0]?.power).toBe(false);
+	});
+
+	it("calls POWER UP! once, when the rally unlocks the power shot", () => {
+		const arcade = createArcade();
+		const calls: string[][] = [];
+		for (let i = 0; i < POWER_RALLY + 3; i++) {
+			calls.push(texts(arcade.step([hit(i % 2 ? "far" : "near")])));
+		}
+		expect(calls.flat().filter((t) => t === "POWER UP!")).toEqual([
+			"POWER UP!",
+		]);
+		expect(calls[POWER_RALLY - 1]).toContain("POWER UP!");
+	});
+
+	// The sim starts the rally again at a second serve (`rally.ts`), so the
+	// call has to as well, or it comes before the power shot is unlocked.
+	it("calls POWER UP! on the sim's stroke count when the first serve faulted", () => {
+		const arcade = createArcade();
+		arcade.step([hit("near"), { kind: "fault", side: "near" }]);
+		const calls: string[][] = [];
+		for (let i = 0; i < POWER_RALLY; i++) {
+			calls.push(texts(arcade.step([hit(i % 2 ? "far" : "near")])));
+		}
+		expect(calls.findIndex((c) => c.includes("POWER UP!"))).toBe(
+			POWER_RALLY - 1,
+		);
 	});
 
 	it("counts the rally in strokes, not in re-struck balls, and resets it on a point", () => {
@@ -86,7 +123,7 @@ describe("createArcade", () => {
 		for (let i = 0; i < RALLY_MILESTONE * 2; i++) {
 			calls.push(...texts(arcade.step([hit(i % 2 ? "far" : "near")])));
 		}
-		expect(calls).toEqual([
+		expect(calls.filter((t) => t.startsWith("RALLY"))).toEqual([
 			`RALLY ×${RALLY_MILESTONE}`,
 			`RALLY ×${RALLY_MILESTONE * 2}`,
 		]);

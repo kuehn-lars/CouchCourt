@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+	BACKHAND_GAIN,
+	classify,
 	detectSwings,
 	EPISODE_MERGE_GAP_MS,
 	MIN_SWING_DURATION_MS,
@@ -197,15 +199,15 @@ describe("detectSwings", () => {
 });
 
 describe("swingFrom", () => {
-	it("takes power, spin and `at` from the peak and only the kind from the turn", () => {
+	it("takes power, spin and `at` from the peak, and gains a backhand's power", () => {
 		const peak: MotionSample = { t: 500, acc: [0, 9.8, 0], rot: [0, 0, 900] };
-		const turn: MotionSample = { t: 420, acc: [0, 9.8, 0], rot: [-600, 0, 0] };
-		expect(swingFrom(peak, turn)).toEqual({
+		expect(swingFrom(peak, "backhand")).toEqual({
 			kind: "backhand",
 			power:
 				POWER_FLOOR +
 				(1 - POWER_FLOOR) *
-					((900 - POWER_FLOOR_DEG_S) / (POWER_CEIL_DEG_S - POWER_FLOOR_DEG_S)),
+					((900 * BACKHAND_GAIN - POWER_FLOOR_DEG_S) /
+						(POWER_CEIL_DEG_S - POWER_FLOOR_DEG_S)),
 			at: 500,
 			spin: 0,
 		});
@@ -213,10 +215,8 @@ describe("swingFrom", () => {
 
 	it("reads spin from the peak's beta axis, signed and dead-zoned", () => {
 		const at = (beta: number) =>
-			swingFrom(
-				{ t: 500, acc: [0, 9.8, 0], rot: [900, beta, 0] },
-				{ t: 500, acc: [0, 9.8, 0], rot: [900, beta, 0] },
-			).spin;
+			swingFrom({ t: 500, acc: [0, 9.8, 0], rot: [900, beta, 0] }, "forehand")
+				.spin;
 
 		// Inside the dead zone: flat. Wrist noise is not a spin decision.
 		expect(at(0)).toBe(0);
@@ -246,7 +246,7 @@ describe("swingFrom", () => {
 		const turn = samples.reduce((best, s) =>
 			Math.abs(s.rot[0]) > Math.abs(best.rot[0]) ? s : best,
 		);
-		if (peak) expect(swingFrom(peak, turn)).toEqual(swing);
+		if (peak) expect(swingFrom(peak, classify(turn))).toEqual(swing);
 	});
 });
 

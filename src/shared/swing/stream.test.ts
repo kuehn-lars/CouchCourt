@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { MAX_SWING_LAG_MS, type Swing } from "../protocol.ts";
-import { POWER_SHOT, rotMagnitude } from "./detector.ts";
+import { POWER_SHOT } from "../sim/shot.ts";
+import { rotMagnitude } from "./detector.ts";
+import { createSwingGate } from "./gate.ts";
 import { createSwingStream, LOBE_FLOOR_DEG_S } from "./stream.ts";
 import {
 	isTrace,
@@ -31,6 +33,19 @@ function replay(samples: readonly MotionSample[]): {
 		if (swing !== null) out.push({ swing, emitAt: sample.t });
 	}
 	return out;
+}
+
+/** `swings` split into reps: a swing under `gap` ms after the one before it
+ * belongs to the same rep. */
+function repsOf<T extends { swing: Swing }>(swings: readonly T[], gap: number) {
+	const reps: T[][] = [];
+	for (const s of swings) {
+		const last = reps.at(-1);
+		const prev = last?.at(-1);
+		if (last && prev && s.swing.at - prev.swing.at < gap) last.push(s);
+		else reps.push([s]);
+	}
+	return reps;
 }
 
 const SWINGS = ["forehand", "backhand", "serve"];
@@ -74,15 +89,10 @@ function mainSwings(
 		const trace = load(name);
 		if (!labels.includes(trace.label)) continue;
 		const magAt = new Map(trace.samples.map((s) => [s.t, rotMagnitude(s.rot)]));
-		const groups: Swing[][] = [];
-		for (const { swing } of replay(trace.samples)) {
-			const last = groups.at(-1);
-			const prev = last?.at(-1);
-			if (last && prev && swing.at - prev.at < 700) last.push(swing);
-			else groups.push([swing]);
-		}
-		for (const group of groups) {
-			const hardest = group.reduce((a, b) => (b.power > a.power ? b : a));
+		for (const group of repsOf(replay(trace.samples), 700)) {
+			const hardest = group
+				.map((e) => e.swing)
+				.reduce((a, b) => (b.power > a.power ? b : a));
 			if ((magAt.get(hardest.at) ?? 0) < minPeak) continue;
 			out.push({ label: trace.label, kind: hardest.kind });
 		}
@@ -292,15 +302,62 @@ describe("createSwingStream", () => {
 		expect(stream.push(at(16 + MAX_GAP_MS + 50, 500))).toBeNull();
 	});
 
-	// The fast, flat power shot should come up every so often in real play,
-	// not once a session and not every rally. Measured 2026-09-27: 7% of
-	// fixture swing peaks at the old 1400 deg/s ceiling.
-	it("reads between one swing in ten and one in five as a power shot", () => {
+	// A swing hard enough for a power shot should come up every so often in
+	// real play, not once a session and not every rally. Measured
+	// 2026-09-27: 7% of fixture swing peaks at the old 1400 deg/s ceiling,
+	// 15% at 1250, 19% once backhands were read as hard as forehands.
+	it("reads between one swing in ten and one in five as hard enough for a power shot", () => {
 		const powers = swingTraces.flatMap((name) =>
 			replay(load(name).samples).map((e) => e.swing.power),
 		);
 		const share = powers.filter((p) => p >= POWER_SHOT).length / powers.length;
 		expect(share).toBeGreaterThanOrEqual(0.1);
 		expect(share).toBeLessThanOrEqual(0.2);
+	});
+
+	// A backhand turns the wrist slower than a forehand: the same effort read
+	// ~0.15 less power (median of the hardest peak per rep, 0.61 v 0.76), so
+	// every backhand landed shorter and slower than the forehand beside it.
+	it("reads a backhand as hard as a forehand", () => {
+		const median = (label: string) => {
+			const powers = files
+				.filter((n) => load(n).label === label)
+				.flatMap((n) =>
+					repsOf(replay(load(n).samples), 1200).flatMap((rep) => {
+						const mine = rep
+							.map((e) => e.swing)
+							.filter((s) => s.kind === label);
+						return mine.length ? [Math.max(...mine.map((s) => s.power))] : [];
+					}),
+				)
+				.sort((a, b) => a - b);
+			return powers[Math.floor(powers.length / 2)] ?? 0;
+		};
+		expect(median("backhand")).toBeCloseTo(median("forehand"), 1);
+	});
+
+	// The take-back of a swing is a peak of its own, often read as the
+	// opposite stroke, and it can come a full second before the swing. A
+	// cooldown timed from it refused the real swing behind it — five reps in
+	// the 30s captures, mostly backhands. Only the long captures: their reps
+	// are ~3s apart, as in a rally; the short ones swing faster than play.
+	it("never lets the cooldown refuse the hardest peak of a real swing", () => {
+		const refused: string[] = [];
+		for (const name of swingTraces) {
+			const trace = load(name);
+			if (trace.samples.length < 1500) continue;
+			const gate = createSwingGate();
+			const admitted = replay(trace.samples).map(({ swing }) => ({
+				swing,
+				admitted: gate.admit(swing.at, swing.power),
+			}));
+			for (const rep of repsOf(admitted, 1500)) {
+				const hardest = rep.reduce((a, b) =>
+					b.swing.power > a.swing.power ? b : a,
+				);
+				if (!hardest.admitted) refused.push(`${name}@${hardest.swing.at}`);
+			}
+		}
+		expect(refused).toEqual([]);
 	});
 });

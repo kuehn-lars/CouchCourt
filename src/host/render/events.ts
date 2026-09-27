@@ -22,6 +22,9 @@ export type RenderEvent =
 			readonly position: Vec3;
 			readonly stroke: StrokeAnim;
 			readonly power: number;
+			/** Struck with full power (`sim/shot.ts`, `isPowerShot`). A hard
+			 * swing alone is not one. */
+			readonly powerShot: boolean;
 			/** The same ball re-struck by a harder peak of the same swing
 			 * (`rally.ts`, `revise`): the ball jumps, nobody swings again. */
 			readonly revised: boolean;
@@ -88,6 +91,7 @@ export function detectEvents(
 			position: stroke.from,
 			stroke: strokeAnim(stroke),
 			power: stroke.power,
+			powerShot: stroke.powerShot,
 			revised: before.stroke?.at === stroke.at,
 			speed: Math.hypot(current.ball.v.x, current.ball.v.y, current.ball.v.z),
 			timing: stroke.timing,

@@ -125,16 +125,20 @@ function timeToReach(from: Player, x: number, z: number): number {
  * and dropped back to about the waist. */
 export const STRIKE_COMFORT = 1.5;
 
-/** Height, metres, a high ball is taken out of the air at, overhead: an arm
- * and a racket above a standing player. Coming down through it before the
+/** Height, metres, a high ball is taken out of the air at, overhead: a
+ * racket above a player who jumps for it. Coming down through it before the
  * bounce, within reach, is a chance to smash
- * (`llm-knowledge/decisions/0016-stroke-decides-direction.md`). */
-export const SMASH_HEIGHT = 2.3;
+ * (`llm-knowledge/decisions/0016-stroke-decides-direction.md`). 2.3 until
+ * 2026-09-27, when 5.5% of returns were smashes; 1.9 with `SMASH_SLACK`
+ * 0.3 makes it 8.5%
+ * (`llm-knowledge/experiments/2026-09-27-power-backhand-overhead.md`). */
+export const SMASH_HEIGHT = 1.9;
 
 /** Seconds of slack a smash chance needs over the bare running time: the
- * player reacts before running (`REACTION` in `rally.ts`) and has to be set
- * under the ball, not arriving as it falls past. */
-export const SMASH_SLACK = 0.4;
+ * player reacts before running (`REACTION` in `rally.ts`), so no less than
+ * that. Less slack than this lets the plan flip back to a groundstroke under
+ * a player who already swung overhead. */
+export const SMASH_SLACK = 0.3;
 
 /**
  * Where the player on `side` will meet `ball`, and when — the one answer both

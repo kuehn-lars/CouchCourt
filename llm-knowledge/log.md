@@ -605,3 +605,39 @@ works and it plays well. This closes the "not on a phone" items in
 [[0022-arcade-layer]], [[architecture]], [[modules/controller]] and the
 index's known gaps. Still not measured: the cooldown and power ceiling
 against a person's swings, and the solo balance after the ceiling moved.
+
+## [2026-09-27] tune | Power shots are earned; backhands and overheads
+
+After a phone session the user found power shots unreturnable by the bot (so
+they won every game), backhands off, and overheads rare. A hard swing is now a power shot
+only if timed PERFECT (0.08) or after the 8th stroke of a rally (POWER UP!);
+otherwise it keeps its risk but only 0.7 of its pace. A simulated decent
+player swinging hard every time went from 21% to 13% winners per shot. The
+phone's cooldown was refusing a real swing behind its own take-back (five in
+the 30s captures) and now restarts from it; backhands read 0.15 weaker and
+are scaled by 1.15; the avatar steps across for the stroke actually played
+(unseen in a browser); smash chances 5.5% → 8.5% of returns. Along the way:
+the balance harness had been swinging at a stale contact.
+
+Promoted: [[0023-power-shots-are-earned]],
+[[2026-09-27-power-backhand-overhead]]; amended [[0022-arcade-layer]],
+[[0016-stroke-decides-direction]], [[2026-09-27-cooldown-and-power-share]]
+and the sim, swing, host and controller module pages.
+
+## [2026-09-27] review | Quality pass over the power-shot work
+
+A code-quality review of the entry above, before commit. One bug: the
+arcade's rally count did not restart at a first-serve fault while the sim's
+does, so POWER UP! came two strokes before the unlock in any point after a
+fault; it resets on `fault` now (tested). The swing gate's "once per swing"
+rule is a flag instead of a consequence of 2 × group = cooldown;
+`swingFrom(peak, kind)` drops the dummy turn sample the stream passed;
+`smash` lost its `cap` (the caller caps), and the overhead cap, which no
+test covered, now has one. Amended [[modules/host]] and
+[[modules/shared-swing]].
+The review's four remaining findings, applied the same session: `POWER_SHOT`
+moved into `sim/shot.ts` (the sim no longer imports from `swing/`);
+`groundstroke`'s `screenLeft` and `cap` are an options object; the avatar's
+sidestep reads `lastX` instead of a duplicate `simX`; the renderer's stadium
+flashes read `MatchState.rally` instead of a third stroke count. Amended
+[[modules/shared-sim]] and [[modules/shared-swing]] as well.
