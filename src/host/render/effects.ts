@@ -12,12 +12,22 @@ import type { Side } from "../../shared/protocol.ts";
 import type { Vec3 } from "../../shared/sim/state.ts";
 import { burstTexture, dotTexture } from "./textures.ts";
 
-const SIDE_COLOR: Readonly<Record<Side, string>> = {
+export const SIDE_COLOR: Readonly<Record<Side, string>> = {
 	near: "#ff5d73",
 	far: "#5ac8fa",
 };
 
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
+
+/** Spark colours by the shot's heat (`arcade.ts`), and for a side on fire. */
+const SPARKS: readonly (readonly string[])[] = [
+	["#fff8d0", "#fff8d0", "#dcff4a"],
+	["#fff8d0", "#dcff4a", "#ffe94a"],
+	["#ffe94a", "#ffae2e", "#fff8d0"],
+	["#ff3d8b", "#ffae2e", "#fff36b"],
+];
+const FLAME: readonly string[] = ["#fff36b", "#ff8a2a", "#ff2d55", "#ffae2e"];
+const RING: readonly string[] = ["#eaffb0", "#f4ff8a", "#ffc46b", "#ff7ab8"];
 
 /** A pool of camera-facing quads drawn in one call, each with its own
  * position, size, colour and opacity. The shared shape of sparks, dust and
@@ -79,7 +89,16 @@ function pool(
 }
 
 export interface Effects {
-	hit(at: Vec3, power: number, side: Side, smash: boolean): void;
+	hit(
+		at: Vec3,
+		power: number,
+		side: Side,
+		smash: boolean,
+		/** `arcade.ts` `heatOf`, 0..3. */
+		heat: number,
+		/** The striker is on a streak. */
+		fire: boolean,
+	): void;
 	bounce(at: Vec3, velocity: Vec3): void;
 	confetti(side: Side): void;
 	/** Advances everything by `dt`; `camera` is what the sprites face. */
@@ -209,8 +228,11 @@ export function createEffects(scene: THREE.Scene): Effects {
 	}
 
 	return {
-		hit(at, power, side, smash) {
-			const n = Math.round(10 + power * 18 + (smash ? 12 : 0));
+		hit(at, power, side, smash, heat, fire) {
+			const palette = fire ? FLAME : (SPARKS[heat] ?? SPARKS[0] ?? FLAME);
+			const n = Math.round(
+				10 + power * 18 + (smash ? 12 : 0) + heat * 6 + (fire ? 14 : 0),
+			);
 			for (let i = 0; i < n; i++) {
 				const s = sparks.next();
 				const speed = rand(2.5, 7) * (0.6 + power);
@@ -229,7 +251,11 @@ export function createEffects(scene: THREE.Scene): Effects {
 				s.drag = 3;
 				s.spin = 0;
 				s.angle = 0;
-				s.color.set(i % 4 === 0 ? SIDE_COLOR[side] : "#fff8d0");
+				s.color.set(
+					i % 4 === 0
+						? SIDE_COLOR[side]
+						: (palette[i % palette.length] ?? "#fff8d0"),
+				);
 			}
 			const b = bursts[burstCursor];
 			burstCursor = (burstCursor + 1) % bursts.length;
@@ -240,13 +266,16 @@ export function createEffects(scene: THREE.Scene): Effects {
 				b.size = 0.9 + power * 0.9 + (smash ? 0.8 : 0);
 				b.sprite.visible = true;
 			}
-			if (power > 0.55 || smash) {
+			if (power > 0.55 || smash || heat >= 2) {
 				const r = rings[ringCursor];
 				ringCursor = (ringCursor + 1) % rings.length;
 				if (r) {
 					r.mesh.position.set(at.x, 0.02, at.z);
 					r.life = r.max = smash ? 0.55 : 0.4;
-					r.size = smash ? 3.2 : 1.8;
+					r.size = (smash ? 3.2 : 1.8) + heat * 0.5;
+					(r.mesh.material as THREE.MeshBasicMaterial).color.set(
+						fire ? "#ff8a2a" : (RING[heat] ?? "#eaffb0"),
+					);
 				}
 			}
 		},
@@ -284,11 +313,14 @@ export function createEffects(scene: THREE.Scene): Effects {
 		},
 		confetti(side) {
 			const z = side === "near" ? 8 : -8;
+			// The winner's colour, with the rest of the arcade palette thrown in.
 			const palette = [
 				SIDE_COLOR[side],
 				"#ffffff",
 				"#dcff4a",
 				SIDE_COLOR[side],
+				"#ffd23f",
+				"#b86bff",
 			];
 			for (let i = 0; i < 90; i++) {
 				const c = confettiPool.next();

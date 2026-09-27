@@ -1,9 +1,12 @@
 /*
  * The host screen: everything drawn over the court. Dark only, one accent
- * (the ball's optic yellow), SF Pro through system-ui, and every size in rem
- * off a root that scales with the window, because this is read from a sofa
- * on a Mac or a TV three metres away. Rules and rejected alternatives:
- * llm-knowledge/decisions/0017-phosphor-icons-and-the-visual-system.md.
+ * for the chrome (the ball's optic yellow), SF Pro through system-ui, and
+ * every size in rem off a root that scales with the window, because this is
+ * read from a sofa on a Mac or a TV three metres away. Rules and rejected
+ * alternatives:
+ * llm-knowledge/decisions/0017-phosphor-icons-and-the-visual-system.md. The
+ * arcade moments — callouts, the rally counter, the streak — get a wider
+ * palette: llm-knowledge/decisions/0022-arcade-layer.md.
  */
 
 /* In cascade order. `adapt.css` is last because its media queries override
@@ -12,4 +15,5 @@
 @import "./styles/lobby.css";
 @import "./styles/match.css";
 @import "./styles/settings.css";
+@import "./styles/arcade.css";
 @import "./styles/adapt.css";

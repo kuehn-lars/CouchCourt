@@ -110,6 +110,8 @@ export interface Scene {
 	shake(amount: number): void;
 	/** The screen's own kick on impact, 0..1. */
 	punch(amount: number): void;
+	/** Tint the frame from the edges; see `post.ts`. */
+	flash(color: THREE.ColorRepresentation, amount: number): void;
 }
 
 export function createScene(canvas: HTMLCanvasElement): Scene {
@@ -268,6 +270,9 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
 		},
 		shake(amount) {
 			shakeAmount = Math.max(shakeAmount, amount);
+		},
+		flash(color, amount) {
+			post.flash(color, amount);
 		},
 		punch(amount) {
 			post.punch(amount);

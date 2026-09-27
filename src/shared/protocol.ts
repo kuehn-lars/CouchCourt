@@ -317,3 +317,14 @@ export const parseControllerMessage = (raw: string): ControllerMessage | null =>
 
 export const parseHostMessage = (raw: string): HostMessage | null =>
 	parse(raw, isHostMessage);
+
+/**
+ * Reconnect delay for both ends of the relay: 500ms doubling to a flat 8s.
+ * Capped rather than unbounded: a phone that was in a pocket for ten minutes
+ * must come back promptly, not after a delay that grew while nobody was
+ * watching. The host uses it too since 2026-09-27 — a host whose socket
+ * dropped used to stay dead for the rest of the evening.
+ */
+export function backoffMs(attempt: number): number {
+	return Math.min(8000, 500 * 2 ** attempt);
+}

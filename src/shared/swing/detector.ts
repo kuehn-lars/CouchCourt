@@ -53,9 +53,17 @@ export const EPISODE_MERGE_GAP_MS = 800;
 export const TURN_AXIS = 0;
 
 /** Peak rotation magnitude `power` is linearly mapped from. Measured range
- * across every correctly-classified swing in the fixtures: 392.1-1401.4. */
+ * across every correctly-classified swing in the fixtures: 392.1-1401.4.
+ * The ceiling sits below the top of that range on purpose (1400 until
+ * 2026-09-27): a hard swing, not only the hardest one anyone recorded,
+ * should reach a full-power shot. At 1400, 7% of fixture swing peaks were
+ * power shots; at 1250, 15% (`stream.test.ts` holds it between 10 and 20). */
 export const POWER_FLOOR_DEG_S = 400;
-export const POWER_CEIL_DEG_S = 1400;
+export const POWER_CEIL_DEG_S = 1250;
+
+/** `power` from which a shot is a power shot: flat, fast, and called out on
+ * the host screen. */
+export const POWER_SHOT = 0.85;
 
 /**
  * `power` never reads as 0 for a detected swing — a swing that cleared

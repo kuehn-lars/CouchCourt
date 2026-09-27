@@ -58,7 +58,8 @@ describe("detectEvents", () => {
 		const before = state({ phase: "rally" });
 		const after = state({
 			phase: "rally",
-			stroke: stroke({ kind: "backhand" }),
+			stroke: stroke({ kind: "backhand", timing: -0.4 }),
+			ball: { p: { x: 1, y: 1, z: 10 }, v: { x: 3, y: 4, z: 0 } },
 		});
 		const [hit] = detectEvents(before, after);
 		expect(hit).toEqual({
@@ -68,6 +69,8 @@ describe("detectEvents", () => {
 			stroke: "backhand",
 			power: 0.6,
 			revised: false,
+			speed: 5,
+			timing: -0.4,
 		});
 	});
 
@@ -139,7 +142,57 @@ describe("detectEvents", () => {
 		const before = state({});
 		const after = { ...before, score: { ...before.score } };
 		expect(after.score).not.toBe(before.score);
-		expect(detectEvents(before, after)).toEqual([{ kind: "point" }]);
+		expect(detectEvents(before, after)).toEqual([
+			{ kind: "point", winner: null, how: null },
+		]);
+	});
+
+	describe("says how a point was won", () => {
+		// The point is over; `toHit` is whoever failed to play the ball, and
+		// `stroke` is the last shot anyone hit.
+		const ended = (
+			kind: Stroke["kind"],
+			winner: "near" | "far",
+			bounces: number,
+		) => {
+			const before = state({ phase: "rally" });
+			const after = state({
+				phase: "point-over",
+				stroke: stroke({ side: "near", kind }),
+				toHit: "far",
+				lastPoint: winner,
+				bounces,
+				score: { ...before.score },
+			});
+			const point = detectEvents(before, after).find((e) => e.kind === "point");
+			return point?.kind === "point" ? point.how : undefined;
+		};
+
+		it("an unreturned serve is an ace", () => {
+			expect(ended("serve", "near", 2)).toBe("ace");
+		});
+		it("an unreturned rally ball is a winner", () => {
+			expect(ended("forehand", "near", 2)).toBe("winner");
+		});
+		it("a serve that lost the point is a double fault", () => {
+			expect(ended("serve", "far", 1)).toBe("double-fault");
+		});
+		it("a shot that bounced and lost the point went out", () => {
+			expect(ended("backhand", "far", 1)).toBe("out");
+		});
+		it("a shot that lost the point without bouncing found the net", () => {
+			expect(ended("forehand", "far", 0)).toBe("net");
+		});
+	});
+
+	it("reports a first-serve fault, and nothing for the second serve's setup", () => {
+		const before = state({ phase: "serve-flight", serveNumber: 1 });
+		const after = state({ phase: "waiting-serve", serveNumber: 2 });
+		expect(detectEvents(before, after)).toEqual([
+			{ kind: "fault", side: "near" },
+		]);
+		const next = state({ phase: "waiting-serve", serveNumber: 2 });
+		expect(detectEvents(after, next)).toEqual([]);
 	});
 
 	it("reports a serve hit from a real toss and serve through tick()", () => {

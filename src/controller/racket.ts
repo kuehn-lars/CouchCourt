@@ -10,6 +10,9 @@
  *   and bow toward the swing while one is under way;
  * - the frame **charges** round from the throat with the power of the swing
  *   the phone just read, and glows while it is moving;
+ * - after a swing the frame goes dark and **refills** from the throat while
+ *   the racket recharges (`shared/swing/gate.ts`), flashes when it is ready,
+ *   and the refill turns red if you swing before it is;
  * - on your serve a **ball sits on the strings**, bouncing, and on the toss
  *   it flies up off the top of the screen and comes back down on the same
  *   clock as the real one (`TOSS_APEX`), timed from the phone's own swing;
@@ -24,6 +27,7 @@
 
 import type { SwingKind } from "../shared/protocol.ts";
 import { TOSS_APEX } from "../shared/sim/serve.ts";
+import { POWER_SHOT } from "../shared/swing/detector.ts";
 import type { Ink, RacketView, Tone } from "./view.ts";
 
 const ACCENT = "#dcff4a";
@@ -114,6 +118,10 @@ export interface Racket {
 	reading(text: string | null): void;
 	/** Gravity across the screen, -1..1 each way, for the parallax. */
 	tilt(x: number, y: number): void;
+	/** The swing cooldown, 0 just swung .. 1 ready. */
+	recharge(amount: number): void;
+	/** A swing came before the racket had recharged, and was not sent. */
+	refused(): void;
 }
 
 function toneColor(tone: Tone, side: string): string {
@@ -143,6 +151,11 @@ export function createRacket(canvas: HTMLCanvasElement): Racket {
 	let liveKind: SwingKind | null = null;
 	let charge = 0;
 	let chargeAge = 99;
+	let recharged = 1;
+	/** Seconds of red on the refill, after a refused swing. */
+	let refusal = 0;
+	/** The flash round the frame the moment it is ready again, 1 → 0. */
+	let ready = 0;
 	let slack = 0;
 	let fuzz = 0;
 	let tiltX = 0;
@@ -471,6 +484,47 @@ export function createRacket(canvas: HTMLCanvasElement): Racket {
 			g.restore();
 		}
 
+		// Recharging: the frame dark, refilling from the throat.
+		if (recharged < 1) {
+			g.save();
+			g.lineWidth = L.t * 1.02;
+			g.strokeStyle = `rgba(5,8,12,${0.62 * (1 - recharged)})`;
+			g.beginPath();
+			g.ellipse(L.cx, L.cy, L.rx, L.ry, 0, 0, Math.PI * 2);
+			g.stroke();
+			g.lineCap = "round";
+			g.lineWidth = L.t * 0.26;
+			g.strokeStyle = refusal > 0 ? "#ff5a5f" : "rgba(243,246,239,0.85)";
+			const sweep = recharged * Math.PI;
+			for (const s of [-1, 1]) {
+				g.beginPath();
+				g.ellipse(
+					L.cx,
+					L.cy,
+					L.rx,
+					L.ry,
+					0,
+					Math.PI / 2,
+					Math.PI / 2 + s * sweep,
+					s < 0,
+				);
+				g.stroke();
+			}
+			g.restore();
+		}
+		if (ready > 0.01) {
+			g.save();
+			g.globalAlpha = ready;
+			g.lineWidth = L.t * (1 + (1 - ready) * 0.8);
+			g.strokeStyle = "#ffffff";
+			g.shadowColor = side;
+			g.shadowBlur = 30;
+			g.beginPath();
+			g.ellipse(L.cx, L.cy, L.rx, L.ry, 0, 0, Math.PI * 2);
+			g.stroke();
+			g.restore();
+		}
+
 		drawRim();
 	}
 
@@ -678,6 +732,8 @@ export function createRacket(canvas: HTMLCanvasElement): Racket {
 			live > 0.01 ||
 			toss >= 0 ||
 			chargeAge < 2 ||
+			recharged < 1 ||
+			ready > 0.01 ||
 			fuzz > 0.01 ||
 			slack > 0.01 ||
 			view?.serveBall != null;
@@ -695,6 +751,8 @@ export function createRacket(canvas: HTMLCanvasElement): Racket {
 			if (r.age > 1.4) ripples.splice(i, 1);
 		}
 		chargeAge += dt;
+		refusal = Math.max(0, refusal - dt);
+		ready = Math.max(0, ready - dt * 3.5);
 		fuzz *= Math.exp(-dt * 1.4);
 		slack *= Math.exp(-dt * 2.2);
 		if (toss >= 0) {
@@ -771,16 +829,21 @@ export function createRacket(canvas: HTMLCanvasElement): Racket {
 			fuzz = 1;
 			// A hit with no swing read first (a revised strike, or a phone
 			// that missed its own peak) has no number to show.
+			const smash = power >= POWER_SHOT;
 			stamp =
 				power > 0.05
 					? {
 							text: String(Math.round(power * 100)),
-							sub: "POWER",
-							color: ACCENT,
+							sub: smash ? "POWER SHOT" : "POWER",
+							color: smash ? "#ff3d8b" : ACCENT,
 							age: 0,
 						}
 					: { text: "HIT", sub: "", color: ACCENT, age: 0 };
-			burst(18, [ACCENT, "#ffffff", ACCENT], 520);
+			burst(
+				smash ? 40 : 18,
+				smash ? ["#ff3d8b", "#ffae2e", "#fff36b"] : [ACCENT, "#ffffff", ACCENT],
+				smash ? 720 : 520,
+			);
 		},
 		point() {
 			stamp = { text: "POINT", sub: "", color: "#34d86a", age: 0 };
@@ -792,6 +855,13 @@ export function createRacket(canvas: HTMLCanvasElement): Racket {
 		},
 		reading(text) {
 			readout = text;
+		},
+		recharge(amount) {
+			if (recharged < 1 && amount >= 1 && !reduce) ready = 1;
+			recharged = amount;
+		},
+		refused() {
+			refusal = 0.35;
 		},
 		tilt(x, y) {
 			tiltX += (x - tiltX) * 0.1;

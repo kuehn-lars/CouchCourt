@@ -20,6 +20,7 @@
  */
 
 import {
+	backoffMs,
 	type FeedbackKind,
 	type HostBoundMessage,
 	type HostMessage,
@@ -39,6 +40,7 @@ import {
 	type RallyInput,
 	tick,
 } from "../shared/sim/index.ts";
+import { createArcade } from "./arcade.ts";
 import { createAudio } from "./audio/index.ts";
 import { advance, FIXED_DT } from "./loop.ts";
 import { nextMode } from "./render/camera.ts";
@@ -59,18 +61,39 @@ if (!(canvas instanceof HTMLCanvasElement) || uiRoot === null) {
 }
 const renderer = createRenderer(canvas, uiRoot);
 const audio = createAudio();
+const arcade = createArcade();
 
-const socket = new WebSocket(
-	`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${RELAY_PATH}`,
-);
+/**
+ * The relay socket, reconnected with the phones' backoff whenever it drops.
+ * It used not to be: a host whose socket closed (a relay restart, a laptop
+ * lid) went on drawing a match nobody's swings could reach, with no sign of
+ * it. While it is down a match is paused, exactly as for a dropped phone.
+ * The relay re-sends the roster on `host-hello`, and the roster handler
+ * re-announces the match to every phone.
+ */
+let socket: WebSocket;
+let online = false;
+let attempts = 0;
+
+function connect(): void {
+	socket = new WebSocket(
+		`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${RELAY_PATH}`,
+	);
+	socket.addEventListener("open", () => {
+		attempts = 0;
+		online = true;
+		send({ t: "host-hello", v: PROTOCOL_VERSION });
+	});
+	socket.addEventListener("message", (event) => onMessage(event));
+	socket.addEventListener("close", () => {
+		online = false;
+		window.setTimeout(connect, backoffMs(attempts++));
+	});
+}
 
 function send(msg: HostMessage): void {
 	if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg));
 }
-
-socket.addEventListener("open", () => {
-	send({ t: "host-hello", v: PROTOCOL_VERSION });
-});
 
 // ---------------------------------------------------------------- match state
 
@@ -85,6 +108,15 @@ let winner: Side | null = null;
 let bot: Bot | null = null;
 let botSide: Side | null = null;
 let countdownUntil = 0;
+/** The last countdown number beeped, so each is beeped once. */
+let beeped = 0;
+/** The last match was against the machine: what "play again" repeats. */
+let lastSolo = false;
+/** `performance.now()` the match ended. A swing only counts as "again" once
+ * the winner has had a moment: the last point's follow-through must not
+ * start the next match. */
+let overAt = 0;
+const AGAIN_AFTER_MS = 2500;
 /** This match is played on a split screen. Fixed at the start, because the
  * sim's idea of "screen-left" is fixed with it (`shot.ts`, `screenLeftOf`). */
 let split = false;
@@ -170,8 +202,11 @@ function playerIdFor(side: Side): PlayerId | undefined {
  * games in the meantime.
  */
 function waitingFor(): Side | null {
-	for (const player of players) {
-		if (!player.connected && player.side !== botSide) return player.side;
+	// By side, not by roster entry: after a relay restart the roster comes
+	// back empty, and a side with nobody in it is as absent as a dropped one.
+	for (const side of ["near", "far"] as const) {
+		if (side === botSide) continue;
+		if (!players.find((p) => p.side === side)?.connected) return side;
 	}
 	return null;
 }
@@ -192,35 +227,46 @@ function announce(): void {
 	});
 }
 
+/** Starts a match — from a Start button, or from a swing on the result
+ * screen. Does nothing without the phones for it. */
+function startMatch(solo: boolean): void {
+	const ready = players.filter((p) => p.ready && p.connected);
+	const first =
+		ready.find((p) => p.playerId === readyOrder[0]) ?? ready[0] ?? null;
+	if (!first) return;
+
+	if (solo) {
+		botSide = other(first.side);
+		bot = createBot(botSide, OPPONENT_SKILL[settings.get().opponent]);
+	} else {
+		if (ready.length < 2) return;
+		botSide = null;
+		bot = null;
+	}
+	lastSolo = solo;
+	arcade.newMatch();
+	serverSide = first.side;
+	split = !solo && settings.get().split;
+	winner = null;
+	phase = "countdown";
+	countdownUntil = performance.now() + 3000;
+	// The court the countdown shows is the one about to be played on:
+	// the camera flies in from the lobby's crane to a fresh match.
+	previous = createMatch(serverSide, split);
+	current = previous;
+	announce();
+}
+
 const lobbyUI = createLobbyUI(uiRoot, {
 	onStart(solo) {
-		// Every browser wants a gesture before it will make a sound, and this
-		// button is the only one on the host screen.
+		// Every browser wants a gesture before it will make a sound, and these
+		// buttons are the only ones on the host screen.
 		audio.resume();
-
-		const ready = players.filter((p) => p.ready && p.connected);
-		const first =
-			ready.find((p) => p.playerId === readyOrder[0]) ?? ready[0] ?? null;
-		if (!first) return;
-
-		if (solo) {
-			botSide = other(first.side);
-			bot = createBot(botSide, OPPONENT_SKILL[settings.get().opponent]);
-		} else {
-			if (ready.length < 2) return;
-			botSide = null;
-			bot = null;
-		}
-		serverSide = first.side;
-		split = !solo && settings.get().split;
-		winner = null;
-		phase = "countdown";
-		countdownUntil = performance.now() + 3000;
-		// The court the countdown shows is the one about to be played on:
-		// the camera flies in from the lobby's crane to a fresh match.
-		previous = createMatch(serverSide, split);
-		current = previous;
-		announce();
+		startMatch(solo);
+	},
+	onPlayAgain() {
+		audio.resume();
+		startMatch(lastSolo);
 	},
 	onRematch() {
 		phase = "lobby";
@@ -231,7 +277,7 @@ const lobbyUI = createLobbyUI(uiRoot, {
 	},
 });
 
-socket.addEventListener("message", (event) => {
+function onMessage(event: MessageEvent): void {
 	const msg = JSON.parse(event.data as string) as HostBoundMessage;
 	switch (msg.t) {
 		case "lobby": {
@@ -248,13 +294,26 @@ socket.addEventListener("message", (event) => {
 			return;
 		}
 		case "swing": {
-			if (phase !== "playing") return;
 			const side = sideFor(msg.playerId);
-			if (side) pending.push({ side, swing: msg.swing, time: current.time });
+			if (!side) return;
+			if (phase === "playing") {
+				pending.push({ side, swing: msg.swing, time: current.time });
+			} else if (phase === "lobby") {
+				// The motion check: the seat lights up with the swing, so a
+				// player knows the whole path works before anything starts.
+				lobbyUI.swung(side, msg.swing.power);
+			} else if (
+				phase === "over" &&
+				performance.now() - overAt > AGAIN_AFTER_MS
+			) {
+				startMatch(lastSolo);
+			}
 			return;
 		}
 	}
-});
+}
+
+connect();
 
 window.addEventListener("keydown", (event) => {
 	// Cmd-F is the browser's find, not full screen.
@@ -305,11 +364,21 @@ function runTick(inputs: readonly RallyInput[]): void {
 		for (const side of ["near", "far"] as const) {
 			feedback(side, side === current.lastPoint ? "point" : "miss");
 		}
+		const games = current.score.games;
+		if (
+			current.score.setWinner === null &&
+			(games.near !== before.score.games.near ||
+				games.far !== before.score.games.far)
+		) {
+			audio.jingle("game");
+		}
 	}
 
 	if (current.score.setWinner !== null && phase === "playing") {
 		phase = "over";
+		overAt = performance.now();
 		winner = current.score.setWinner;
+		audio.jingle("match");
 		announce();
 	} else if (
 		// The only three things a score line is read from: checked first so a
@@ -336,7 +405,14 @@ function frame(now: number): void {
 	if (lastTime !== undefined) {
 		const frameDt = (now - lastTime) / 1000;
 
+		if (phase === "countdown") {
+			const n = Math.ceil((countdownUntil - now) / 1000);
+			if (n > 0 && n !== beeped) audio.countdown(n);
+			beeped = n;
+		}
 		if (phase === "countdown" && now >= countdownUntil) {
+			audio.countdown(0);
+			beeped = 0;
 			phase = "playing";
 			previous = createMatch(serverSide, split);
 			current = previous;
@@ -345,7 +421,7 @@ function frame(now: number): void {
 			announce();
 		}
 
-		const paused = phase === "playing" && waitingFor() !== null;
+		const paused = phase === "playing" && (waitingFor() !== null || !online);
 		// Drop the backlog rather than carrying it: a pause is the same case
 		// as a restored suspended tab, and `advance`'s own catch-up cap exists
 		// for exactly that reason (`llm-knowledge/modules/host.md`).
@@ -371,6 +447,8 @@ function frame(now: number): void {
 		}
 
 		if (phase === "lobby") {
+			// Nothing to hear in the lobby: lets the crowd fall silent.
+			audio.play([], 0);
 			const shown = demo ?? { previous: idle, current: idle };
 			renderer.render(
 				shown.previous,
@@ -381,7 +459,10 @@ function frame(now: number): void {
 				"attract",
 			);
 		} else {
-			audio.play(frameEvents);
+			const made = arcade.step(frameEvents);
+			renderer.arcade(made, arcade.rally, arcade.onFire);
+			audio.play(frameEvents, arcade.rally);
+			audio.callouts(made.callouts);
 			renderer.render(
 				previous,
 				current,
@@ -399,8 +480,12 @@ function frame(now: number): void {
 			countdown: Math.ceil((countdownUntil - now) / 1000),
 			winner,
 			games: current.score.games,
+			stats: phase === "over" ? arcade.stats() : null,
+			best: arcade.best,
+			againIn: Math.max(0, AGAIN_AFTER_MS - (now - overAt)),
 			botSide,
 			waitingFor: waitingFor(),
+			offline: !online,
 			joinUrl: JOIN_URL,
 		});
 	}

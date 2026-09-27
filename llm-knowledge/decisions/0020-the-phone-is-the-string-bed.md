@@ -1,6 +1,6 @@
 ---
 title: The phone is the string bed
-updated: 2026-09-24
+updated: 2026-09-27
 tags: [decision, controller, design, protocol]
 status: current
 code:
@@ -14,6 +14,10 @@ code:
 ---
 
 # 0020 — The phone is the string bed
+
+> **Amended 2026-09-27 by [[0022-arcade-layer]]:** swings are sent in every
+> phase, not only while playing, and while a point is in play the phone
+> applies a swing cooldown — the first thing it decides from `MatchScore`.
 
 Settled 2026-09-24. The user found the 2026-09-23 match screen (a 270° power
 dial, a status pill, a hint card) "lazy, boring, AI slop" and asked for a

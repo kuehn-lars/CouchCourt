@@ -1,6 +1,6 @@
 ---
 title: How CouchCourt fits together
-updated: 2026-09-24
+updated: 2026-09-27
 tags: [map, architecture, core]
 status: current
 code:
@@ -57,7 +57,7 @@ This is the path that matters. Everything else in the codebase supports it.
    │  Swing{kind,power,at,spin,lag}   kind: forehand/backhand/overhead
    ▼
  ws.send {t:"swing"}     ②  ──▶  parseControllerMessage
-   (only while playing)          attach playerId from socket
+   (cooldown in a rally)         attach playerId from socket
                                  forward to host       ──▶  onmessage
                                                               │
                                                               ▼
@@ -94,7 +94,10 @@ This is the path that matters. Everything else in the codebase supports it.
 the host pick which peak was the swing. Reads the stroke at the peak,
 including overhead ([[2026-09-22-stroke-classifier]]). Played on real iPhones
 2026-09-24 and works; its accuracy has not been measured.
-② Swings are only sent while the match is `playing`.
+② Sent in every phase since 2026-09-27; the host decides what a swing means
+(a shot, the lobby's motion check, "play again"). While a point is in play
+the phone's cooldown drops a new swing started within 1.2s of the last
+([[0022-arcade-layer]]).
 ③ The swing is stamped with the **host's** sim clock, never the phone's
 `swing.at` — [[0007-host-arrival-time-for-swing-timing]].
 ④ `hit` to whoever struck a new stroke; on a point, `point` to the winner and
@@ -230,8 +233,10 @@ match:
 
 ```
 lobby ──(Start / Play the machine)──▶ countdown ──(3s)──▶ playing
-  ▲                                                          │
-  └──────────────(Back to the lobby)──── over ◀──(setWinner)──┘
+  ▲                                     ▲                    │
+  │                                     └─(Play again, or a swing
+  │                                        after 2.5s)──┐     │
+  └──────────────(Lobby)──────────────────────────── over ◀──(setWinner)
 ```
 
 Every transition is `{ t: "match", phase, server, winner? }` from the host,
@@ -271,7 +276,9 @@ new controller page was screenshotted at phone size.
 **Played on real phones, 2026-09-24:** the user played it end to end on an
 iPhone 14 Pro and an iPhone 16e, and it worked on both. The host has been read
 back on a real Apple M3 GPU, holding 60fps in the lobby
-([[msaa-target-is-discarded-after-resolve]]).
+([[msaa-target-is-discarded-after-resolve]]). **Played again on a phone,
+2026-09-27**, with the arcade layer ([[0022-arcade-layer]]): the user reports
+everything works and it plays well.
 
 What that report does not include is any measurement. How often a swing is
 read as the wrong stroke, the latency a player perceives, and the balance

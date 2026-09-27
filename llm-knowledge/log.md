@@ -1,6 +1,6 @@
 ---
 title: Project log
-updated: 2026-09-25
+updated: 2026-09-27
 tags: [meta]
 status: current
 ---
@@ -558,3 +558,50 @@ Reported by the user: a phone scanning the join QR code from a host opened at
 the local-ip.co URL that `npm run dev` / `npm start` now print joins
 correctly. This closes the "Not verified" in the pre-pin review entry above.
 Still not verified: a real Windows host.
+
+## [2026-09-27] build | The arcade layer
+
+`host/arcade.ts` (pure, tested): timing grades, km/h heat tiers, rally
+milestones, ON FIRE streaks, session bests, match stats, callouts. Events
+grew `speed`/`timing` on a hit, `winner`/`how` on a point, and a `fault`.
+In-world speed pops, a rally counter and callout banner, heat-coloured trail
+and sparks, a frame tint on big moments, an audio rewrite (bus, reverb, crowd
+bed, rally ladder, stingers, countdown, jingles), a result card with stats and
+Play again, and a swing on the result screen starts the next match. The phone
+sends swings in every phase (lobby motion check) and applies a swing cooldown
+(`shared/swing/gate.ts`, 600ms group / 1.2s) drawn on the racket.
+`POWER_CEIL_DEG_S` 1400 → 1250 (power shots 7% → 15% of fixture peaks).
+Promoted: [[0022-arcade-layer]], [[2026-09-27-cooldown-and-power-share]].
+Watched in headless Chrome on Metal with a scripted phone; nothing heard.
+
+## [2026-09-27] fix | The host reconnects; the crowd bed was static
+
+The host's relay socket now reconnects with `backoffMs` (moved to
+`shared/protocol.ts`) and pauses a match while offline; `waitingFor()` is per
+side so an empty roster after a relay restart pauses too. Watched against
+`vite preview` with the relay killed and restarted mid-rally. The crowd bed
+was a constant hiss the user heard as static; now silent below a 3-stroke
+rally. See [[modules/host]], [[0022-arcade-layer]].
+
+## [2026-09-27] review | Pre-publish review of the arcade branch
+
+Scanned the branch and the tracked tree for secrets and personal data: clean
+(the one private key, `tests/fixtures/tls/key.pem`, is the self-signed
+`CN=localhost` test pair). Fixes: callouts carry a `kind`, and the audio and
+colours key on it rather than on the callout's wording; the audio never
+creates its context outside `resume()`, and schedules the crowd bed only when
+its level changes; `backoffMs`'s tests moved to `shared/protocol.test.ts`
+with the function. [[2026-09-27-cooldown-and-power-share]] corrected: 26
+traces, 19 power-shot peaks and 7 full-power at 1250 (was 28 / 20 / 8).
+Then every committed vault file (67) was read for sensitive data: none. The
+real LAN address replaced on 2026-09-25 is still in git history, as that entry
+says. Stale claims that the phone "decides nothing" from the score line were
+amended in [[wire-protocol]] and [[modules/controller]].
+
+## [2026-09-27] verify | The arcade build, played on a phone
+
+Reported by the user: the arcade build played on a real phone, everything
+works and it plays well. This closes the "not on a phone" items in
+[[0022-arcade-layer]], [[architecture]], [[modules/controller]] and the
+index's known gaps. Still not measured: the cooldown and power ceiling
+against a person's swings, and the solo balance after the ceiling moved.

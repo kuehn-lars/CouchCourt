@@ -21,6 +21,13 @@
 	--near: #ff5d73;
 	--far: #5ac8fa;
 	--ok: #34d86a;
+	/* The arcade palette: moments, never chrome (decision 0022). */
+	--gold: #ffd23f;
+	--hot: #ff5a1f;
+	--orange: #ffae2e;
+	--pink: #ff3d8b;
+	--cyan: #5ef2ff;
+	--bad: #ff5a5f;
 
 	--font:
 		system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;

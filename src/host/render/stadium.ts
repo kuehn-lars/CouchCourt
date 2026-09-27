@@ -209,7 +209,15 @@ function beamMaterial(): THREE.ShaderMaterial {
 
 export interface Stadium {
 	readonly group: THREE.Group;
-	update(dt: number, excite: number, wave: number, flashes: number): void;
+	/** `heat` 0..1 is how long the rally is: the boards scroll faster, warm
+	 * up, and past two thirds cycle through colours. */
+	update(
+		dt: number,
+		excite: number,
+		wave: number,
+		flashes: number,
+		heat: number,
+	): void;
 }
 
 export function buildStadium(): Stadium {
@@ -321,10 +329,19 @@ export function buildStadium(): Stadium {
 	}
 
 	let scroll = 0;
+	let hue = 0;
+	const white = new THREE.Color("#ffffff");
+	const warm = new THREE.Color("#ffb05a");
+	const tint = new THREE.Color();
 	return {
 		group,
-		update(dt, excite, wave, flashes) {
-			scroll = (scroll + dt * 0.035) % 1;
+		update(dt, excite, wave, flashes, heat) {
+			scroll = (scroll + dt * (0.035 + heat * 0.12)) % 1;
+			hue = (hue + dt * 0.35) % 1;
+			if (heat > 0.66) tint.setHSL(hue, 1, 0.62);
+			else tint.copy(warm);
+			board.color.copy(white).lerp(tint, Math.min(1, heat * 1.1));
+			ribbon.color.copy(board.color);
 			led.offset.x = scroll;
 			ribbonTex.offset.x = -scroll * 0.6;
 			crowd.update(dt, excite, wave, flashes);

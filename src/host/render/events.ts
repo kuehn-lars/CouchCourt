@@ -25,11 +25,41 @@ export type RenderEvent =
 			/** The same ball re-struck by a harder peak of the same swing
 			 * (`rally.ts`, `revise`): the ball jumps, nobody swings again. */
 			readonly revised: boolean;
+			/** m/s off the racket, as near as the state says: the ball's
+			 * speed at the end of the tick it was struck in. */
+			readonly speed: number;
+			/** -1 early … +1 late (`Stroke.timing`). */
+			readonly timing: number;
 	  }
 	| { readonly kind: "whiff"; readonly side: Side; readonly stroke: StrokeAnim }
 	| { readonly kind: "toss"; readonly side: Side }
 	| { readonly kind: "bounce"; readonly position: Vec3 }
-	| { readonly kind: "point" };
+	| {
+			readonly kind: "point";
+			readonly winner: Side | null;
+			/** `null` only for a point no stroke was played in. */
+			readonly how: PointHow | null;
+	  }
+	/** A first serve missed; the second is being set up. */
+	| { readonly kind: "fault"; readonly side: Side };
+
+export type PointHow = "ace" | "winner" | "double-fault" | "out" | "net";
+
+/**
+ * How the point that just ended was won, read off the state it ended in —
+ * the sim resolves out, net and a second bounce inside `rally.ts` and keeps
+ * only the result. `toHit` is still whoever failed to play the ball and
+ * `stroke` the last shot anyone hit, so: the hitter won it (nobody got it
+ * back) or lost it (it bounced out, or never got over).
+ */
+function pointHow(state: MatchState): PointHow | null {
+	const last = state.stroke;
+	if (!last || state.lastPoint === null) return null;
+	const hitterWon = state.lastPoint !== state.toHit;
+	if (last.kind === "serve") return hitterWon ? "ace" : "double-fault";
+	if (hitterWon) return "winner";
+	return state.bounces > 0 ? "out" : "net";
+}
 
 /** Ball must be this low, metres, and moving upward, to count as a bounce.
  * A heuristic on the ball state, not a sim event — cosmetic only. */
@@ -59,6 +89,8 @@ export function detectEvents(
 			stroke: strokeAnim(stroke),
 			power: stroke.power,
 			revised: before.stroke?.at === stroke.at,
+			speed: Math.hypot(current.ball.v.x, current.ball.v.y, current.ball.v.z),
+			timing: stroke.timing,
 		});
 	}
 	for (const side of ["near", "far"] as const) {
@@ -85,7 +117,13 @@ export function detectEvents(
 		events.push({ kind: "bounce", position: current.ball.p });
 	}
 	if (before.score !== current.score) {
-		events.push({ kind: "point" });
+		events.push({
+			kind: "point",
+			winner: current.lastPoint,
+			how: pointHow(current),
+		});
+	} else if (current.serveNumber === 2 && before.serveNumber === 1) {
+		events.push({ kind: "fault", side: current.toHit });
 	}
 	return events;
 }

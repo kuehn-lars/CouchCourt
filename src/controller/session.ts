@@ -10,6 +10,7 @@
  */
 
 import {
+	backoffMs,
 	type ControllerBoundMessage,
 	type ControllerMessage,
 	type FeedbackKind,
@@ -32,15 +33,6 @@ export type SessionState =
 export interface Session {
 	send(msg: ControllerMessage): void;
 	side(): Side | null;
-}
-
-/**
- * 500ms doubling to a flat 8s. Capped rather than unbounded: a phone that was
- * in a pocket for ten minutes must come back promptly, not after a delay that
- * grew while nobody was watching.
- */
-export function backoffMs(attempt: number): number {
-	return Math.min(8000, 500 * 2 ** attempt);
 }
 
 export function createSession(handlers: {
