@@ -20,6 +20,8 @@
 
 import qrcode from "qrcode-generator";
 import type { LobbyPlayer, MatchPhase, Side } from "../../shared/protocol.ts";
+import { POWER_SHOT } from "../../shared/swing/detector.ts";
+import type { Bests, MatchStats } from "../arcade.ts";
 import { el, play, setText } from "./dom.ts";
 import { ICON, type IconName, icon } from "./icons.ts";
 
@@ -32,21 +34,34 @@ export interface LobbyView {
 	readonly winner: Side | null;
 	/** Games won, for the final line. Only read in `over`. */
 	readonly games: Readonly<Record<Side, number>>;
+	/** The match just played, in `over`; `null` otherwise. */
+	readonly stats: MatchStats | null;
+	/** The session's bests (`arcade.ts`). */
+	readonly best: Bests;
+	/** ms until a swing starts the next match, in `over`. */
+	readonly againIn: number;
 	/** Set in solo play, so the roster can show who the bot is. */
 	readonly botSide: Side | null;
 	/** A side whose phone has dropped mid-match. The simulation is frozen
 	 * while this is set. */
 	readonly waitingFor: Side | null;
+	/** The host has lost the relay. A match is frozen while this is set. */
+	readonly offline: boolean;
 	readonly joinUrl: string;
 }
 
 export interface LobbyHandlers {
 	onStart(solo: boolean): void;
+	/** Same players, same opponent, straight into a countdown. */
+	onPlayAgain(): void;
+	/** Back to the lobby. */
 	onRematch(): void;
 }
 
 export interface LobbyUI {
 	update(view: LobbyView): void;
+	/** A swing from `side`'s phone in the lobby: the motion check. */
+	swung(side: Side, power: number): void;
 }
 
 const SIDE_LABEL: Readonly<Record<Side, string>> = {
@@ -54,12 +69,17 @@ const SIDE_LABEL: Readonly<Record<Side, string>> = {
 	far: "Far side",
 };
 
+const SHORT_LABEL: Readonly<Record<Side, string>> = {
+	near: "Near",
+	far: "Far",
+};
+
 type SeatState = "empty" | "joining" | "ready" | "away" | "bot";
 
 const SEAT: Readonly<Record<SeatState, { status: string; glyph: IconName }>> = {
 	empty: { status: "Scan the code to take this end", glyph: "deviceMobile" },
 	joining: { status: "Phone connected", glyph: "deviceMobile" },
-	ready: { status: "Racket ready", glyph: "check" },
+	ready: { status: "Ready. Give it a swing", glyph: "check" },
 	away: { status: "Reconnecting", glyph: "wifiSlash" },
 	bot: { status: "The machine plays this end", glyph: "robot" },
 };
@@ -102,23 +122,47 @@ interface Seat {
 	readonly root: HTMLLIElement;
 	readonly avatar: HTMLSpanElement;
 	readonly status: HTMLSpanElement;
+	readonly meter: HTMLSpanElement;
 	state: SeatState | null;
+	/** Restores the status line after a swing was shown on it. */
+	timer: number;
 }
 
 function buildSeat(side: Side): Seat {
 	const avatar = el("span", "seat-avatar");
 	const status = el("span", "seat-status");
 	const tag = el("span", "seat-tag", icon("check"), "Ready");
+	const meter = el("span", "seat-meter");
 	const root = el(
 		"li",
 		"seat",
 		avatar,
 		el("div", "", el("div", "seat-name", SIDE_LABEL[side]), status),
 		tag,
+		meter,
 	);
 	root.dataset.side = side;
-	return { root, avatar, status, state: null };
+	return { root, avatar, status, meter, state: null, timer: 0 };
 }
+
+/** What a lobby swing reads as, in the words the match will use. */
+function swingWords(power: number): string {
+	if (power >= POWER_SHOT) return `Power shot! ${Math.round(power * 100)}%`;
+	if (power >= 0.5) return `Good swing, ${Math.round(power * 100)}%`;
+	return `Swing read, ${Math.round(power * 100)}%. Harder!`;
+}
+
+const STAT_ROWS: readonly {
+	readonly label: string;
+	readonly value: (s: MatchStats["near"]) => string;
+}[] = [
+	{
+		label: "Fastest shot",
+		value: (s) => (s.fastest ? `${s.fastest} km/h` : "-"),
+	},
+	{ label: "Perfect hits", value: (s) => String(s.perfects) },
+	{ label: "Aces and winners", value: (s) => String(s.aces + s.winners) },
+];
 
 function seatState(player: LobbyPlayer | undefined, isBot: boolean): SeatState {
 	if (isBot) return "bot";
@@ -235,12 +279,13 @@ export function createLobbyUI(
 
 	// ------------------------------------------------------------ pause
 	const pauseTitle = el("h2");
+	const pauseLine = el("p");
 	const pauseCard = el(
 		"div",
 		"pause-card",
 		icon("wifiSlash"),
 		pauseTitle,
-		el("p", "", "Their phone dropped out. Play resumes the moment it is back."),
+		pauseLine,
 	);
 	const pause = el("div", "layer pause", pauseCard);
 
@@ -251,8 +296,33 @@ export function createLobbyUI(
 	const loseGames = el("span", "lose");
 	const final = el("p", "final", winGames, el("span", "sep"), loseGames);
 	const resultLine = el("p", "", "Game, set and match.");
-	const again = el("button", "btn btn-primary", "Back to the lobby");
+	const statCells = STAT_ROWS.map((row) => ({
+		row,
+		near: el("span", "stat-near"),
+		far: el("span", "stat-far"),
+	}));
+	const statNames = {
+		near: el("span", "stat-near"),
+		far: el("span", "stat-far"),
+	};
+	const rallyLine = el("p", "stat-rally");
+	const statGrid = el(
+		"div",
+		"stats",
+		el("span", ""),
+		statNames.near,
+		statNames.far,
+		...statCells.flatMap((c) => [
+			el("span", "stat-label", c.row.label),
+			c.near,
+			c.far,
+		]),
+	);
+	const playAgain = el("button", "btn btn-primary", "Play again");
+	playAgain.type = "button";
+	const again = el("button", "btn btn-ghost", "Lobby");
 	again.type = "button";
+	const swingHint = el("p", "swing-hint");
 	const resultCard = el(
 		"div",
 		"result-card",
@@ -260,7 +330,10 @@ export function createLobbyUI(
 		resultTitle,
 		final,
 		resultLine,
-		again,
+		statGrid,
+		rallyLine,
+		el("div", "result-actions", playAgain, again),
+		swingHint,
 	);
 	const result = el("div", "layer result", resultCard);
 
@@ -269,6 +342,7 @@ export function createLobbyUI(
 	start.addEventListener("click", () => handlers.onStart(false));
 	solo.addEventListener("click", () => handlers.onStart(true));
 	again.addEventListener("click", () => handlers.onRematch());
+	playAgain.addEventListener("click", () => handlers.onPlayAgain());
 
 	// ------------------------------------------------------- the slides
 	let tip = -1;
@@ -316,7 +390,10 @@ export function createLobbyUI(
 			);
 		});
 		rise(resultLine, 700);
-		rise(again, 820);
+		rise(statGrid, 780);
+		rise(rallyLine, 840);
+		rise(playAgain, 900);
+		rise(again, 960);
 		// Winner's games first, the way a result is always written.
 		if (view.winner) {
 			winGames.textContent = String(view.games[view.winner]);
@@ -332,8 +409,24 @@ export function createLobbyUI(
 	let lastLayer: HTMLElement | null = null;
 
 	return {
+		swung(side, power) {
+			const seat = seats[side];
+			seat.meter.style.setProperty("--power", String(power));
+			seat.root.classList.toggle("power", power >= POWER_SHOT);
+			seat.root.classList.remove("swung");
+			void seat.root.offsetWidth;
+			seat.root.classList.add("swung");
+			pop(seat.avatar);
+			seat.status.textContent = swingWords(power);
+			window.clearTimeout(seat.timer);
+			seat.timer = window.setTimeout(() => {
+				if (seat.state) seat.status.textContent = SEAT[seat.state].status;
+			}, 1600);
+		},
+
 		update(view) {
-			const paused = view.phase === "playing" && view.waitingFor !== null;
+			const paused =
+				view.phase === "playing" && (view.waitingFor !== null || view.offline);
 			const layer =
 				view.phase === "lobby"
 					? lobby
@@ -372,8 +465,21 @@ export function createLobbyUI(
 				lastLayer = layer;
 			}
 
+			if (paused && view.offline) {
+				setText(pauseTitle, "Reconnecting");
+				setText(
+					pauseLine,
+					"The game lost its connection. Play resumes the moment it is back.",
+				);
+				pauseCard.style.setProperty("--side", "var(--accent)");
+				return;
+			}
 			if (paused && view.waitingFor) {
 				setText(pauseTitle, `Waiting for ${SIDE_LABEL[view.waitingFor]}`);
+				setText(
+					pauseLine,
+					"Their phone dropped out. Play resumes the moment it is back.",
+				);
 				pauseCard.style.setProperty("--side", `var(--${view.waitingFor})`);
 				return;
 			}
@@ -427,6 +533,29 @@ export function createLobbyUI(
 							: [el("span", "winner", who), text.slice(who.length)]),
 					);
 				}
+				const name = (s: Side) =>
+					s === view.botSide
+						? "Machine"
+						: view.botSide
+							? "You"
+							: SHORT_LABEL[s];
+				setText(statNames.near, name("near"));
+				setText(statNames.far, name("far"));
+				if (view.stats) {
+					const stats = view.stats;
+					for (const c of statCells) {
+						setText(c.near, c.row.value(stats.near));
+						setText(c.far, c.row.value(stats.far));
+					}
+					setText(
+						rallyLine,
+						`Longest rally ${stats.longestRally} shots. Session best ${Math.max(view.best.rally, stats.longestRally)} shots, ${view.best.kmh} km/h.`,
+					);
+				}
+				setText(
+					swingHint,
+					view.againIn > 0 ? "" : "Or swing your phone to play again",
+				);
 				return;
 			}
 

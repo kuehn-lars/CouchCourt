@@ -1,11 +1,13 @@
 ---
 title: "Module: src/shared/swing — traces and swing detection"
-updated: 2026-09-22
+updated: 2026-09-27
 tags: [module, swing-detection, motion]
 status: current
 code:
   - `src/shared/swing/detector.ts`
   - `src/shared/swing/stream.ts`
+  - `src/shared/swing/gate.ts`
+  - `src/shared/swing/gate.test.ts`
   - `src/shared/swing/trace.ts`
   - `src/shared/swing/detector.test.ts`
   - `src/shared/swing/stream.test.ts`
@@ -35,6 +37,7 @@ duration-and-merge method described below is now the batch detector's only.
 | `src/shared/swing/trace.ts` | `MotionSample`, `MotionTrace`, `isTrace`, `toSample`, `formatTrace`, `measuredHz`, `longestGapMs`, `nextTraceName`, `MAX_GAP_MS` |
 | `src/shared/swing/detector.ts` | `detectSwings` (batch), `rotMagnitude`, `swingFrom`, `TURN_AXIS`, and every tuned threshold |
 | `src/shared/swing/stream.ts` | `createSwingStream` (live peak detector), its thresholds, and `level` for the controller's meter |
+| `src/shared/swing/gate.ts` | `createSwingGate` — the swing cooldown the phone applies before sending ([[0022-arcade-layer]]). Knows nothing of the stream; fed `Swing.at` |
 | `tests/fixtures/motion/` | 26 committed captures, seven labels, plus their README |
 
 ## Wiring — and the seam
@@ -47,6 +50,8 @@ stream.ts                 ──▶ detector.ts  rotMagnitude, swingFrom, TURN_A
 fixtures.test.ts          ──▶ trace.ts    isTrace, measuredHz, longestGapMs
 
 controller/main.ts         ──▶ stream.ts   createSwingStream            ◀── production caller
+controller/main.ts         ──▶ gate.ts     createSwingGate (cooldown)
+host/arcade.ts, render/, lobby, controller/racket ──▶ detector.ts  POWER_SHOT
 detectSwings (batch)       ◀── NOTHING in production, still only its own test
 ```
 
@@ -115,8 +120,11 @@ What works is **duration at a moderate threshold**, then merging:
 3. Classify from the episode's **largest turn** — the sample where `|α|` is
    greatest, which is usually *not* the magnitude peak. Positive → forehand,
    negative → backhand. That is the phone's whole judgement.
-4. `power` = peak magnitude mapped linearly from 400–1400°/s onto 0.15–1.0,
-   taken from the magnitude peak, which is a different sample again.
+4. `power` = peak magnitude mapped linearly from 400–1250°/s onto 0.15–1.0,
+   taken from the magnitude peak, which is a different sample again. The
+   ceiling was 1400 until 2026-09-27; it was lowered so power shots
+   (`POWER_SHOT`, 0.85) come up in 10-20% of swings, not 7%
+   ([[2026-09-27-cooldown-and-power-share]]). Both detectors share it.
 
 **The phone does not classify serves.** It did, from `|γ| ≥ 350°/s`, until six
 30-second captures showed hard forehands reaching `|γ|` of 1063. That was a

@@ -1,9 +1,11 @@
 /**
- * The host's icons: Phosphor, regular weight, as inline SVG strings so they
- * take the text colour (decision 0017). One import per glyph keeps the other
+ * The host's icons: Phosphor, regular weight (the streak's flame is the one
+ * filled glyph), as inline SVG strings so they take the text colour
+ * (decision 0017). One import per glyph keeps the other
  * thousand out of the bundle.
  */
 
+import fire from "@phosphor-icons/core/assets/fill/fire-fill.svg?raw";
 import arrowsIn from "@phosphor-icons/core/assets/regular/arrows-in.svg?raw";
 import arrowsLeftRight from "@phosphor-icons/core/assets/regular/arrows-left-right.svg?raw";
 import arrowsOut from "@phosphor-icons/core/assets/regular/arrows-out.svg?raw";
@@ -26,6 +28,7 @@ export const ICON = {
 	arrowsLeftRight,
 	check,
 	deviceMobile,
+	fire,
 	gear,
 	handGrabbing,
 	logo,

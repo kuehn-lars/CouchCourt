@@ -1,6 +1,6 @@
 ---
 title: Wire protocol intent
-updated: 2026-09-24
+updated: 2026-09-27
 tags: [reference, networking, protocol]
 status: current
 code:
@@ -80,7 +80,9 @@ desync.
   The phones are *told* a presentation summary — phase, and since
   2026-09-24 the score and whether the ball is in the server's hand
   (`MatchScore`) — the way a scoreboard tells a crowd. They decide nothing
-  from it; that is the line, not whether a fact about the match is sent.
+  about the game from it; that is the line, not whether a fact about the
+  match is sent. Since 2026-09-27 the phone gates its **own** input on it —
+  the swing cooldown runs only while `ball` is `"play"` ([[0022-arcade-layer]]).
 - **No acknowledgements or sequence numbers.** A dropped aim update is replaced
   20ms later. If swings ever start getting lost on real hardware, that is the
   point to reconsider — not before.

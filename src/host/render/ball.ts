@@ -65,7 +65,17 @@ export interface BallVisual {
 	): Vec3;
 	/** A few frames of flattening: `strength` 0..1. */
 	squash(strength: number): void;
+	/** How the shot just struck is drawn: `heat` 0..3 (`arcade.ts`) warms
+	 * the trail from the ball's own lime to pink and widens it; `fire` is a
+	 * side on a streak. Held until the next shot or a new point. */
+	style(heat: number, fire: boolean): void;
 }
+
+/** Trail colour by heat, then the streak's flame. */
+const TINTS = ["#dcff4a", "#ffe94a", "#ff9a2e", "#ff3d8b"].map(
+	(c) => new THREE.Color(c),
+);
+const FIRE = new THREE.Color("#ff5a1f");
 
 function ribbon(): {
 	mesh: THREE.Mesh;
@@ -101,6 +111,7 @@ function ribbon(): {
 		side: THREE.DoubleSide,
 		uniforms: {
 			heat: { value: 0 },
+			tint: { value: new THREE.Color("#dcff4a") },
 		},
 		vertexShader: /* glsl */ `
 			attribute float aAlpha;
@@ -111,11 +122,11 @@ function ribbon(): {
 			}`,
 		fragmentShader: /* glsl */ `
 			uniform float heat;
+			uniform vec3 tint;
 			varying float vAlpha;
 			void main() {
-				vec3 ball = vec3(0.86, 1.0, 0.29);
 				vec3 hot = vec3(1.0, 1.0, 0.92);
-				vec3 col = mix(ball, hot, heat * vAlpha);
+				vec3 col = mix(tint, hot, heat * vAlpha * vAlpha);
 				gl_FragColor = vec4(col * vAlpha * (0.45 + heat * 0.5), 1.0);
 			}`,
 	});
@@ -151,9 +162,13 @@ export function createBallVisual(scene: THREE.Scene): BallVisual {
 	scene.add(holder, shadow, trail.mesh);
 	const trailPositions = trail.mesh.geometry.getAttribute("position");
 	const trailAlphas = trail.mesh.geometry.getAttribute("aAlpha");
-	const heat = (trail.mesh.material as THREE.ShaderMaterial).uniforms.heat as {
-		value: number;
-	};
+	const uniforms = (trail.mesh.material as THREE.ShaderMaterial).uniforms;
+	const heat = uniforms.heat as { value: number };
+	const tint = (uniforms.tint as { value: THREE.Color }).value;
+	const feltMaterial = felt.material as THREE.MeshStandardMaterial;
+	const feltGlow = feltMaterial.emissive.clone();
+	/** Trail width, 1 for an ordinary shot. */
+	let width = 1;
 
 	const history = Array.from({ length: TRAIL }, () => new THREE.Vector3());
 	let head = 0;
@@ -212,7 +227,7 @@ export function createBallVisual(scene: THREE.Scene): BallVisual {
 			if (flat.lengthSq() < 1e-6) flat.set(1, 0, 0);
 			flat.normalize();
 			upright.crossVectors(flat, along).normalize();
-			const w = TRAIL_WIDTH * age;
+			const w = TRAIL_WIDTH * width * age;
 			const alpha = age * age * 0.9;
 			writeStrip(0, i, flat, p, w, alpha);
 			writeStrip(1, i, upright, p, w, alpha);
@@ -221,7 +236,15 @@ export function createBallVisual(scene: THREE.Scene): BallVisual {
 		trailAlphas.needsUpdate = true;
 	}
 
+	function style(level: number, fire: boolean): void {
+		tint.copy(fire ? FIRE : (TINTS[level] ?? TINTS[0] ?? FIRE));
+		width = fire ? 1.7 : 1 + level * 0.22;
+		feltMaterial.emissive.copy(fire ? FIRE : feltGlow);
+		feltMaterial.emissiveIntensity = fire ? 1.1 : 0.55;
+	}
+
 	return {
+		style,
 		squash(strength) {
 			squashT = 0.09;
 			squashAmount = Math.max(squashAmount * (squashT > 0 ? 1 : 0), strength);
@@ -239,6 +262,7 @@ export function createBallVisual(scene: THREE.Scene): BallVisual {
 			) {
 				offset.set(0, 0, 0);
 				filled = 0;
+				style(0, false);
 			}
 			offset.multiplyScalar(Math.exp(-dt / CATCH_UP));
 			const px = sx + offset.x;

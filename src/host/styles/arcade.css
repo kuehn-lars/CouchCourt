@@ -1,0 +1,272 @@
+/* The arcade layer over a match: the rally counter, the callouts, the
+   streak's flame on the scorebug, the lobby's motion check and the result
+   screen's numbers. The palette beyond the one accent is
+   llm-knowledge/decisions/0022-arcade-layer.md. */
+
+/* ------------------------------------------------------ rally counter */
+
+.combo {
+	--heat: var(--cyan);
+	position: fixed;
+	top: 5.5rem;
+	right: 1.75rem;
+	display: grid;
+	justify-items: end;
+	line-height: 1;
+	opacity: 0;
+	transform: translateX(1.5rem);
+	transition:
+		opacity 300ms var(--ease),
+		transform 500ms var(--spring);
+	pointer-events: none;
+}
+.combo.on {
+	opacity: 1;
+	transform: none;
+}
+.combo[data-heat="1"] {
+	--heat: var(--accent);
+}
+.combo[data-heat="2"] {
+	--heat: var(--orange);
+}
+.combo[data-heat="3"] {
+	--heat: var(--pink);
+}
+.combo-num {
+	font: italic 900 4.2rem / 0.9 var(--font);
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.04em;
+	color: var(--heat);
+	-webkit-text-stroke: 0.1rem rgba(5, 8, 12, 0.85);
+	paint-order: stroke fill;
+	text-shadow:
+		0 0 1.4rem color-mix(in srgb, var(--heat) 55%, transparent),
+		0 0.3rem 1rem rgba(0, 0, 0, 0.6);
+	transition: color 300ms var(--ease);
+}
+.combo-label {
+	margin-top: 0.3rem;
+	font-size: 0.85rem;
+	font-weight: 800;
+	font-style: italic;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+}
+.combo-bar {
+	width: 5.5rem;
+	height: 0.3rem;
+	margin-top: 0.5rem;
+	border-radius: 1rem;
+	overflow: hidden;
+}
+.combo-bar > i {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--heat);
+	transform-origin: right;
+	transition: transform 300ms var(--spring);
+}
+
+/* ----------------------------------------------------------- callouts */
+
+.shout {
+	--tone: var(--accent);
+	position: fixed;
+	top: 30%;
+	left: 50%;
+	translate: -50% -50%;
+	white-space: nowrap;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 260ms var(--ease);
+}
+.shout[data-tone="gold"] {
+	--tone: var(--gold);
+}
+.shout[data-tone="hot"] {
+	--tone: var(--hot);
+}
+.shout[data-tone="cool"] {
+	--tone: var(--cyan);
+}
+.shout[data-tone="bad"] {
+	--tone: var(--bad);
+}
+.shout[data-tone="side"] {
+	--tone: var(--who);
+}
+.shout.on {
+	opacity: 1;
+	transition: none;
+}
+.shout-text {
+	display: block;
+	font: italic 900 4.4rem / 1.1 var(--font);
+	letter-spacing: -0.03em;
+	padding: 0 0.3em 0.1em;
+	color: var(--tone);
+	-webkit-text-stroke: 0.18rem rgba(5, 8, 12, 0.9);
+	paint-order: stroke fill;
+	text-shadow:
+		0.25rem 0.25rem 0 rgba(5, 8, 12, 0.75),
+		0 0 2.5rem color-mix(in srgb, var(--tone) 60%, transparent);
+	transform: skewX(-8deg);
+}
+/* The misses are said, not shouted, and a sentence is smaller than a word. */
+.shout[data-tone="bad"] .shout-text,
+.shout[data-long="true"] .shout-text {
+	font-size: 2.9rem;
+}
+.shout.on .shout-text {
+	animation: slam 520ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes slam {
+	from {
+		transform: skewX(-8deg) scale(2.6) rotate(-6deg);
+		opacity: 0;
+		filter: blur(12px);
+	}
+	40% {
+		opacity: 1;
+		filter: blur(0);
+	}
+	to {
+		transform: skewX(-8deg);
+	}
+}
+
+/* ------------------------------------------------ the streak's flame */
+
+.bug-fire {
+	display: inline-grid;
+	width: 0;
+	height: 1rem;
+	margin-left: 0.35rem;
+	vertical-align: -0.1rem;
+	color: var(--hot);
+	opacity: 0;
+	overflow: hidden;
+	transition:
+		width 300ms var(--spring),
+		opacity 300ms var(--ease);
+}
+.bug-fire svg {
+	width: 1rem;
+	height: 1rem;
+}
+.bug-row.fire .bug-fire {
+	width: 1rem;
+	opacity: 1;
+	animation: flicker 700ms ease-in-out infinite alternate;
+}
+.bug-row.fire .bug-bar {
+	background: linear-gradient(0deg, var(--hot), var(--gold));
+	box-shadow: 0 0 1rem var(--hot);
+}
+@keyframes flicker {
+	from {
+		transform: scale(1) rotate(-4deg);
+		filter: drop-shadow(0 0 0.2rem var(--hot));
+	}
+	to {
+		transform: scale(1.18) rotate(4deg);
+		filter: drop-shadow(0 0 0.6rem var(--gold));
+	}
+}
+
+/* -------------------------------------------- lobby: the motion check */
+
+.seat-meter {
+	--power: 0;
+	position: absolute;
+	inset: auto 1rem 0.35rem;
+	height: 0.2rem;
+	border-radius: 1rem;
+	background: var(--side);
+	transform: scaleX(var(--power));
+	transform-origin: left;
+	opacity: 0;
+}
+.seat.power .seat-meter {
+	background: linear-gradient(90deg, var(--side), var(--gold), var(--pink));
+}
+.seat.swung .seat-meter {
+	animation: meter 1600ms var(--ease) both;
+}
+.seat.swung {
+	animation: swung 600ms var(--ease);
+}
+@keyframes meter {
+	0% {
+		opacity: 1;
+		transform: scaleX(0);
+	}
+	20% {
+		opacity: 1;
+		transform: scaleX(var(--power));
+	}
+	70% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: scaleX(var(--power));
+	}
+}
+@keyframes swung {
+	0% {
+		box-shadow: inset 0 0 0 2px var(--side);
+		background: color-mix(in srgb, var(--side) 18%, transparent);
+	}
+}
+
+/* ------------------------------------------------ result: the numbers */
+
+.stats {
+	display: grid;
+	grid-template-columns: auto auto auto;
+	column-gap: 2rem;
+	row-gap: 0.35rem;
+	margin-top: 0.6rem;
+	font-size: 1.05rem;
+	font-variant-numeric: tabular-nums;
+}
+.stats .stat-label {
+	color: var(--ink-3);
+}
+.stats .stat-near,
+.stats .stat-far {
+	font-weight: 750;
+	text-align: right;
+}
+.stats .stat-near {
+	color: var(--near);
+}
+.stats .stat-far {
+	color: var(--far);
+}
+.result .stat-rally {
+	margin: 0.3rem 0 0;
+	font-size: 0.95rem;
+	color: var(--ink-2);
+}
+.result-actions {
+	display: flex;
+	gap: 0.7rem;
+}
+.result .swing-hint {
+	min-height: 1.3em;
+	margin: 0.2rem 0 0;
+	font-size: 0.95rem;
+	font-weight: 650;
+	color: var(--accent);
+	animation: breathe 1.8s ease-in-out infinite;
+}
+@keyframes breathe {
+	50% {
+		opacity: 0.55;
+	}
+}

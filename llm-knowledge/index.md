@@ -1,6 +1,6 @@
 ---
 title: Index
-updated: 2026-09-25
+updated: 2026-09-27
 tags: [meta]
 status: current
 ---
@@ -63,6 +63,7 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0019-split-screen]] | Two people, two halves, each from behind their own player — and why the sim needed a per-side "screen-left" |
 | [[0020-the-phone-is-the-string-bed]] | The match screen is a racket: stencil on the strings, ripples, a charging frame, a ball you toss. The score line on the wire |
 | [[0021-couchcourt-name-and-mark]] | Renamed to CouchCourt; the "CC" ball-seam mark and the three marks rejected; favicon is now a file; where `PRODUCT.md`'s binding parts went |
+| [[0022-arcade-layer]] | **The arcade layer.** Speed pops, timing grades, callouts, rally ladder, streaks, session records, play-again-by-swing; the phone's swing cooldown; power ceiling 1250; swings sent in every phase. Amends 0017 and 0020 |
 
 ## Platform
 
@@ -116,6 +117,7 @@ the evidence that produced them.
 | [[2026-09-22-stroke-classifier]] | Overhead from the racket position going into the swing (8/8); side from alpha + 0.4·gamma at the peak (58/60, up from a silent 54/60); what failed |
 | [[2026-09-22-stroke-direction-balance]] | Why pace was a knife-edge, the timing trade, bot skill as spread, and the shipped win rates |
 | [[2026-09-21-camera-frames-a-moving-player]] | The camera framed a court, not the players in it — and the guard passed while the legs hung off the screen |
+| [[2026-09-27-cooldown-and-power-share]] | Peaks of one swing land up to ~600ms apart; players never swing twice within 1.97s; power-shot share 7% → 15% at a 1250 ceiling; bot shot speeds (median 100 km/h) |
 | [[2026-09-20-serve-reachability]] | **Superseded.** The original, wrong claim — kept so nobody re-derives it |
 
 ## Sessions
@@ -165,6 +167,10 @@ Things that are true today and that a session should not be surprised by.
 - **`Swing.spin`'s rotation axis is still a design decision, not a
   measurement** ([[2026-09-20-spin-from-wrist-roll]]). Unchanged by the
   2026-09-21 work, which only touched the direction axis.
+- **The arcade layer has not been heard or felt** ([[0022-arcade-layer]]).
+  The audio was only heard by accident (the crowd bed was static; fixed); the swing cooldown (600ms group, 1.2s)
+  and the power ceiling (1250°/s) are cut from fixtures, not from a person
+  playing; the solo balance was not re-run after the ceiling moved.
 - **Two perfect bots rally forever** ([[modules/shared-sim]]). Solo mode uses
   skill 0.7, which beats a novice and loses to a decent player; no
   rally-length cap exists.

@@ -1,6 +1,6 @@
 ---
 title: Phosphor icons, system type, no UI framework
-updated: 2026-09-23
+updated: 2026-09-27
 tags: [decision, dependency, host, controller, design]
 status: current
 code:
@@ -11,6 +11,10 @@ code:
 ---
 
 # 0017 — Phosphor icons, system type, and no UI framework
+
+> **Amended 2026-09-27 by [[0022-arcade-layer]]:** the one accent still owns
+> the chrome; arcade moments (callouts, the rally counter, heat, the streak)
+> get a wider palette. One filled Phosphor glyph (the streak's flame).
 
 ## Decision
 

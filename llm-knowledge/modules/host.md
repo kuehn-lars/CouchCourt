@@ -1,6 +1,6 @@
 ---
 title: "Module: src/host — the Mac display"
-updated: 2026-09-25
+updated: 2026-09-27
 tags: [module, host, rendering]
 status: current
 code:
@@ -9,6 +9,8 @@ code:
   - `src/host/loop.test.ts`
   - `src/host/score-line.ts`
   - `src/host/score-line.test.ts`
+  - `src/host/arcade.ts`
+  - `src/host/arcade.test.ts`
   - `src/host/render/`
   - `src/host/ui/lobby.ts`
   - `src/host/ui/settings.ts`
@@ -32,6 +34,7 @@ currently wired end to end.
 | --- | --- | --- |
 | `src/host/main.ts` | match state machine, rAF loop, socket wiring, the two state references, feedback | no — DOM and socket I/O |
 | `src/host/loop.ts` | `advance(accumulator, frameDt)` — the fixed-timestep accumulator | yes, `src/host/loop.test.ts` |
+| `src/host/arcade.ts` | `createArcade`: what a frame's events mean to a player — timing grade, km/h, heat, rally count, streak/ON FIRE, callouts, session bests, match stats. Pure ([[0022-arcade-layer]]) | **yes**, `src/host/arcade.test.ts` |
 | `src/host/score-line.ts` | `scoreLine(state)`: the score and serve as the phones show them (`MatchScore`) | **yes**, `src/host/score-line.test.ts` |
 | `src/host/render/index.ts` | `createRenderer` — wires scene, court, stadium, officials, ball, players, effects, UI; turns events into swings, bursts, reactions, crowd mood | no |
 | `src/host/render/events.ts` | `detectEvents`, `strokeAnim` — which animation a stroke plays | **yes**, `src/host/render/events.test.ts` |
@@ -49,15 +52,17 @@ currently wired end to end.
 | `src/host/render/players.ts` | The two players: layered animation, swing smear, ponytail spring, reactions | no |
 | `src/host/render/officials.ts` | Chair umpire and four ball kids, heads following the ball | no |
 | `src/host/render/ball.ts` | Ball, squash and stretch, crossed ribbon trail, blob shadow | no |
-| `src/host/render/effects.ts` | Sparks, impact star, rings, dust, skid marks, confetti — fixed pools | no |
+| `src/host/render/effects.ts` | Sparks, impact star, rings, dust, skid marks, confetti — fixed pools; spark and ring colours follow the shot's heat and a streak | no |
+| `src/host/render/popups.ts` | The km/h and grade that pop off the racket: a pool of 8 sprites, each with its own canvas, screen-sized | no |
+| `src/host/render/hud.ts` | The rally counter and the callout banner (a queue of at most 3) | no |
 | `src/host/render/ui.ts` | Broadcast scorebug, the umpire's call, the note, the split-screen divider and half tags | `callFor` only, `src/host/render/ui.test.ts` |
 | `src/host/ui/lobby.ts` | Title screen (join QR, two seats, how-to slides), countdown, "Play", pause, result | no |
 | `src/host/ui/settings.ts` | `<dialog>` settings sheet and the two corner buttons; prefs in `localStorage` through `shared/prefs.ts` | parsing only, `src/shared/prefs.test.ts` |
 | `src/host/ui/dom.ts` | `el`, write-on-change `setText`, reduced-motion-aware `play` | no |
 | `src/host/ui/icons.ts` | Phosphor glyphs as `?raw` strings ([[0017-phosphor-icons-and-the-visual-system]]), plus the CouchCourt `logo` from `src/logo.svg` ([[0021-couchcourt-name-and-mark]]) | no |
 | `src/host/host.css` | The page's one stylesheet: an ordered `@import` list that Vite inlines at build time | — |
-| `src/host/styles/` | `base` (tokens, buttons, overlay), `lobby`, `match` (countdown, pause, result, scorebug, calls), `settings`, and `adapt` (narrow windows, reduced motion and transparency), which must stay last because its media queries override the rest | — |
-| `src/host/audio/index.ts` | Synthesised hit / bounce / point. No asset files | no |
+| `src/host/styles/` | `base` (tokens, buttons, overlay), `lobby`, `match` (countdown, pause, result, scorebug, calls), `settings`, `arcade` (rally counter, callouts, streak flame, motion check, result numbers), and `adapt` (narrow windows, reduced motion and transparency), which must stay last because its media queries override the rest | — |
+| `src/host/audio/index.ts` | Everything heard, synthesised: a bus with a compressor and a generated reverb, a crowd bed, the layered hit, the rally ladder, callout stingers, countdown, jingles. No asset files | no |
 | `src/host/index.html` | `#scene` canvas, `#ui` div, loads `main.ts` | — |
 
 The split is deliberate: `loop.ts`, `camera.ts`, `poses.ts`, `events.ts` and
@@ -72,8 +77,10 @@ highest-value code in it, and they are the things tested. Everything else is DOM
 
 ```
 lobby ──(Start / Play the machine)──▶ countdown ──(3s)──▶ playing
-  ▲                                                          │
-  └──────────────(Back to the lobby)──── over ◀──(setWinner)──┘
+  ▲                                     ▲                    │
+  │                                     └─(Play again, or a swing
+  │                                        after 2.5s)──┐     │
+  └──────────────(Lobby)──────────────────────────── over ◀──(setWinner)
 ```
 
 Each transition sends `{ t: "match", phase, server, winner? }`, which the
@@ -123,6 +130,58 @@ about to be played on.
 0.4 / Match 0.65 / Tough 0.85 skill — only Match is measured,
 [[2026-09-22-stroke-direction-balance]]), sound, lobby rally, full screen.
 Keys ignore Cmd/Ctrl/Alt, so Cmd-F is still the browser's find.
+
+## The arcade layer (2026-09-27)
+
+[[0022-arcade-layer]]. `main.ts` owns one `createArcade()` for the page's
+life: `newMatch()` on every start resets the match's stats and streaks and
+keeps the session's bests. Outside the lobby, once a frame:
+
+```
+frameEvents ─▶ arcade.step() ─▶ { pops, callouts }
+                  │                 ├─▶ renderer.arcade(…, rally, onFire)   popups, HUD, scorebug flame, frame tint
+                  │                 └─▶ audio.callouts()                    stingers
+                  └─ rally ─────────────▶ audio.play(frameEvents, rally)     the ladder, the crowd bed
+renderer.render(…, frameEvents)                                             ball trail/sparks read heat and `fire`
+```
+
+A callout's `kind` is what everything keys on: the HUD and the frame tint
+take its colour from `TONE[kind]`, and the audio plays one sting per kind.
+Never match on a callout's `text` — it is wording, free to change.
+
+`renderer.arcade` must come **before** `render`: a hit's trail and sparks
+burn only if the renderer already knows its side is on fire. The lobby's demo
+rally never reaches the arcade — no pops, no callouts, no records set by two
+machines.
+
+**Swings outside a match** (the phone sends them in every phase): in the
+lobby they light the seat (`lobbyUI.swung`) — the end-to-end motion check;
+on the result screen, after `AGAIN_AFTER_MS` (2.5s, so a last point's
+follow-through does not count), any human's swing calls `startMatch` with
+the last match's opponent. `startMatch` is the one path the Start buttons,
+Play again and that swing share.
+
+## The host reconnects (2026-09-27)
+
+Until 2026-09-27 the host opened its relay socket once. If it closed — a
+relay restart, a laptop lid — the page went on drawing a match that no
+phone's swing could reach, with no sign of it: the bot kept serving, the
+human's serve never came. Watched once in a scripted run, cause not proven.
+
+Now `connect()` reopens it with the phones' `backoffMs` (moved to
+`shared/protocol.ts` so the host need not import the controller), and a match
+is **paused while the host is offline** ("Reconnecting"), as it is for a
+dropped phone. On `host-hello` the relay re-sends the roster and the roster
+handler re-announces the match. `waitingFor()` is now **per side**, not per
+roster entry: after a relay restart the roster comes back empty, and an
+empty human side must pause the match too.
+
+Watched against `vite preview`: relay killed mid-rally → "Reconnecting";
+restarted 8s later → host back on its own, match held at its score on
+"Waiting for Near side". **Under `npm run dev` the same restart reloads the
+host page** (Vite's dev client does that when its server comes back), so the
+match is lost there regardless. A real phone rejoining after a relay restart
+gets a fresh slot, possibly the other side; not handled.
 
 ## The frame
 
@@ -175,10 +234,11 @@ tick states**, mirroring the derivation `main.ts` already uses:
 
 | Event | Derived from |
 | --- | --- |
-| `hit` | `current.stroke !== before.stroke`. Positioned at `stroke.from`, the contact point; `revised` when `stroke.at` is unchanged |
+| `hit` | `current.stroke !== before.stroke`. Positioned at `stroke.from`, the contact point; `revised` when `stroke.at` is unchanged. Carries `speed` (the ball's, end of that tick) and `timing` |
 | `whiff` | `whiffs[side]` went up — the avatar swings at air |
 | `toss` | `toss` went from `null` to set |
-| `point` | `before.score !== current.score` (reference inequality) |
+| `point` | `before.score !== current.score` (reference inequality), with `winner` and `how`: ace / winner / double-fault / out / net, read off the **end** state's `toHit`, `stroke` and `bounces` — `before.toHit` is wrong when a rewound strike and its error land in one tick |
+| `fault` | `serveNumber` went 1 → 2 with the score unchanged |
 | `bounce` | `v.y` sign flip with `p.y < BOUNCE_HEIGHT` — a **heuristic**, visual only |
 
 The bounce heuristic can produce a false positive and that costs nothing,

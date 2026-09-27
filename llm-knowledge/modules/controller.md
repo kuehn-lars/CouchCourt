@@ -1,18 +1,18 @@
 ---
 title: "Module: src/controller — the iPhone racket"
-updated: 2026-09-25
+updated: 2026-09-27
 tags: [module, controller, ios]
 status: current
 code:
   - `src/controller/main.ts`
   - `src/controller/session.ts`
-  - `src/controller/session.test.ts`
   - `src/controller/wake-lock.ts`
   - `src/controller/motion.ts`
   - `src/controller/index.html`
   - `src/controller/controller.css`
   - `src/controller/icons.ts`
   - `src/controller/racket.ts`
+  - `src/shared/swing/gate.ts`
   - `src/controller/view.ts`
   - `src/controller/view.test.ts`
   - `src/controller/record.ts`
@@ -32,7 +32,7 @@ verified" below before trusting this page over your own hands.
 | File | What it is | State |
 | --- | --- | --- |
 | `src/controller/main.ts` | The real entry point: gate → motion listener → stream → session | built, untested on hardware |
-| `src/controller/session.ts` | Socket identity, resume, reconnect backoff | `backoffMs` tested; socket wiring untested by design (DOM/WebSocket wiring) |
+| `src/controller/session.ts` | Socket identity, resume, reconnect with `backoffMs` (in `shared/protocol.ts` since 2026-09-27, tested there) | no — DOM/WebSocket wiring, untested by design |
 | `src/controller/wake-lock.ts` | `keepAwake()` — screen wake lock with re-acquire on visibility | untested by design (browser API wiring, no logic to assert) |
 | `src/controller/motion.ts` | `requestMotionPermission()` — the iOS permission gate | working, now used by both the controller and the recorder |
 | `src/controller/index.html` | The controller page | built — permission gate + play screen + settings sheet; redesigned 2026-09-23 |
@@ -73,8 +73,11 @@ enable tap → requestMotionPermission()          motion.ts
                     stream.push(sample)           shared/swing/stream.ts
                          │ Swing | null        (stream.level → the live glow)
                          ▼
+                    cooldown.admit(at)           shared/swing/gate.ts, only while
+                         │ refused → racket.refused()   score.ball === "play"
+                         ▼
                     showSwing(power)             the ring: last swing's power
-                    session.send({t:"swing"})    ONLY while match.phase === "playing"
+                    session.send({t:"swing"})    every phase; the host decides
 ```
 
 `{t:"ready"}` is sent from inside `onSide`, not right after `createSession`
@@ -108,8 +111,16 @@ fixtures, and this module only calls it. See that page and
 [[0015-contact-model]] for why it now announces every rotation peak and leaves
 the choosing to the host.
 
-**The phone only sends swings while the match is `playing`.** The peak
-detector fires on gestures too; in the lobby a gesture is not a shot.
+**The phone sends swings in every phase** (since 2026-09-27,
+[[0022-arcade-layer]]). The peak detector fires on gestures too, so the host
+decides: a shot while playing, the seat's motion check in the lobby, "play
+again" on the result screen. Before that the phone filtered on `playing`.
+
+**The swing cooldown** (`shared/swing/gate.ts`) runs here, before the send,
+and only while a point is in play — a serve's toss and hit are two swings
+close together. It is timed on the stream's clock, the same one `Swing.at` is
+in, and `racket.recharge` draws it from the same numbers that enforce it.
+Numbers: [[2026-09-27-cooldown-and-power-share]].
 
 ## What actually works today: the recorder
 
@@ -186,8 +197,10 @@ What the phone knows about the match comes from the host's `match` message:
 the phase, and since 2026-09-24 **`score`** (`MatchScore` — games, points, who
 serves, and the ball in hand / tossed / in play). That is what lets the racket
 say SERVE with a ball on the strings, HIT once it is up, RETURN when they
-serve, and the score from your own side. Still presentation of a relayed fact:
-the phone decides nothing from it ([[0002-host-authoritative-simulation]]).
+serve, and the score from your own side. Still presentation of a relayed fact,
+with one exception since 2026-09-27: the swing cooldown applies only while
+`ball` is `"play"` ([[0022-arcade-layer]]). It gates the phone's own input,
+never the game ([[0002-host-authoritative-simulation]]).
 
 **The toss is started by the phone's own swing**, not by the host's reply:
 with the ball in hand, the swing the phone just read is the toss, so the ball
@@ -195,8 +208,10 @@ leaves the strings immediately, back-dated by the detector's `lag`, and flies
 on `TOSS_APEX`. The host's `ball: "toss"` is the fallback.
 
 Kept from before, unchanged: one swing arrives as several peaks, so the
-strongest in 400ms is the one shown (and the one the host plays); swings are
-sent only while `playing`; the flash wash. **There is no haptic feedback** —
+strongest in 400ms is the one shown (and the one the host plays); the flash
+wash. Since 2026-09-27 the frame also shows the swing cooldown (dark, refilling
+from the throat, red on a refused swing, a white flash when ready) and a power
+shot stamps POWER SHOT in pink ([[0022-arcade-layer]]). **There is no haptic feedback** —
 removed 2026-09-25, see [[ios-web-haptics]]. The stroke readout (a setting) now reads along the
 throat.
 
@@ -223,7 +238,7 @@ real detector. Not on a phone.
 
 ## What is and is not verified
 
-Everything above is verified by tests (`session.test.ts`'s `backoffMs`,
+Everything above is verified by tests (`shared/protocol.test.ts`'s `backoffMs`,
 `stream.test.ts` in `shared/swing/`) and a typechecker, and by `npm run build`
 actually emitting `dist/controller/index.html` wired to a bundled script.
 

@@ -71,6 +71,8 @@ const GradeShader = {
 		time: { value: 0 },
 		split: { value: 0 },
 		punch: { value: 0 },
+		flash: { value: 0 },
+		flashColor: { value: new THREE.Color() },
 	},
 	vertexShader: /* glsl */ `
 		varying vec2 vUv;
@@ -83,6 +85,8 @@ const GradeShader = {
 		uniform float time;
 		uniform float split;
 		uniform float punch;
+		uniform float flash;
+		uniform vec3 flashColor;
 		varying vec2 vUv;
 
 		float grain(vec2 uv) {
@@ -108,6 +112,9 @@ const GradeShader = {
 			// A gentle S-curve and a cool lift in the shadows.
 			col = mix(col, col * col * (3.0 - 2.0 * col), 0.22);
 			col += vec3(0.0, 0.012, 0.024) * (1.0 - col);
+			// A big moment tints the frame from the edges in, leaving the
+			// middle — where the ball is — readable.
+			col = mix(col, flashColor, flash * (0.12 + 0.6 * smoothstep(0.05, 0.5, edge * 1.6)));
 			col += (grain(uv) - 0.5) * 0.035;
 			gl_FragColor = vec4(col, 1.0);
 		}`,
@@ -118,6 +125,8 @@ export interface Post {
 	resize(width: number, height: number, pixelRatio: number): void;
 	/** A hit's kick: 0..1, decays by itself. */
 	punch(amount: number): void;
+	/** Tint the frame from the edges: `amount` 0..1, decays by itself. */
+	flash(color: THREE.ColorRepresentation, amount: number): void;
 }
 
 export function createPost(
@@ -151,6 +160,7 @@ export function createPost(
 
 	let time = 0;
 	let kick = 0;
+	let glow = 0;
 	return {
 		render(list, dt) {
 			time = (time + dt) % 1000;
@@ -160,6 +170,8 @@ export function createPost(
 			u.time.value = time;
 			u.split.value = list.length > 1 ? 1 : 0;
 			u.punch.value = kick;
+			glow *= Math.exp(-dt * 5);
+			u.flash.value = glow;
 			composer.render(dt);
 		},
 		resize(width, height, pixelRatio) {
@@ -169,6 +181,13 @@ export function createPost(
 		},
 		punch(amount) {
 			kick = Math.max(kick, amount);
+		},
+		flash(color, amount) {
+			if (amount < glow) return;
+			glow = amount;
+			(grade.uniforms as typeof GradeShader.uniforms).flashColor.value.set(
+				color,
+			);
 		},
 	};
 }

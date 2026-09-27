@@ -14,6 +14,7 @@ import type {
 	Side,
 	SwingKind,
 } from "../shared/protocol.ts";
+import { createSwingGate } from "../shared/swing/gate.ts";
 import { createSwingStream } from "../shared/swing/stream.ts";
 import { toSample } from "../shared/swing/trace.ts";
 import { fillIcons } from "./icons.ts";
@@ -249,11 +250,23 @@ function drawLevel(): void {
 		prefs.readout && now !== null ? `READING ${MOVE_NAME[now]}` : null,
 	);
 	racket?.show(currentView());
+	racket?.recharge(
+		inRally() && firstAt !== null
+			? cooldown.charge(performance.now() - firstAt)
+			: 1,
+	);
 	announce();
 	requestAnimationFrame(drawLevel);
 }
 
 const stream = createSwingStream();
+const cooldown = createSwingGate();
+
+/** A point is being played out: the only time the swing cooldown applies.
+ * A serve is a toss and a hit close together, and neither is spam. */
+function inRally(): boolean {
+	return match?.phase === "playing" && match.score?.ball === "play";
+}
 let session: Session | null = null;
 
 /**
@@ -276,9 +289,15 @@ function onMotion(event: DeviceMotionEvent): void {
 	if (g?.x != null && g.y != null) racket?.tilt(g.x / 9.81, -g.y / 9.81);
 	const swing = stream.push(sample);
 	if (swing === null) return;
+	if (!inRally()) cooldown.reset();
+	else if (!cooldown.admit(swing.at)) {
+		racket?.refused();
+		return;
+	}
 	showSwing(swing.power, swing.lag ?? 0);
-	// Only while a point can be played: a gesture in the lobby is not a shot.
-	if (match?.phase === "playing") session?.send({ t: "swing", ...swing });
+	// Sent in every phase, and the host decides what it means: a shot while
+	// playing, the motion check in the lobby, "play again" once it is over.
+	session?.send({ t: "swing", ...swing });
 }
 
 function startPlaying(): void {

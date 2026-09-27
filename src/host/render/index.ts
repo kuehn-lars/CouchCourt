@@ -10,22 +10,40 @@
  * is `llm-knowledge/decisions/0018-stylised-stadium-renderer.md`.
  */
 
+import type { Side } from "../../shared/protocol.ts";
 import type { MatchState, Vec3 } from "../../shared/sim/index.ts";
+import { POWER_SHOT } from "../../shared/swing/detector.ts";
+import { type ArcadeFrame, heatOf, TONE, type Tone } from "../arcade.ts";
 import { createBallVisual } from "./ball.ts";
 import { buildCourt } from "./court.ts";
-import { createEffects } from "./effects.ts";
+import { createEffects, SIDE_COLOR } from "./effects.ts";
 import { type RenderEvent, strokeAnim } from "./events.ts";
+import { createHud } from "./hud.ts";
 import { buildOfficials } from "./officials.ts";
 import { createPlayersVisual } from "./players.ts";
+import { createPopups } from "./popups.ts";
 import { type CameraShot, createScene } from "./scene.ts";
 import { buildStadium } from "./stadium.ts";
 import { createScoreUI } from "./ui.ts";
 
 export type { CameraShot } from "./scene.ts";
 
+/** Frame tints for the big callouts, by tone (`arcade.ts`); a `side`
+ * callout tints in that side's colour. */
+const FLASH: Readonly<Record<Tone, string | null>> = {
+	gold: "#ffd23f",
+	hot: "#ff5a1f",
+	cool: null,
+	bad: null,
+	side: null,
+};
+
 export interface Renderer {
 	/** A brief line at the bottom of the screen. */
 	note(text: string): void;
+	/** What the arcade layer made of this frame's events. Called before
+	 * `render`, in a match only. */
+	arcade(frame: ArcadeFrame, rally: number, onFire: Side | null): void;
 	render(
 		previous: MatchState,
 		current: MatchState,
@@ -54,7 +72,10 @@ export function createRenderer(
 	const ball = createBallVisual(scene);
 	const players = createPlayersVisual(scene);
 	const effects = createEffects(scene);
+	const popups = createPopups(scene);
 	const scoreUI = createScoreUI(uiRoot);
+	const hud = createHud(uiRoot);
+	let fire: Side | null = null;
 
 	/** The crowd's mood, 0..1: up on a point, easing back down. */
 	let excite = 0;
@@ -66,6 +87,22 @@ export function createRenderer(
 	return {
 		note: scoreUI.note,
 
+		arcade(frame, rallyCount, onFire) {
+			fire = onFire;
+			scoreUI.setFire(onFire);
+			hud.rally(rallyCount);
+			for (const pop of frame.pops) popups.pop(pop);
+			for (const callout of frame.callouts) {
+				hud.callout(callout);
+				const tone = TONE[callout.kind];
+				const tint =
+					tone === "side" && callout.side
+						? SIDE_COLOR[callout.side]
+						: FLASH[tone];
+				if (tint) world.flash(tint, tone === "side" ? 0.22 : 0.32);
+			}
+		},
+
 		render(previous, current, alpha, dt, events, shot) {
 			const attract = shot === "attract";
 			let struckAt: Vec3 | null = null;
@@ -73,18 +110,32 @@ export function createRenderer(
 				switch (event.kind) {
 					case "hit": {
 						struckAt = event.position;
+						const heat = heatOf(event.speed * 3.6);
+						const onFire = !attract && fire === event.side;
+						ball.style(heat, onFire);
 						if (event.revised) break;
 						const smash = event.stroke === "smash";
 						players.swing(event.side, event.stroke, event.power);
-						effects.hit(event.position, event.power, event.side, smash);
+						effects.hit(
+							event.position,
+							event.power,
+							event.side,
+							smash,
+							heat,
+							onFire,
+						);
 						ball.squash(0.5 + event.power * 0.4);
 						rally += 1;
-						if (!attract && (smash || event.power > 0.85)) {
-							world.shake(smash ? 0.9 : 0.35);
-							world.punch(smash ? 1 : 0.5);
+						const power = event.power >= POWER_SHOT || heat >= 3;
+						if (!attract && (smash || power)) {
+							world.shake(smash ? 0.9 : 0.45);
+							world.punch(smash ? 1 : 0.7);
+							world.flash(onFire ? "#ff5a1f" : "#ff3d8b", smash ? 0.4 : 0.28);
 						}
 						break;
 					}
+					case "fault":
+						break;
 					case "whiff":
 						players.swing(event.side, event.stroke, 0.7);
 						break;
@@ -136,10 +187,19 @@ export function createRenderer(
 			court.setSplit(shot === "split");
 
 			const flashes = Math.min(1, 0.08 + rally * 0.05 + excite * 0.8);
-			stadium.update(dt, excite, attract ? 1 : 0, flashes);
+			stadium.update(
+				dt,
+				excite,
+				attract ? 1 : 0,
+				flashes,
+				Math.min(1, rally / 15),
+			);
 
 			const match = !attract;
 			scoreUI.setVisible(match);
+			hud.setVisible(match);
+			hud.update(performance.now());
+			popups.update(dt);
 			scoreUI.setSplit(shot === "split");
 			if (match) scoreUI.update(current.score);
 

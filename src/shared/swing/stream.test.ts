@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { MAX_SWING_LAG_MS, type Swing } from "../protocol.ts";
-import { rotMagnitude } from "./detector.ts";
+import { POWER_SHOT, rotMagnitude } from "./detector.ts";
 import { createSwingStream, LOBE_FLOOR_DEG_S } from "./stream.ts";
 import {
 	isTrace,
@@ -290,5 +290,17 @@ describe("createSwingStream", () => {
 		expect(stream.push(at(16, 900))).toBeNull();
 		// Stalled, then resumes lower: that is NOT the old lobe's decay.
 		expect(stream.push(at(16 + MAX_GAP_MS + 50, 500))).toBeNull();
+	});
+
+	// The fast, flat power shot should come up every so often in real play,
+	// not once a session and not every rally. Measured 2026-09-27: 7% of
+	// fixture swing peaks at the old 1400 deg/s ceiling.
+	it("reads between one swing in ten and one in five as a power shot", () => {
+		const powers = swingTraces.flatMap((name) =>
+			replay(load(name).samples).map((e) => e.swing.power),
+		);
+		const share = powers.filter((p) => p >= POWER_SHOT).length / powers.length;
+		expect(share).toBeGreaterThanOrEqual(0.1);
+		expect(share).toBeLessThanOrEqual(0.2);
 	});
 });

@@ -18,6 +18,7 @@ import { icon } from "../ui/icons.ts";
 const SIDE_LABEL: Readonly<Record<Side, string>> = { near: "Near", far: "Far" };
 
 interface Row {
+	readonly root: HTMLDivElement;
 	readonly games: HTMLSpanElement;
 	readonly points: HTMLSpanElement;
 	readonly serve: HTMLSpanElement;
@@ -31,13 +32,13 @@ function buildRow(side: Side): { root: HTMLDivElement; row: Row } {
 		"div",
 		"bug-row",
 		el("span", "bug-bar"),
-		el("span", "bug-name", SIDE_LABEL[side]),
+		el("span", "bug-name", SIDE_LABEL[side], icon("fire", "bug-fire")),
 		serve,
 		games,
 		points,
 	);
 	root.dataset.side = side;
-	return { root, row: { games, points, serve } };
+	return { root, row: { root, games, points, serve } };
 }
 
 /** A number rolling up into place, the way a broadcast graphic changes. */
@@ -65,6 +66,8 @@ export interface ScoreUI {
 	/** A brief line at the bottom of the screen — what the camera just
 	 * changed to, and nothing weightier. */
 	note(text: string): void;
+	/** The side on a streak (`arcade.ts`): their row burns. */
+	setFire(side: Side | null): void;
 }
 
 /**
@@ -130,8 +133,17 @@ export function createScoreUI(root: HTMLElement): ScoreUI {
 	let noteTimer = 0;
 	let visible = false;
 	let split = false;
+	let fire: Side | null = null;
 
 	return {
+		setFire(side) {
+			if (side === fire) return;
+			fire = side;
+			for (const s of ["near", "far"] as const) {
+				rows[s].root.classList.toggle("fire", s === side);
+			}
+		},
+
 		note(text) {
 			note.textContent = text;
 			note.classList.add("on");
