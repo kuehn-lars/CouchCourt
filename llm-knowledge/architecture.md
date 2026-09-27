@@ -276,7 +276,9 @@ new controller page was screenshotted at phone size.
 **Played on real phones, 2026-09-24:** the user played it end to end on an
 iPhone 14 Pro and an iPhone 16e, and it worked on both. The host has been read
 back on a real Apple M3 GPU, holding 60fps in the lobby
-([[msaa-target-is-discarded-after-resolve]]).
+([[msaa-target-is-discarded-after-resolve]]). **Played again on a phone,
+2026-09-27**, with the arcade layer ([[0022-arcade-layer]]): the user reports
+everything works and it plays well.
 
 What that report does not include is any measurement. How often a swing is
 read as the wrong stroke, the latency a player perceives, and the balance

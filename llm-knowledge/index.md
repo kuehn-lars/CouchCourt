@@ -134,8 +134,8 @@ Things that are true today and that a session should not be surprised by.
   ([[0018-stylised-stadium-renderer]]). 60fps (p95 16.7ms) on an M3 at 2880px
   wide, after the MSAA fix ([[msaa-target-is-discarded-after-resolve]]).
   rAF caps at 60, so the headroom is unknown. A match and the split screen
-  are unmeasured on a real GPU. Likewise the
-  phone's racket canvas has never run on a phone.
+  are unmeasured on a real GPU. The phone's racket canvas has run on real
+  phones (2026-09-24, 2026-09-27); its frame rate there is unmeasured.
 
 - **Stroke classification is measured on multi-rep captures only**, and the
   overhead rule rests on eight serve swings — no recorded smash exists. The
@@ -167,10 +167,11 @@ Things that are true today and that a session should not be surprised by.
 - **`Swing.spin`'s rotation axis is still a design decision, not a
   measurement** ([[2026-09-20-spin-from-wrist-roll]]). Unchanged by the
   2026-09-21 work, which only touched the direction axis.
-- **The arcade layer has not been heard or felt** ([[0022-arcade-layer]]).
-  The audio was only heard by accident (the crowd bed was static; fixed); the swing cooldown (600ms group, 1.2s)
-  and the power ceiling (1250°/s) are cut from fixtures, not from a person
-  playing; the solo balance was not re-run after the ceiling moved.
+- **The arcade layer is played, not measured** ([[0022-arcade-layer]]). The
+  user played it on a phone on 2026-09-27 and reports it works and plays
+  well. The swing cooldown (600ms group, 1.2s) and the power ceiling
+  (1250°/s) are still cut from fixtures, not counted from a person playing,
+  and the solo balance was not re-run after the ceiling moved.
 - **Two perfect bots rally forever** ([[modules/shared-sim]]). Solo mode uses
   skill 0.7, which beats a novice and loses to a decent player; no
   rally-length cap exists.

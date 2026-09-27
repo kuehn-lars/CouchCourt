@@ -597,3 +597,11 @@ Then every committed vault file (67) was read for sensitive data: none. The
 real LAN address replaced on 2026-09-25 is still in git history, as that entry
 says. Stale claims that the phone "decides nothing" from the score line were
 amended in [[wire-protocol]] and [[modules/controller]].
+
+## [2026-09-27] verify | The arcade build, played on a phone
+
+Reported by the user: the arcade build played on a real phone, everything
+works and it plays well. This closes the "not on a phone" items in
+[[0022-arcade-layer]], [[architecture]], [[modules/controller]] and the
+index's known gaps. Still not measured: the cooldown and power ceiling
+against a person's swings, and the solo balance after the ceiling moved.

@@ -112,14 +112,16 @@ stroke, low-passed and wobbled, and falls silent between points.
 - **DOM popups.** Crisper text, but a split screen needs each one projected
   into two viewports.
 
-## Not verified
+## Verified, and what is still not
 
-- **Barely heard.** The user heard the first version's crowd bed as static
-  (fixed, see 8). Nothing else has been listened to deliberately.
-- **The cooldown and the power ceiling have not met a person.** Both are cut
-  from fixtures recorded faster than play.
-- **The phone's recharge** was drawn in headless Chrome at 390x844, not seen
-  on a phone.
-- Watched in headless Chrome on the Metal GPU with a scripted phone: popups,
-  callouts, the rally counter, the streak flame, the lobby motion check. No
-  console errors.
+- **Played on a real phone, 2026-09-27** — reported by the user: everything
+  works and it plays well. That covers the cooldown and the power ceiling
+  meeting a person, and the phone's recharge drawing.
+- Before that, watched in headless Chrome on the Metal GPU with a scripted
+  phone: popups, callouts, the rally counter, the streak flame, the lobby
+  motion check. No console errors.
+- **Still not measured.** The cooldown (600ms group, 1.2s) and the power
+  ceiling (1250°/s) feel right but are cut from fixtures; how often a real
+  player's swing is refused, or is a power shot, has not been counted. The
+  solo balance ([[2026-09-22-stroke-direction-balance]]) was not re-run
+  after the ceiling moved.

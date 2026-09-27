@@ -234,7 +234,7 @@ readout, kept in `localStorage` through `shared/prefs.ts`.
 
 Seen in headless Chrome at 390x844, driven by a fake host over the real relay
 (every phase and feedback kind) and by synthetic `devicemotion` through the
-real detector. Not on a phone.
+real detector. Since played on real phones (2026-09-24, 2026-09-27).
 
 ## What is and is not verified
 
@@ -248,11 +248,12 @@ screen (`requestMotionPermission` returns `"unsupported"` there, which is the
 path a non-iOS browser takes), it opens a socket, is assigned a side, sends
 `ready`, and renders "Far side / Ready / Waiting for the host."
 
-**No session has opened this page on a phone.** Specifically unverified:
+**Played on real phones, reported by the user:** end to end on an iPhone 14
+Pro and an iPhone 16e on 2026-09-24, and the arcade build (cooldown,
+recharge, every-phase swings) on 2026-09-27, working and playing well. So
+`main.ts`'s wiring works against a real `devicemotion` stream and a real
+WebSocket round trip. Not specifically reported on, and not measured:
 
-- Whether `main.ts`'s wiring actually works against a real `devicemotion`
-  stream and a real WebSocket round trip — everything below `main.ts` is
-  tested in isolation, but the integration itself has not run.
 - Whether the wake lock actually keeps the screen on through a real match on
   real hardware — `record.ts` proved the underlying API works for a 30s
   capture; a whole match is a longer, unverified claim.
@@ -263,8 +264,8 @@ path a non-iOS browser takes), it opens a socket, is assigned a side, sends
   the ball — [[2026-09-20-spin-from-wrist-roll]] is explicit that no
   committed fixture can confirm it.
 
-Closing this gap needs a phone in hand: `npm start`, scan the QR code on the
-host's lobby screen, tap Enable, swing. Not done in this session — [[0009-streaming-swing-detection]]'s
+Checking these needs a phone in hand and something to count with.
+[[0009-streaming-swing-detection]]'s
 "What would overturn this" also still needs six single-swing fixtures
 recorded with rally-like spacing, which the same phone session should collect.
 
