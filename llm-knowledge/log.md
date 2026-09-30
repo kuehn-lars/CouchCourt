@@ -641,3 +641,13 @@ moved into `sim/shot.ts` (the sim no longer imports from `swing/`);
 sidestep reads `lastX` instead of a duplicate `simX`; the renderer's stadium
 flashes read `MatchState.rally` instead of a third stroke count. Amended
 [[modules/shared-sim]] and [[modules/shared-swing]] as well.
+
+## [2026-10-01] verify | Earned power shots, played on a phone
+
+Reported by the user: everything on the power-shot branch (PR #18) was played
+and works great — earned power shots, the take-back cooldown fix, the
+backhand gain, the commoner smash and the avatar's sidestep. This closes the
+"unseen" items in [[0023-power-shots-are-earned]],
+[[2026-09-27-power-backhand-overhead]] and the index's known gaps. Still not
+measured: how often a real player earns a power shot or a smash chance; the
+tuning is against a simulated human.

@@ -174,8 +174,9 @@ Things that are true today and that a session should not be surprised by.
   well. The swing cooldown (600ms group, 1.2s) and the power ceiling
   (1250°/s) are still cut from fixtures, not counted from a person playing.
 - **Earned power shots, the backhand gain and the smash height are tuned
-  against a simulated human** ([[0023-power-shots-are-earned]]), and the
-  avatar's sidestep to the ball has never been watched in a browser. A very
+  against a simulated human** ([[0023-power-shots-are-earned]]). The user
+  played them on a phone on 2026-10-01 and reports they work great, the
+  avatar's sidestep included; nothing was counted. A very
   precise player (σ 30ms) still earns a power shot on about half their hard
   swings; `PERFECT_TIMING` is the knob.
 - **Two perfect bots rally forever** ([[modules/shared-sim]]). Solo mode uses
