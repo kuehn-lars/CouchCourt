@@ -73,7 +73,7 @@ enable tap → requestMotionPermission()          motion.ts
                     stream.push(sample)           shared/swing/stream.ts
                          │ Swing | null        (stream.level → the live glow)
                          ▼
-                    cooldown.admit(at)           shared/swing/gate.ts, only while
+                    cooldown.admit(at, power)    shared/swing/gate.ts, only while
                          │ refused → racket.refused()   score.ball === "play"
                          ▼
                     showSwing(power)             the ring: last swing's power
@@ -120,6 +120,8 @@ again" on the result screen. Before that the phone filtered on `playing`.
 and only while a point is in play — a serve's toss and hit are two swings
 close together. It is timed on the stream's clock, the same one `Swing.at` is
 in, and `racket.recharge` draws it from the same numbers that enforce it.
+It restarts from a harder peak past the group, because a take-back can come
+a second before its swing ([[0023-power-shots-are-earned]]).
 Numbers: [[2026-09-27-cooldown-and-power-share]].
 
 ## What actually works today: the recorder
@@ -210,8 +212,10 @@ on `TOSS_APEX`. The host's `ball: "toss"` is the fallback.
 Kept from before, unchanged: one swing arrives as several peaks, so the
 strongest in 400ms is the one shown (and the one the host plays); the flash
 wash. Since 2026-09-27 the frame also shows the swing cooldown (dark, refilling
-from the throat, red on a refused swing, a white flash when ready) and a power
-shot stamps POWER SHOT in pink ([[0022-arcade-layer]]). **There is no haptic feedback** —
+from the throat, red on a refused swing, a white flash when ready) and a hard
+swing stamps POWER in pink ([[0022-arcade-layer]]). It never says POWER SHOT:
+whether one was earned is the sim's call and the phone is not told
+([[0023-power-shots-are-earned]]). **There is no haptic feedback** —
 removed 2026-09-25, see [[ios-web-haptics]]. The stroke readout (a setting) now reads along the
 throat.
 

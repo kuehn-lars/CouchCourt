@@ -20,7 +20,7 @@
 
 import qrcode from "qrcode-generator";
 import type { LobbyPlayer, MatchPhase, Side } from "../../shared/protocol.ts";
-import { POWER_SHOT } from "../../shared/swing/detector.ts";
+import { POWER_SHOT } from "../../shared/sim/shot.ts";
 import type { Bests, MatchStats } from "../arcade.ts";
 import { el, play, setText } from "./dom.ts";
 import { ICON, type IconName, icon } from "./icons.ts";
@@ -147,7 +147,7 @@ function buildSeat(side: Side): Seat {
 
 /** What a lobby swing reads as, in the words the match will use. */
 function swingWords(power: number): string {
-	if (power >= POWER_SHOT) return `Power shot! ${Math.round(power * 100)}%`;
+	if (power >= POWER_SHOT) return `Full power! ${Math.round(power * 100)}%`;
 	if (power >= 0.5) return `Good swing, ${Math.round(power * 100)}%`;
 	return `Swing read, ${Math.round(power * 100)}%. Harder!`;
 }

@@ -24,6 +24,7 @@ const stroke = (overrides: Partial<Stroke>): Stroke => ({
 	at: 1,
 	from: { x: 1, y: 1, z: 11 },
 	timing: 0,
+	powerShot: false,
 	...overrides,
 });
 
@@ -58,7 +59,7 @@ describe("detectEvents", () => {
 		const before = state({ phase: "rally" });
 		const after = state({
 			phase: "rally",
-			stroke: stroke({ kind: "backhand", timing: -0.4 }),
+			stroke: stroke({ kind: "backhand", timing: -0.4, powerShot: true }),
 			ball: { p: { x: 1, y: 1, z: 10 }, v: { x: 3, y: 4, z: 0 } },
 		});
 		const [hit] = detectEvents(before, after);
@@ -68,6 +69,7 @@ describe("detectEvents", () => {
 			position: { x: 1, y: 1, z: 11 },
 			stroke: "backhand",
 			power: 0.6,
+			powerShot: true,
 			revised: false,
 			speed: 5,
 			timing: -0.4,

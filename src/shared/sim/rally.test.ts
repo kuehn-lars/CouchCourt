@@ -9,7 +9,13 @@ import {
 	tick,
 } from "./rally.ts";
 import { TOSS_APEX, TOSS_MIN_HIT } from "./serve.ts";
-import { TIMING_EARLY, TIMING_IDEAL, TIMING_LATE } from "./shot.ts";
+import {
+	POWER_CAP,
+	POWER_RALLY,
+	TIMING_EARLY,
+	TIMING_IDEAL,
+	TIMING_LATE,
+} from "./shot.ts";
 import type { Ball } from "./state.ts";
 
 const DT = 1 / 120;
@@ -285,6 +291,26 @@ describe("the stance is where the ball is", () => {
 	});
 });
 
+/** A high ball dropping in front of the near player, as a smash chance. */
+function highBall(): MatchState {
+	return until(
+		tick(
+			state({
+				phase: "rally",
+				toHit: "near",
+				ball: { p: { x: 0, y: 4, z: -1 }, v: { x: 0, y: 1, z: 7 } },
+				players: {
+					near: { side: "near", x: 0, z: 6 },
+					far: { side: "far", x: 0, z: -BASELINE_Z },
+				},
+			}),
+			[],
+			DT,
+		),
+		(x) => x.contact !== null,
+	);
+}
+
 describe("the stroke you play is where the ball goes", () => {
 	/** Swings `kind` on time at the contact `s` is waiting on, and flies the
 	 * shot to its bounce. */
@@ -315,26 +341,6 @@ describe("the stroke you play is where the ball goes", () => {
 		expect(hit.toHit).toBe("near");
 		expect(hit.whiffs.near).toBe(on.whiffs.near + 1);
 	});
-
-	/** A high ball dropping in front of the near player, as a smash chance. */
-	function highBall(): MatchState {
-		return until(
-			tick(
-				state({
-					phase: "rally",
-					toHit: "near",
-					ball: { p: { x: 0, y: 4, z: -1 }, v: { x: 0, y: 1, z: 7 } },
-					players: {
-						near: { side: "near", x: 0, z: 6 },
-						far: { side: "far", x: 0, z: -BASELINE_Z },
-					},
-				}),
-				[],
-				DT,
-			),
-			(x) => x.contact !== null,
-		);
-	}
 
 	it("smashes a high ball taken out of the air", () => {
 		const s = highBall();
@@ -580,5 +586,61 @@ describe("a full set between two bots, replayed", () => {
 		expect(JSON.stringify(playSet().final)).toBe(
 			JSON.stringify(playSet().final),
 		);
+	});
+});
+
+describe("power shots are earned", () => {
+	/** `near` returns the serve (or the ball in `from`) with a `kind` of
+	 * `power`, swung `offset` seconds off the ideal moment — back-dated by
+	 * `lag`, so early and late are exact. */
+	function returnAt(
+		offset: number,
+		power: number,
+		from = awaitingReturn(),
+		kind: Swing["kind"] = "forehand",
+	) {
+		const c = from.contact;
+		if (!c) throw new Error("no contact");
+		const at = c.at + TIMING_IDEAL + offset;
+		const now = until(from, (x) => x.time >= Math.max(at, c.at) + DT);
+		const lag = (now.time - at) * 1000;
+		return tick(now, [input("near", now, swing(power, lag, 0, kind))], DT);
+	}
+	const speed = (s: MatchState) =>
+		Math.hypot(s.ball.v.x, s.ball.v.y, s.ball.v.z);
+
+	it("counts the strokes of a point, and starts again at the next", () => {
+		const served = serve(createMatch("far"));
+		expect(served.rally).toBe(1);
+		const returned = returnAt(0, 0.6);
+		expect(returned.rally).toBe(2);
+		const next = until(returned, (x) => x.phase === "point-over");
+		expect(tick(next, [], DT).rally).toBe(0);
+	});
+
+	it("plays a hard swing that has not earned it as a capped one", () => {
+		const hard = returnAt(-0.09, 1);
+		expect(hard.stroke?.powerShot).toBe(false);
+		const capped = returnAt(-0.09, POWER_CAP);
+		expect(speed(hard)).toBeCloseTo(speed(capped), 6);
+	});
+
+	it("plays an overhead that has not earned it as a capped one too", () => {
+		const overhead = (power: number) =>
+			returnAt(-0.09, power, highBall(), "overhead");
+		expect(overhead(1).stroke?.kind).toBe("overhead");
+		expect(overhead(1).stroke?.powerShot).toBe(false);
+		expect(speed(overhead(1))).toBeCloseTo(speed(overhead(POWER_CAP)), 6);
+	});
+
+	it("gives a perfectly timed hard swing its full power", () => {
+		const perfect = returnAt(0, 1);
+		expect(perfect.stroke?.powerShot).toBe(true);
+		expect(speed(perfect)).toBeGreaterThan(speed(returnAt(0, POWER_CAP)) + 3);
+	});
+
+	it("gives every hard swing its full power once the rally is long", () => {
+		const long = { ...awaitingReturn(), rally: POWER_RALLY };
+		expect(returnAt(-0.09, 1, long).stroke?.powerShot).toBe(true);
 	});
 });

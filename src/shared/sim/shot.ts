@@ -21,7 +21,9 @@
  * (`llm-knowledge/decisions/0016-stroke-decides-direction.md`).
  *
  * Power is depth and pace: a clean ball lands in the court rather than on
- * the baseline, and a harder one goes deeper and faster.
+ * the baseline, and a harder one goes deeper and faster. **Full power is
+ * earned** (`isPowerShot`): a hard swing that is not perfectly timed, early
+ * in a point, is played at `POWER_CAP` — a ball the other player can reach.
  *
  * `src/shared/**` is compiled under both a DOM-only and a Node-only tsconfig,
  * so this file names no DOM type and no Node global — see
@@ -52,6 +54,41 @@ export const TIMING_LATE = 0.2;
  * middle.
  */
 export const TIMING_IDEAL = 0.04;
+
+/** `power` — the phone's reading, 0..1 (`swing/detector.ts`) — from which a
+ * swing is hard enough to be a power shot. Whether it is one is
+ * `isPowerShot`'s call. It is paired with the detector's `POWER_CEIL_DEG_S`:
+ * `swing/stream.test.ts` holds the share of real swings reaching it at
+ * 10-20%. */
+export const POWER_SHOT = 0.85;
+
+/** `|u|` inside which a hit is perfect: the host grades it PERFECT, and a
+ * hard swing timed this well is a power shot. ±24ms early, ±16ms late: a
+ * decent player (σ 60ms) gets about one hard swing in four there. */
+export const PERFECT_TIMING = 0.08;
+
+/** Strokes a point has lasted, the serve included, after which every hard
+ * swing is a power shot: a long rally is ended by whoever swings hardest.
+ * The host's "long rally" too (`host/arcade.ts`). */
+export const POWER_RALLY = 8;
+
+/** The most power a hard swing puts on the ball when it is not a power
+ * shot. A flat full-power ball aimed away from the bot beat it one shot in
+ * four and ended points in five strokes
+ * (`llm-knowledge/experiments/2026-09-27-power-backhand-overhead.md`). */
+export const POWER_CAP = 0.7;
+
+/**
+ * Whether a swing of `power`, timed `u` (see `timingOf`), as the `stroke`th
+ * stroke of the point, is a power shot: hard, and either perfectly timed or
+ * deep in a long rally.
+ */
+export function isPowerShot(power: number, u: number, stroke: number): boolean {
+	return (
+		power >= POWER_SHOT &&
+		(Math.abs(u) <= PERFECT_TIMING || stroke > POWER_RALLY)
+	);
+}
 
 /** `|u|` inside which every clean groundstroke lands in — the band a player
  * can swing in without losing the point to their own timing. */
@@ -220,7 +257,10 @@ const quality = (u: number): number =>
 /**
  * A groundstroke or volley struck at `from` by `side` with `stroke`, timed
  * `u` (see `timingOf`), at `power` 0..1, flying in `env` (the spin of this
- * shot).
+ * shot). A forehand goes toward `screenLeft` (`screenLeftOf`). At most
+ * `cap` of the power goes into pace and depth; a late swing still sails as
+ * long as its full power sends it — the cap takes the reward of an unearned
+ * hard swing, not its risk.
  */
 export function groundstroke(
 	from: Vec3,
@@ -229,19 +269,28 @@ export function groundstroke(
 	u: number,
 	power: number,
 	env: BallEnv,
-	screenLeft = SCREEN_LEFT,
+	{
+		screenLeft = SCREEN_LEFT,
+		cap = 1,
+	}: { screenLeft?: number; cap?: number } = {},
 ): Vec3 {
 	const p = clamp(power, 0, 1);
+	const pace = Math.min(p, cap);
 	const t = clamp(u, -1, 1);
 	const early = Math.max(0, -t);
 	const late = Math.max(0, t);
 	const wide =
 		AIM_GOOD + early * (AIM_OUT - AIM_GOOD) - late * (AIM_GOOD - AIM_CENTER);
+	// Late drifts from where the (capped) clean ball lands to where the full
+	// swing sends a late one: the same risk whether or not it was capped.
+	const depth = lerp(
+		lerp(DEPTH_SOFT, DEPTH_HARD, pace),
+		lerp(DEPTH_SOFT, DEPTH_HARD, p) + lerp(LONG_SOFT, LONG_HARD, p),
+		late,
+	);
 	const target = {
 		x: (stroke === "forehand" ? screenLeft : -screenLeft) * wide,
-		z:
-			forwardOf(side) *
-			(lerp(DEPTH_SOFT, DEPTH_HARD, p) + late * lerp(LONG_SOFT, LONG_HARD, p)),
+		z: forwardOf(side) * depth,
 	};
 	const { dir, distance } = toward(from, target);
 
@@ -259,7 +308,7 @@ export function groundstroke(
 	};
 
 	const start =
-		lerp(ANGLE_SOFT, ANGLE_HARD, p) +
+		lerp(ANGLE_SOFT, ANGLE_HARD, pace) +
 		Math.abs(t) * MISTIME_LIFT +
 		late * LATE_POP;
 	const direct = launch(start);

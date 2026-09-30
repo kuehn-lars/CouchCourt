@@ -10,7 +10,8 @@
  * forehand to screen-left, a backhand to screen-right — and smashes a high ball
  * out of the air. Skill is how often it mistimes a shot into an error, and
  * how far its timing wanders on the rest: a little and the ball drifts off
- * the line toward the middle.
+ * the line toward the middle. Once a rally is long enough to unlock the
+ * power shot (`POWER_RALLY`), it swings hard.
  *
  * `src/shared/**` is compiled under both a DOM-only and a Node-only tsconfig,
  * so this file names no DOM type and no Node global — see
@@ -21,7 +22,7 @@ import type { Side, Swing, SwingKind } from "../protocol.ts";
 import { SMASH_HEIGHT } from "./players.ts";
 import type { MatchState } from "./rally.ts";
 import { TOSS_APEX } from "./serve.ts";
-import { screenLeftOf, TIMING_IDEAL } from "./shot.ts";
+import { POWER_RALLY, POWER_SHOT, screenLeftOf, TIMING_IDEAL } from "./shot.ts";
 
 /** Seconds the bot waits before tossing. A bot that serves the instant the
  * point starts reads as a glitch, not as an opponent. */
@@ -142,6 +143,8 @@ export function createBot(side: Side, skill = 0.75): Bot {
 						0.15,
 						1,
 					);
+					// A long rally has unlocked the power shot: go for it.
+					if (state.rally >= POWER_RALLY) power = Math.max(power, POWER_SHOT);
 					// Commit to an error once, as a player does. The contact
 					// itself is tracked as it firms up — the ball is in plain
 					// sight — but how well it is hit is decided now.

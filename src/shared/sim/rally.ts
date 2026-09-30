@@ -69,6 +69,8 @@ import {
 } from "./serve.ts";
 import {
 	groundstroke,
+	isPowerShot,
+	POWER_CAP,
 	screenLeftOf,
 	serveShot,
 	smash,
@@ -111,6 +113,9 @@ export interface Stroke {
 	readonly from: Vec3;
 	/** -1 early … +1 late. For a serve, against the top of the toss. */
 	readonly timing: number;
+	/** Struck with full power (`isPowerShot`); otherwise a hard swing was
+	 * played at `POWER_CAP`. `power` stays what the phone read. */
+	readonly powerShot: boolean;
 }
 
 export interface MatchState {
@@ -122,6 +127,8 @@ export interface MatchState {
 	readonly toHit: Side;
 	/** Bounces since the last hit. Two loses the point for whoever is `toHit`. */
 	readonly bounces: number;
+	/** Strokes played in this point, the serve included. */
+	readonly rally: number;
 	readonly serveNumber: 1 | 2;
 	/** Spin of the shot in flight, -1 (slice) to +1 (topspin). */
 	readonly spin: number;
@@ -203,6 +210,7 @@ function setUpServe(state: MatchState, serveNumber: 1 | 2): MatchState {
 		phase: "waiting-serve",
 		toHit: server,
 		bounces: 0,
+		rally: 0,
 		serveNumber,
 		spin: 0,
 		stroke: null,
@@ -225,6 +233,7 @@ export function createMatch(server: Side, split = false): MatchState {
 		score: initialScore(server),
 		toHit: server,
 		bounces: 0,
+		rally: 0,
 		serveNumber: 1,
 		spin: 0,
 		stroke: null,
@@ -358,27 +367,25 @@ function strokeOf(
 	return swing.kind;
 }
 
-/** The ball off the racket for a rally stroke. */
+/** The ball off the racket for a rally stroke. A hard swing that has not
+ * earned a power shot puts only `POWER_CAP` into pace (`isPowerShot`). */
 function shoot(
 	from: Vec3,
 	side: Side,
 	kind: Exclude<SwingKind, "serve">,
 	timing: number,
 	power: number,
+	powerShot: boolean,
 	env: BallEnv,
 	split: boolean,
 ): Vec3 {
+	const cap = powerShot ? 1 : POWER_CAP;
 	return kind === "overhead"
-		? smash(from, side, timing, power, env)
-		: groundstroke(
-				from,
-				side,
-				kind,
-				timing,
-				power,
-				env,
-				screenLeftOf(side, split),
-			);
+		? smash(from, side, timing, Math.min(power, cap), env)
+		: groundstroke(from, side, kind, timing, power, env, {
+				screenLeft: screenLeftOf(side, split),
+				cap,
+			});
 }
 
 function strike(
@@ -397,12 +404,15 @@ function strike(
 	}
 	const timing = timingOf(at - c.at) ?? 0;
 	const spin = swing.spin ?? 0;
+	const rally = state.rally + 1;
+	const powerShot = isPowerShot(swing.power, timing, rally);
 	const v = shoot(
 		c.ball,
 		c.side,
 		kind,
 		timing,
 		swing.power,
+		powerShot,
 		envForSpin(spin),
 		state.split,
 	);
@@ -412,6 +422,7 @@ function strike(
 		ball: { p: c.ball, v },
 		toHit: other(c.side),
 		bounces: 0,
+		rally,
 		spin,
 		stroke: {
 			side: c.side,
@@ -421,6 +432,7 @@ function strike(
 			at: c.at,
 			from: c.ball,
 			timing,
+			powerShot,
 		},
 		contact: null,
 		armed: null,
@@ -455,6 +467,7 @@ function serveSwing(state: MatchState, swing: Swing, at: number): MatchState {
 		ball: { p: from, v },
 		toHit: other(server),
 		bounces: 0,
+		rally: 1,
 		spin,
 		toss: null,
 		stroke: {
@@ -465,6 +478,7 @@ function serveSwing(state: MatchState, swing: Swing, at: number): MatchState {
 			at: state.toss + since,
 			from,
 			timing,
+			powerShot: false,
 		},
 	};
 	return fastForward(served, state.time - (state.toss + since));
@@ -499,6 +513,7 @@ function revise(
 	let v: Vec3;
 	let timing = st.timing;
 	let kind = st.kind;
+	let powerShot = false;
 	if (st.kind === "serve") {
 		v = serveShot(
 			st.from,
@@ -521,13 +536,23 @@ function revise(
 		if (played === null) return state;
 		kind = played;
 		timing = t;
-		v = shoot(st.from, side, kind, timing, swing.power, env, state.split);
+		powerShot = isPowerShot(swing.power, timing, state.rally);
+		v = shoot(
+			st.from,
+			side,
+			kind,
+			timing,
+			swing.power,
+			powerShot,
+			env,
+			state.split,
+		);
 	}
 	const redone: MatchState = {
 		...state,
 		ball: { p: st.from, v },
 		spin,
-		stroke: { ...st, kind, power: swing.power, timing },
+		stroke: { ...st, kind, power: swing.power, timing, powerShot },
 	};
 	return fastForward(redone, state.time - st.at);
 }

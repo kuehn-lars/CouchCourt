@@ -63,7 +63,8 @@ Choices we made and will not casually revisit, with the alternatives rejected.
 | [[0019-split-screen]] | Two people, two halves, each from behind their own player — and why the sim needed a per-side "screen-left" |
 | [[0020-the-phone-is-the-string-bed]] | The match screen is a racket: stencil on the strings, ripples, a charging frame, a ball you toss. The score line on the wire |
 | [[0021-couchcourt-name-and-mark]] | Renamed to CouchCourt; the "CC" ball-seam mark and the three marks rejected; favicon is now a file; where `PRODUCT.md`'s binding parts went |
-| [[0022-arcade-layer]] | **The arcade layer.** Speed pops, timing grades, callouts, rally ladder, streaks, session records, play-again-by-swing; the phone's swing cooldown; power ceiling 1250; swings sent in every phase. Amends 0017 and 0020 |
+| [[0022-arcade-layer]] | **The arcade layer.** Speed pops, timing grades, callouts, rally ladder, streaks, session records, play-again-by-swing; the phone's swing cooldown; power ceiling 1250; swings sent in every phase. Amends 0017 and 0020; amended by 0023 |
+| [[0023-power-shots-are-earned]] | **Power shots are earned**: a hard swing timed PERFECT or deep in a rally (POWER UP! at 8); otherwise capped pace, full risk. Also: the cooldown restarts from the real swing, backhands read as hard as forehands, the avatar steps to the ball, more smash chances |
 
 ## Platform
 
@@ -117,7 +118,8 @@ the evidence that produced them.
 | [[2026-09-22-stroke-classifier]] | Overhead from the racket position going into the swing (8/8); side from alpha + 0.4·gamma at the peak (58/60, up from a silent 54/60); what failed |
 | [[2026-09-22-stroke-direction-balance]] | Why pace was a knife-edge, the timing trade, bot skill as spread, and the shipped win rates |
 | [[2026-09-21-camera-frames-a-moving-player]] | The camera framed a court, not the players in it — and the guard passed while the legs hung off the screen |
-| [[2026-09-27-cooldown-and-power-share]] | Peaks of one swing land up to ~600ms apart; players never swing twice within 1.97s; power-shot share 7% → 15% at a 1250 ceiling; bot shot speeds (median 100 km/h) |
+| [[2026-09-27-cooldown-and-power-share]] | Peaks of one swing land up to ~600ms apart; players never swing twice within 1.97s; power-shot share 7% → 15% at a 1250 ceiling; bot shot speeds (median 100 km/h). Its group rule missed take-backs — see the next row |
+| [[2026-09-27-power-backhand-overhead]] | **Why power shots won every point** (23% of hard shots winners), a harness bug, why capping power made hard swings safer; five real swings refused behind their take-back; backhands read 0.15 weaker; half of strokes from the wrong stance; smash chances 5.5% → 8.5% |
 | [[2026-09-20-serve-reachability]] | **Superseded.** The original, wrong claim — kept so nobody re-derives it |
 
 ## Sessions
@@ -170,10 +172,15 @@ Things that are true today and that a session should not be surprised by.
 - **The arcade layer is played, not measured** ([[0022-arcade-layer]]). The
   user played it on a phone on 2026-09-27 and reports it works and plays
   well. The swing cooldown (600ms group, 1.2s) and the power ceiling
-  (1250°/s) are still cut from fixtures, not counted from a person playing,
-  and the solo balance was not re-run after the ceiling moved.
+  (1250°/s) are still cut from fixtures, not counted from a person playing.
+- **Earned power shots, the backhand gain and the smash height are tuned
+  against a simulated human** ([[0023-power-shots-are-earned]]). The user
+  played them on a phone on 2026-10-01 and reports they work great, the
+  avatar's sidestep included; nothing was counted. A very
+  precise player (σ 30ms) still earns a power shot on about half their hard
+  swings; `PERFECT_TIMING` is the knob.
 - **Two perfect bots rally forever** ([[modules/shared-sim]]). Solo mode uses
-  skill 0.7, which beats a novice and loses to a decent player; no
+  skill 0.65, which beats a novice and loses to a decent player; no
   rally-length cap exists.
 - **How long iOS waits before suspending a backgrounded tab is unmeasured**,
   which is why the relay's 15s ping interval is a guess rather than a tuned

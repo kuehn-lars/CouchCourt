@@ -1,6 +1,6 @@
 ---
 title: The stroke you swing decides where the ball goes; timing decides how well
-updated: 2026-09-24
+updated: 2026-09-27
 tags: [decision, sim, input, swing, core, feel]
 status: current
 code:
@@ -21,6 +21,9 @@ backhand and overhand should decide where the ball goes, not the physics* —
 more playable and more fun even if less realistic — with the overhand only
 working on a ball in the air, balls landing in the court rather than on the
 baseline, and more depth. Explicit permission to break earlier decisions.
+
+**Amended by [[0023-power-shots-are-earned]]:** the smash chance in §3 is a
+ball coming down through 1.9m (was 2.3) with 0.3s slack (was 0.4).
 
 **Amended by [[0019-split-screen]]:** "screen space" below means the screen
 that player is watching; on a split screen the far player's screen-left is

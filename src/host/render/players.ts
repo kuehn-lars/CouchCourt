@@ -11,7 +11,11 @@
  *    trophy position.
  * 4. **The stroke**, or after a point a fist pump or a hang of the head.
  *    Strokes join just before their contact frame (`strokeEntry`), because a
- *    stroke is only known once the ball has been struck.
+ *    stroke is only known once the ball has been struck. The sim sets a
+ *    player up from where the ball is, but the swing decides the stroke, so
+ *    half of all strokes are played from the other stance: the drawn player
+ *    steps across to where that stroke is played from (`standFor`) and
+ *    drifts back. Cosmetic only — the sim's player never moves for it.
  *
  * The upper layers only take part of the legs (`mixUpper`), so a player who
  * swings on the run keeps running.
@@ -22,8 +26,8 @@
 
 import * as THREE from "three";
 import type { Side } from "../../shared/protocol.ts";
-import { PLAYER_SPEED } from "../../shared/sim/players.ts";
-import type { Player } from "../../shared/sim/state.ts";
+import { PLAYER_SPEED, standFor } from "../../shared/sim/players.ts";
+import type { Player, Vec3 } from "../../shared/sim/state.ts";
 import { type Athlete, buildAthlete, type Look } from "./athlete.ts";
 import {
 	type ActionName,
@@ -127,6 +131,10 @@ interface Rig {
 	lastZ: number;
 	seeded: boolean;
 	coil: number;
+	/** Drawn x offset from the sim's player: the step across to the ball
+	 * (`shiftTo`) while a stroke plays, easing back to 0 after it. */
+	shift: number;
+	shiftTo: number;
 	toss: number;
 	live: number;
 	swings: number;
@@ -197,8 +205,9 @@ export interface PlayersVisual {
 		dt: number,
 		cue: PlayersCue,
 	): void;
-	/** Plays `stroke` on `side`, harder for more `power`. */
-	swing(side: Side, stroke: StrokeAnim, power: number): void;
+	/** Plays `stroke` on `side`, harder for more `power`, stepping across to
+	 * the ball `at` for a groundstroke. */
+	swing(side: Side, stroke: StrokeAnim, power: number, at?: Vec3): void;
 	/** The point is over: `winner` celebrates, the other hangs their head. */
 	react(winner: Side): void;
 	/** Where each player is drawn, for the cameras. */
@@ -230,6 +239,8 @@ export function createPlayersVisual(scene: THREE.Scene): PlayersVisual {
 			lastZ: 0,
 			seeded: false,
 			coil: 0,
+			shift: 0,
+			shiftTo: 0,
 			toss: 0,
 			live: 0,
 			swings: 0,
@@ -262,6 +273,7 @@ export function createPlayersVisual(scene: THREE.Scene): PlayersVisual {
 	) {
 		const clip = CLIPS[name];
 		rig.playing = { clip, t: from * clip.duration, rate, legs };
+		rig.shiftTo = 0;
 	}
 
 	const tip = new THREE.Vector3();
@@ -313,9 +325,14 @@ export function createPlayersVisual(scene: THREE.Scene): PlayersVisual {
 		cue: PlayersCue,
 	) {
 		const athlete = rig.athlete;
-		athlete.root.position.x = x;
+		rig.shift = lerp(
+			rig.shift,
+			rig.playing ? rig.shiftTo : 0,
+			1 - Math.exp(-dt * (rig.playing ? 20 : 5)),
+		);
+		athlete.root.position.x = x + rig.shift;
 		athlete.root.position.z = z;
-		drawnAt[side].x = x;
+		drawnAt[side].x = x + rig.shift;
 		drawnAt[side].z = z;
 
 		// Running, from distance covered.
@@ -443,7 +460,7 @@ export function createPlayersVisual(scene: THREE.Scene): PlayersVisual {
 				animate(side, rigs[side], x, z, dt, cue);
 			}
 		},
-		swing(side, stroke, power) {
+		swing(side, stroke, power, at) {
 			const rig = rigs[side];
 			const vary = VARIATION[rig.swings % VARIATION.length] ?? 1;
 			rig.swings += 1;
@@ -458,6 +475,10 @@ export function createPlayersVisual(scene: THREE.Scene): PlayersVisual {
 				0.6,
 				strokeEntry(clip),
 			);
+			if (at && (stroke === "forehand" || stroke === "backhand")) {
+				// `lastX` is the sim's x, before `shift`, as last drawn.
+				rig.shiftTo = standFor(side, at, stroke).x - rig.lastX;
+			}
 		},
 		react(winner) {
 			for (const side of ["near", "far"] as const) {

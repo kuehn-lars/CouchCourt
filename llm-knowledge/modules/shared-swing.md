@@ -37,7 +37,7 @@ duration-and-merge method described below is now the batch detector's only.
 | `src/shared/swing/trace.ts` | `MotionSample`, `MotionTrace`, `isTrace`, `toSample`, `formatTrace`, `measuredHz`, `longestGapMs`, `nextTraceName`, `MAX_GAP_MS` |
 | `src/shared/swing/detector.ts` | `detectSwings` (batch), `rotMagnitude`, `swingFrom`, `TURN_AXIS`, and every tuned threshold |
 | `src/shared/swing/stream.ts` | `createSwingStream` (live peak detector), its thresholds, and `level` for the controller's meter |
-| `src/shared/swing/gate.ts` | `createSwingGate` — the swing cooldown the phone applies before sending ([[0022-arcade-layer]]). Knows nothing of the stream; fed `Swing.at` |
+| `src/shared/swing/gate.ts` | `createSwingGate` — the swing cooldown the phone applies before sending ([[0022-arcade-layer]]). Knows nothing of the stream; fed `Swing.at` and `power`, and restarts from a harder peak past the group — a take-back comes up to a second before its swing ([[0023-power-shots-are-earned]]) |
 | `tests/fixtures/motion/` | 26 committed captures, seven labels, plus their README |
 
 ## Wiring — and the seam
@@ -51,7 +51,7 @@ fixtures.test.ts          ──▶ trace.ts    isTrace, measuredHz, longestGapM
 
 controller/main.ts         ──▶ stream.ts   createSwingStream            ◀── production caller
 controller/main.ts         ──▶ gate.ts     createSwingGate (cooldown)
-host/arcade.ts, render/, lobby, controller/racket ──▶ detector.ts  POWER_SHOT
+stream.test.ts             ──▶ ../sim/shot.ts  POWER_SHOT (the 10-20% share it pins)
 detectSwings (batch)       ◀── NOTHING in production, still only its own test
 ```
 
@@ -95,11 +95,11 @@ when `kind` started deciding where the ball goes). `strokeOf(peak, gravity)`:
 overhead if a 200ms EMA of `accelerationIncludingGravity`, **frozen at the
 first sample of the lobe**, has normalised x above `OVERHEAD_TILT` (the
 racket went into the swing held up); otherwise the sign of
-`alpha + SIDE_GAMMA_WEIGHT · gamma` at the peak. The live detector no longer
-uses `swingFrom`'s `turn` sample for the side — only power, spin and `at`
-still come from `swingFrom`, so **the two detectors now disagree on `kind`
-by design**; the batch detector keeps the 2026-09-21 rule. `current` exposes
-the reading of the lobe in progress, for the controller's readout.
+`alpha + SIDE_GAMMA_WEIGHT · gamma` at the peak. Each detector decides the
+kind its own way and hands it to `swingFrom(peak, kind)`, which reads power,
+spin and `at` — so **the two detectors disagree on `kind` by design**; the
+batch detector keeps the 2026-09-21 rule. `current` exposes the reading of
+the lobe in progress, for the controller's readout.
 Measurements: [[2026-09-22-stroke-classifier]].
 
 ## How the batch detector works
@@ -122,9 +122,15 @@ What works is **duration at a moderate threshold**, then merging:
    negative → backhand. That is the phone's whole judgement.
 4. `power` = peak magnitude mapped linearly from 400–1250°/s onto 0.15–1.0,
    taken from the magnitude peak, which is a different sample again. The
-   ceiling was 1400 until 2026-09-27; it was lowered so power shots
-   (`POWER_SHOT`, 0.85) come up in 10-20% of swings, not 7%
-   ([[2026-09-27-cooldown-and-power-share]]). Both detectors share it.
+   ceiling was 1400 until 2026-09-27; it was lowered so swings hard enough
+   for a power shot (`POWER_SHOT` in `sim/shot.ts`, 0.85) come up in 10-20%
+   of swings, not 7%
+   ([[2026-09-27-cooldown-and-power-share]]). A **backhand's** magnitude is
+   scaled by `BACKHAND_GAIN` (1.15) first — it read ~0.15 weaker for the
+   same effort ([[2026-09-27-power-backhand-overhead]]). Both detectors
+   share it, and each reads it with the kind *it* decided (`swingFrom`
+   takes the kind, not a turn sample). Whether a hard swing *is* a power shot
+   is the sim's call ([[0023-power-shots-are-earned]]).
 
 **The phone does not classify serves.** It did, from `|γ| ≥ 350°/s`, until six
 30-second captures showed hard forehands reaching `|γ|` of 1063. That was a
@@ -171,11 +177,12 @@ as nothing. When in doubt, guess in the player's favour.
 - **The live detector's gravity estimate must be frozen at lobe start.**
   During the swing `accelerationIncludingGravity` is mostly the swing, and
   it is the racket's position *going in* that says overhead.
-- **Both detectors classify through `swingFrom`, and it takes TWO samples.**
-  `peak` (loudest — power, spin, `at`) and `turn` (largest `|α|` — forehand or
-  backhand). They are routinely different samples and confusing them is the
-  bug [[2026-09-21-swing-direction-classifier]] documents. The stream tracks
-  both incrementally; `detectSwings` picks both out of the episode.
+- **The batch detector reads a swing from TWO samples.** `peak` (loudest —
+  power, spin, `at`, via `swingFrom`) and `turn` (largest `|α|` — forehand or
+  backhand, via `classify`). They are routinely different samples and
+  confusing them is the bug [[2026-09-21-swing-direction-classifier]]
+  documents. The stream reads its kind from gravity at the peak instead
+  (`strokeOf`), and both build the swing through `swingFrom`.
 - **Only the stream can fill `Swing.lag`,** because only it has an emission
   moment to measure the peak against. `detectSwings` leaves it absent, which
   is why `stream.test.ts` compares the two with `lag` destructured off.

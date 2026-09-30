@@ -27,6 +27,11 @@ more colour, a swing cooldown so it cannot be spammed, power shots a bit more
 often, and a more polished phone-to-game path. Numbers:
 [[2026-09-27-cooldown-and-power-share]].
 
+**Amended by [[0023-power-shots-are-earned]]** the same evening: a swing at
+`POWER_SHOT` is a power shot only when it earned one (PERFECT timing or a
+long rally), PERFECT is 0.08 not 0.12, the phone no longer stamps POWER
+SHOT, and the cooldown restarts from a take-back's real swing.
+
 ## Decision
 
 **1. One pure layer decides what a moment means.** `host/arcade.ts` turns

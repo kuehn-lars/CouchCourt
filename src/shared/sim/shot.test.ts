@@ -9,6 +9,10 @@ import {
 } from "./court.ts";
 import {
 	groundstroke,
+	isPowerShot,
+	PERFECT_TIMING,
+	POWER_CAP,
+	POWER_RALLY,
 	SAFE_TIMING,
 	serveShot,
 	smash,
@@ -307,5 +311,50 @@ describe("serveShot", () => {
 		};
 		expect(speed(1, 1)).toBeGreaterThan(speed(0.4, 1));
 		expect(speed(1, 1)).toBeGreaterThan(speed(1, 0.4));
+	});
+});
+
+// A hard swing used to be a power shot every time, and a flat 33 m/s ball
+// aimed away from the bot beat it one shot in four. It has to be earned now.
+describe("isPowerShot", () => {
+	it("is not every hard swing", () => {
+		expect(isPowerShot(1, PERFECT_TIMING + 0.1, 2)).toBe(false);
+	});
+
+	it("is a hard swing timed perfectly", () => {
+		expect(isPowerShot(1, -PERFECT_TIMING, 2)).toBe(true);
+		expect(isPowerShot(0.9, PERFECT_TIMING, 2)).toBe(true);
+	});
+
+	it("is any hard swing once the rally is long", () => {
+		expect(isPowerShot(0.9, 0.35, POWER_RALLY + 1)).toBe(true);
+		expect(isPowerShot(0.9, 0.35, POWER_RALLY)).toBe(false);
+	});
+
+	it("is never a soft swing", () => {
+		expect(isPowerShot(0.6, 0, POWER_RALLY + 10)).toBe(false);
+	});
+
+	// The cap takes pace, not risk: capping lateness as well made hard
+	// swinging safer than before, and the always-hard player won more.
+	it("leaves a capped hard swing its risk of sailing long when late", () => {
+		const from = baseline("near");
+		const depth = (power: number, cap: number, u: number) => {
+			const at = land(
+				from,
+				groundstroke(from, "near", "forehand", u, power, FLAT, { cap }),
+			);
+			if (typeof at === "string") throw new Error(at);
+			return -at.z;
+		};
+		expect(depth(1, POWER_CAP, 0.9)).toBeGreaterThan(
+			depth(POWER_CAP, 1, 0.9) + 1,
+		);
+		expect(depth(1, POWER_CAP, 1)).toBeCloseTo(depth(1, 1, 1), 1);
+		const pace = (cap: number) => {
+			const v = groundstroke(from, "near", "forehand", 0, 1, FLAT, { cap });
+			return Math.hypot(v.x, v.y, v.z);
+		};
+		expect(pace(POWER_CAP)).toBeLessThan(pace(1) - 3);
 	});
 });

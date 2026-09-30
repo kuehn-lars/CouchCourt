@@ -134,8 +134,7 @@ export function createSwingStream(): SwingStream {
 		if (fired === 0 && peak.t - lobeStart < MIN_RISE_MS) return null;
 
 		const swing = {
-			...swingFrom(peak, peak),
-			kind: strokeOf(peak, held),
+			...swingFrom(peak, strokeOf(peak, held)),
 			lag: now - peak.t,
 		};
 		fired = peakMag;

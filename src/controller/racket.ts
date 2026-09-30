@@ -27,7 +27,7 @@
 
 import type { SwingKind } from "../shared/protocol.ts";
 import { TOSS_APEX } from "../shared/sim/serve.ts";
-import { POWER_SHOT } from "../shared/swing/detector.ts";
+import { POWER_SHOT } from "../shared/sim/shot.ts";
 import type { Ink, RacketView, Tone } from "./view.ts";
 
 const ACCENT = "#dcff4a";
@@ -828,21 +828,23 @@ export function createRacket(canvas: HTMLCanvasElement): Racket {
 				ripples.push({ x: L.sx, y: L.sy, age: 0, amp: 10 + power * 12 });
 			fuzz = 1;
 			// A hit with no swing read first (a revised strike, or a phone
-			// that missed its own peak) has no number to show.
-			const smash = power >= POWER_SHOT;
+			// that missed its own peak) has no number to show. A hard swing
+			// bursts, but only the host knows whether it earned a power shot
+			// (`sim/shot.ts`, `isPowerShot`), so the phone never claims one.
+			const hard = power >= POWER_SHOT;
 			stamp =
 				power > 0.05
 					? {
 							text: String(Math.round(power * 100)),
-							sub: smash ? "POWER SHOT" : "POWER",
-							color: smash ? "#ff3d8b" : ACCENT,
+							sub: "POWER",
+							color: hard ? "#ff3d8b" : ACCENT,
 							age: 0,
 						}
 					: { text: "HIT", sub: "", color: ACCENT, age: 0 };
 			burst(
-				smash ? 40 : 18,
-				smash ? ["#ff3d8b", "#ffae2e", "#fff36b"] : [ACCENT, "#ffffff", ACCENT],
-				smash ? 720 : 520,
+				hard ? 40 : 18,
+				hard ? ["#ff3d8b", "#ffae2e", "#fff36b"] : [ACCENT, "#ffffff", ACCENT],
+				hard ? 720 : 520,
 			);
 		},
 		point() {
