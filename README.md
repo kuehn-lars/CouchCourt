@@ -26,6 +26,8 @@
 
 ## Your laptop is the stadium. Every phone is a racket.
 
+https://github.com/user-attachments/assets/c4d27f84-4439-447d-a08e-64902d73d284
+
 <p align="center"><sub>The 25-second trailer, sound on. Every shot in it was played by the game itself.</sub></p>
 
 CouchCourt turns a laptop and a couple of iPhones into a local multiplayer
