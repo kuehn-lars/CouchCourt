@@ -31,3 +31,6 @@ coverage/
 # Env
 .env
 .env.local
+
+# Video
+brag-output
