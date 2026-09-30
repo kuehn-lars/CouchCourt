@@ -641,3 +641,8 @@ moved into `sim/shot.ts` (the sim no longer imports from `swing/`);
 sidestep reads `lastX` instead of a duplicate `simX`; the renderer's stadium
 flashes read `MatchState.rally` instead of a third stroke count. Amended
 [[modules/shared-sim]] and [[modules/shared-swing]] as well.
+
+## [2026-09-30] doc | Launch trailer
+
+Added a 25-second trailer to the README, made with the
+[brag](https://github.com/latent-spaces/brag) skill.

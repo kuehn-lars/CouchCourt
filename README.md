@@ -26,6 +26,8 @@
 
 ## Your laptop is the stadium. Every phone is a racket.
 
+<p align="center"><sub>The 25-second trailer, sound on. Every shot in it was played by the game itself.</sub></p>
+
 CouchCourt turns a laptop and a couple of iPhones into a local multiplayer
 tennis game you play by swinging. The laptop shows the court. Each guest scans
 a QR code, taps once to allow the motion sensors, and from then on their phone
@@ -271,3 +273,5 @@ CouchCourt is built on:
 - [Vitest](https://vitest.dev), [Biome](https://biomejs.dev) and [TypeScript](https://www.typescriptlang.org): the test runner, the linter and formatter, and the type system that keeps the simulation pure.
 - [Obsidian](https://obsidian.md), for making a folder of Markdown pleasant to think in.
 - [Claude Code](https://claude.com/claude-code) by Anthropic, the pair programmer on the other end of the experiment.
+
+The trailer was made with the [brag](https://github.com/latent-spaces/brag) skill for Claude Code.
