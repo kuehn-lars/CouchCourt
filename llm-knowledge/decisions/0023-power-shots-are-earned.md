@@ -1,6 +1,6 @@
 ---
 title: Power shots are earned
-updated: 2026-09-27
+updated: 2026-10-01
 tags: [decision, sim, feel, arcade, swing]
 status: current
 code:
@@ -95,7 +95,9 @@ Smashes 5.5% → 8.5% of returns.
 
 - **A very precise player still earns a lot.** At σ 30ms about half of all
   hard swings are PERFECT. `PERFECT_TIMING` is the knob.
-- **The avatar sidestep is unseen.** No browser session watched it; the step
-  is ~1.1m in ~0.15s and may read as a slide.
-- **Every number is against a simulated human** and eight recorded serve
-  swings for the overhead.
+- **Played, not measured.** The user played the whole change on a phone on
+  2026-10-01 and reports all of it works great, the avatar's sidestep
+  included (it had been watched in no browser before). Every number is still
+  against a simulated human and eight recorded serve swings for the
+  overhead; how often a real player earns a power shot or gets a smash
+  chance has not been counted.

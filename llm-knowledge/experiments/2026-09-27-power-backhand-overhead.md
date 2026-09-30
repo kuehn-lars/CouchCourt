@@ -1,6 +1,6 @@
 ---
 title: Earned power shots, backhand swings and overhead chances, measured
-updated: 2026-09-27
+updated: 2026-10-01
 tags: [experiment, sim, swing, detector, tuning, feel]
 status: current
 code:
@@ -126,7 +126,8 @@ Bots, 40 minutes: 610 of 1274 groundstrokes were played from the opposite
 stance — the sim sets the stance from where the ball is, the swing decides
 the stroke. Symmetric for bots; the forehand bias in `strokeFor` (−0.3m)
 makes a human's backhand the likelier mismatch. Fixed in the renderer only.
-**Not seen in a browser.**
+Not seen in a browser; played on a phone on 2026-10-01, and the user reports
+it works.
 
 ## Overheads: why they were rare
 
@@ -149,5 +150,6 @@ flips back to a groundstroke leaves an overhead swing hitting air. Smashes
 win almost no points outright here (0–3 of ~100–180): the receiver is
 centred and the smash goes down the middle.
 
-**Not measured:** any of this with a person. The phone's overhead read is
+**Played, not measured:** the user played all of it on a phone on
+2026-10-01 and reports it works great; none of it was counted. The phone's overhead read is
 still backed by eight serve swings ([[2026-09-22-stroke-classifier]]).
