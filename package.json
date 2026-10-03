@@ -26,16 +26,16 @@
 	"dependencies": {
 		"@phosphor-icons/core": "^2.1.1",
 		"qrcode-generator": "^2.0.4",
-		"three": "^0.186.0",
-		"ws": "^8.21.3"
+		"three": "^0.186.1",
+		"ws": "^8.22.0"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.5.14",
-		"@types/node": "^24.13.6",
+		"@biomejs/biome": "^2.5.15",
+		"@types/node": "^24.19.0",
 		"@types/three": "^0.186.0",
-		"@types/ws": "^8.18.1",
+		"@types/ws": "^8.18.2",
 		"typescript": "^7.0.2",
 		"vite": "^8.3.0",
-		"vitest": "^5.0.1"
+		"vitest": "^5.0.3"
 	}
 }
